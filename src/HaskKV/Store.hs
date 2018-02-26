@@ -7,6 +7,7 @@ module HaskKV.Store
     , StorageM (..)
     , MemStore (..)
     , MemStoreT (..)
+    , execMemStoreT
     , checkAndSet
     ) where
 
@@ -93,7 +94,6 @@ cleanupMemStore curr s = case minHeapMaybe (memStoreHeap s) of
     Nothing -> s
   where
     diff a b = realToFrac (diffUTCTime a b)
-    updateHeap h s = s { memStoreHeap = h }
 
 minHeapMaybe :: H.Heap a -> Maybe a
 minHeapMaybe h
@@ -104,8 +104,8 @@ newtype MemStoreT k v m a = MemStoreT
     { unMemStoreT :: ReaderT (TVar (MemStore k v)) m a
     } deriving (Functor, Applicative, Monad, MonadIO, MonadReader (TVar (MemStore k v)))
 
--- TODO(DarinM223): implement this.
-runMemStoreT = undefined
+execMemStoreT :: (MonadIO m) => MemStoreT k v m b -> MemStore k v -> m b
+execMemStoreT (MemStoreT (ReaderT f)) = f <=< liftIO . newTVarIO
 
 instance (MonadIO m, Ord k, Storable v) => StorageM (MemStoreT k v m) where
     type Key (MemStoreT k v m) = k
@@ -137,10 +137,3 @@ stateTVarIO f v = atomically $ do
 
 modifyTVarIO :: (a -> a) -> TVar a -> IO ()
 modifyTVarIO f v = atomically $ modifyTVar v f
-
-data Message k v
-    = Get k
-    | Set k v Time
-    | Cas k v Time CAS
-    | Delete k
-    deriving (Show, Eq)
