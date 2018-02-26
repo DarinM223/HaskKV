@@ -2,19 +2,28 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module HaskKV.Store where
+module HaskKV.Store
+    ( Storable (..)
+    , StorageM (..)
+    , MemStore (..)
+    , MemStoreT (..)
+    , checkAndSet
+    ) where
 
-import Control.Monad.State
+import Control.Concurrent.STM
+import Control.Monad.Reader
 import Data.Time
 
 import qualified Data.Map as M
 import qualified Data.Heap as H
 
 type Time = UTCTime
+type CAS  = Int
 
 class Storable v where
     expireTime :: v -> Time
-    version    :: v -> Int
+    version    :: v -> CAS
+    setVersion :: CAS -> v -> v
 
 class ( Monad s
       , Ord (Key s)
@@ -29,8 +38,11 @@ class ( Monad s
     -- | Sets a value in the store given a key-value pairing.
     setValue :: Key s -> Value s -> s ()
 
-    -- TODO(DarinM223): implement this later.
-    checkAndSetValue :: Key s -> Value s -> s ()
+    -- | Only sets the values if the CAS values match.
+    --
+    -- Returns the new CAS value if they match,
+    -- Nothing otherwise.
+    replaceValue :: Key s -> Value s -> s (Maybe CAS)
 
     -- | Deletes a value in the store given a key.
     deleteValue :: Key s -> s ()
@@ -48,7 +60,21 @@ getMemStore :: (Ord k) => k -> MemStore k v -> Maybe v
 getMemStore k s = memStoreMap s M.!? k
 
 setMemStore :: (Ord k, Storable v) => k -> v -> MemStore k v -> MemStore k v
-setMemStore k v s = s { memStoreMap = M.insert k v $ memStoreMap s }
+setMemStore k v s = s { memStoreMap = M.insert k v' $ memStoreMap s }
+  where
+    maybeV = memStoreMap s M.!? k
+    maybeCas' = (+ 1) . version <$> maybeV
+    v' = maybe v id (setVersion <$> maybeCas' <*> pure v)
+
+replaceMemStore :: (Ord k, Storable v) => k -> v -> MemStore k v -> (Maybe CAS, MemStore k v)
+replaceMemStore k v s
+    | equalCAS  = (Just cas', s { memStoreMap = M.insert k v' $ memStoreMap s })
+    | otherwise = (Nothing, s)
+  where
+    maybeV = memStoreMap s M.!? k
+    equalCAS = maybe True id ((== version v) . version <$> maybeV)
+    cas' = version v + 1
+    v' = setVersion cas' v
 
 deleteMemStore :: (Ord k) => k -> MemStore k v -> MemStore k v
 deleteMemStore k s = s { memStoreMap = M.delete k $ memStoreMap s }
@@ -74,25 +100,47 @@ minHeapMaybe h
     | H.null h  = Nothing
     | otherwise = Just $ H.minimum h
 
--- TODO(DarinM223): use locks instead.
 newtype MemStoreT k v m a = MemStoreT
-    { unMemStoreT :: StateT (MemStore k v) m a
-    } deriving (Functor, Applicative, Monad, MonadState (MemStore k v))
+    { unMemStoreT :: ReaderT (TVar (MemStore k v)) m a
+    } deriving (Functor, Applicative, Monad, MonadIO, MonadReader (TVar (MemStore k v)))
 
-instance (Monad m, Ord k, Storable v) => StorageM (MemStoreT k v m) where
+-- TODO(DarinM223): implement this.
+runMemStoreT = undefined
+
+instance (MonadIO m, Ord k, Storable v) => StorageM (MemStoreT k v m) where
     type Key (MemStoreT k v m) = k
     type Value (MemStoreT k v m) = v
 
-    getValue k = return . getMemStore k =<< get
-    setValue k v = modify $ setMemStore k v
-    deleteValue k = modify $ deleteMemStore k
-    cleanupExpired t = modify $ cleanupMemStore t
+    getValue k = return . getMemStore k =<< liftIO . readTVarIO =<< ask
+    setValue k v = liftIO . modifyTVarIO (setMemStore k v) =<< ask
+    deleteValue k = liftIO . modifyTVarIO (deleteMemStore k) =<< ask
+    cleanupExpired t = liftIO . modifyTVarIO (cleanupMemStore t) =<< ask
+    replaceValue k v = liftIO . stateTVarIO (replaceMemStore k v) =<< ask
 
-    checkAndSetValue = undefined
+checkAndSet :: (StorageM m) => Int -> Key m -> (Value m -> Value m) -> m Bool
+checkAndSet attempts k f
+    | attempts == 0 = return False
+    | otherwise = do
+        maybeV <- getValue k
+        result <- mapM (replaceValue k) . fmap f $ maybeV
+        case result of
+            Just (Just _) -> return True
+            Just Nothing  -> checkAndSet (attempts - 1) k f
+            _             -> return False
+
+stateTVarIO :: (s -> (a, s)) -> TVar s -> IO a
+stateTVarIO f v = atomically $ do
+    s <- readTVar v
+    let (r, s') = f s
+    writeTVar v s'
+    return r
+
+modifyTVarIO :: (a -> a) -> TVar a -> IO ()
+modifyTVarIO f v = atomically $ modifyTVar v f
 
 data Message k v
     = Get k
     | Set k v Time
-    | Cas k v Time Int
+    | Cas k v Time CAS
     | Delete k
     deriving (Show, Eq)

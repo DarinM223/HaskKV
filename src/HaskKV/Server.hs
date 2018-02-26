@@ -2,7 +2,8 @@ module HaskKV.Server where
 
 import Network.Socket
 
--- TODO(DarinM223): make server do what we want.
+-- TODO(DarinM223): use cloud haskell for both the main server
+-- and the transport for the raft part.
 runServer :: IO ()
 runServer = do
     sock <- socket AF_INET Stream 0
