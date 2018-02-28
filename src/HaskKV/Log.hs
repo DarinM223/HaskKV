@@ -1,8 +1,12 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 module HaskKV.Log where
 
+import Control.Concurrent.STM
+import Control.Monad.Reader
 import HaskKV.Serialize (Serializable)
 
 class (Serializable l) => Entry l where
@@ -42,4 +46,14 @@ instance Entry LogEntry where
     -- TODO(DarinM223): implement this
 
 instance Serializable LogEntry where
+    -- TODO(DarinM223): implement this
+
+data Log = Log
+    { entries :: [LogEntry]
+    }
+
+newtype LogT e m a = LogT { unLogT :: ReaderT (TVar Log) m a }
+    deriving (Functor, Applicative, Monad, MonadIO)
+
+instance (Entry e) => LogM e (LogT e m) where
     -- TODO(DarinM223): implement this
