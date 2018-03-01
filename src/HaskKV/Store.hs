@@ -1,10 +1,14 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module HaskKV.Store
     ( Storable (..)
     , StorageM (..)
+    , StorageMK (..)
+    , StorageMKV (..)
     , MemStore (..)
     , MemStoreT (..)
     , execMemStoreT
@@ -27,32 +31,27 @@ class Storable v where
     version    :: v -> CAS
     setVersion :: CAS -> v -> v
 
-class
-    ( Monad s
-    , Ord (Key s)
-    , Storable (Value s)
-    ) => StorageM s where
+class (Monad s) => StorageM s where
+    -- | Deletes all values that passed the expiration time.
+    cleanupExpired :: Time -> s ()
 
-    type Key s   :: *
-    type Value s :: *
+class (StorageM s, Ord k) => StorageMK k s where
+    -- | Deletes a value in the store given a key.
+    deleteValue :: k -> s ()
 
+class (StorageMK k s, Storable v) => StorageMKV k v s where
     -- | Gets a value from the store given a key.
-    getValue :: Key s -> s (Maybe (Value s))
+    getValue :: k -> s (Maybe v)
 
     -- | Sets a value in the store given a key-value pairing.
-    setValue :: Key s -> Value s -> s ()
+    setValue :: k -> v -> s ()
 
     -- | Only sets the values if the CAS values match.
     --
     -- Returns the new CAS value if they match,
     -- Nothing otherwise.
-    replaceValue :: Key s -> Value s -> s (Maybe CAS)
+    replaceValue :: k -> v -> s (Maybe CAS)
 
-    -- | Deletes a value in the store given a key.
-    deleteValue :: Key s -> s ()
-
-    -- | Deletes all values that passed the expiration time.
-    cleanupExpired :: Time -> s ()
 
 -- | An in-memory storage implementation.
 data MemStore k v = MemStore
@@ -63,7 +62,7 @@ data MemStore k v = MemStore
 newtype MemStoreT k v m a = MemStoreT
     { unMemStoreT :: ReaderT (TVar (MemStore k v)) m a
     } deriving
-        ( Functor, Applicative, Monad, MonadIO
+        ( Functor, Applicative, Monad, MonadIO, MonadTrans
         , MonadReader (TVar (MemStore k v))
         )
 
@@ -77,16 +76,28 @@ execMemStoreTVar :: (MonadIO m)
 execMemStoreTVar (MemStoreT (ReaderT f)) = f
 
 instance (MonadIO m, Ord k, Storable v) => StorageM (MemStoreT k v m) where
-    type Key (MemStoreT k v m) = k
-    type Value (MemStoreT k v m) = v
+    cleanupExpired t = liftIO . modifyTVarIO (cleanupMemStore t) =<< ask
 
+instance (MonadIO m, Ord k, Storable v) => StorageMK k (MemStoreT k v m) where
+    deleteValue k = liftIO . modifyTVarIO (deleteMemStore k) =<< ask
+
+instance (MonadIO m, Ord k, Storable v) => StorageMKV k v (MemStoreT k v m) where
     getValue k = return . getMemStore k =<< liftIO . readTVarIO =<< ask
     setValue k v = liftIO . modifyTVarIO (setMemStore k v) =<< ask
-    deleteValue k = liftIO . modifyTVarIO (deleteMemStore k) =<< ask
-    cleanupExpired t = liftIO . modifyTVarIO (cleanupMemStore t) =<< ask
     replaceValue k v = liftIO . stateTVarIO (replaceMemStore k v) =<< ask
 
-checkAndSet :: (StorageM m) => Int -> Key m -> (Value m -> Value m) -> m Bool
+instance (StorageM m) => StorageM (ReaderT r m) where
+    cleanupExpired = lift . cleanupExpired
+
+instance (StorageMK k m) => StorageMK k (ReaderT r m) where
+    deleteValue = lift . deleteValue
+
+instance (StorageMKV k v m) => StorageMKV k v (ReaderT r m) where
+    getValue = lift . getValue
+    setValue k v = lift $ setValue k v
+    replaceValue k v = lift $ replaceValue k v
+
+checkAndSet :: (StorageMKV k v m) => Int -> k -> (v -> v) -> m Bool
 checkAndSet attempts k f
     | attempts == 0 = return False
     | otherwise = do

@@ -7,9 +7,9 @@ module HaskKV.State where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
-import HaskKV.Log (Entry, LogEntry, LogM, LogT)
+import HaskKV.Log (Entry, LogEntry, LogM, LogME, LogT (..))
 import HaskKV.Serialize (Serializable)
-import HaskKV.Store (Storable, StorageM (..), MemStoreT)
+import HaskKV.Store (Storable, StorageM, StorageMK, StorageMKV, MemStoreT)
 
 data RaftMessage
     = RequestVote
@@ -41,13 +41,6 @@ newtype ServerT k v e m a = ServerT
     deriving
         ( Functor, Applicative, Monad, MonadIO
         , MonadReader (TVar RaftState)
+        , LogM, LogME e
+        , StorageM, StorageMK k, StorageMKV k v
         )
-
-instance (Monad m, Ord k, Storable v) => StorageM (ServerT k v e m) where
-    type Key (ServerT k v e m) = k
-    type Value (ServerT k v e m) = v
-
-    -- TODO(DarinM223): implement this
-
-instance (Entry e) => LogM e (ServerT k v e m) where
-    -- TODO(DarinM223): implement this
