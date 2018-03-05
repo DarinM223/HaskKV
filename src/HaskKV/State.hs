@@ -1,30 +1,25 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies #-}
-
 module HaskKV.State where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
-import HaskKV.Log (Entry, LogEntry, LogM, LogME, LogT (..))
+import HaskKV.Log (LogEntry, LogM, LogME, LogT (..))
 import HaskKV.Serialize (Serializable)
-import HaskKV.Store (Storable, StorageM, StorageMK, StorageMKV, MemStoreT)
+import HaskKV.Store (StorageM, StorageMK, StorageMKV, MemStoreT)
 
 data RaftMessage
     = RequestVote
-        { rvCandidateID :: Int
-        , rvTerm        :: Int
-        , rvLastLogIdx  :: Int
-        , rvLastLogTerm :: Int
+        { _candidateID :: Int
+        , _term        :: Int
+        , _lastLogIdx  :: Int
+        , _lastLogTerm :: Int
         }
     | AppendEntries
-        { aeTerm        :: Int
-        , aeLeaderId    :: Int
-        , aePrevLogIdx  :: Int
-        , aePrevLogTerm :: Int
-        , aeEntries     :: [LogEntry]
-        , aeCommitIdx   :: Int
+        { _term        :: Int
+        , _leaderId    :: Int
+        , _prevLogIdx  :: Int
+        , _prevLogTerm :: Int
+        , _entries     :: [LogEntry]
+        , _commitIdx   :: Int
         }
     | Response Int Bool
 
@@ -32,8 +27,8 @@ instance Serializable RaftMessage where
     -- TODO(DarinM223): implement this
 
 data RaftState = RaftState
-    { rsCurrTerm :: Int
-    , rsVotedFor :: Int
+    { _currTerm :: Int
+    , _votedFor :: Int
     }
 
 newtype ServerT k v e m a = ServerT

@@ -5,7 +5,7 @@ import Control.Concurrent.Chan
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Data.Function (fix)
-import HaskKV.Store (MemStore, Storable, StorageM, execMemStoreTVar)
+import HaskKV.Store (MemStore, Storable, execMemStoreTVar)
 import Network.Socket
 import System.IO
 
@@ -35,7 +35,7 @@ mainLoop sock chan var = do
     forkIO $ execMemStoreTVar (runConn chan conn) var
     mainLoop sock chan var
 
-runConn :: (MonadIO m, StorageM m)
+runConn :: (MonadIO m)
         => Chan Message
         -> (Socket, SockAddr)
         -> m ()

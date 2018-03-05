@@ -1,7 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-
 module HaskKV.Log where
 
 import Control.Concurrent.STM
@@ -23,6 +19,18 @@ class (Monad m) => LogM m where
     -- | Deletes entries in an inclusive range.
     deleteRange :: Int -> Int -> m ()
 
+    default firstIndex :: (MonadTrans t, LogM m', m ~ t m') => m Int
+    firstIndex = lift firstIndex
+
+    default lastIndex :: (MonadTrans t, LogM m', m ~ t m') => m Int
+    lastIndex = lift lastIndex
+
+    default deleteRange :: (MonadTrans t, LogM m', m ~ t m')
+                        => Int
+                        -> Int
+                        -> m ()
+    deleteRange a b = lift $ deleteRange a b
+
 class (LogM m, Entry e) => LogME e m where
     -- | Gets a log entry at the specified index.
     loadEntry :: Int -> m e
@@ -33,9 +41,18 @@ class (LogM m, Entry e) => LogME e m where
     -- | Stores multiple log entries.
     storeEntries :: [e] -> m ()
 
+    default loadEntry :: (MonadTrans t, LogME e m', m ~ t m') => Int -> m e
+    loadEntry = lift . loadEntry
+
+    default storeEntry :: (MonadTrans t, LogME e m', m ~ t m') => e -> m ()
+    storeEntry = lift . storeEntry
+
+    default storeEntries :: (MonadTrans t, LogME e m', m ~ t m') => [e] -> m ()
+    storeEntries = lift . storeEntries
+
 data LogEntry = LogEntry
-    { leTerm :: Int
-    , leData :: LogEntryData
+    { _term :: Int
+    , _data :: LogEntryData
     } deriving (Show, Eq)
 
 data LogEntryData
@@ -50,7 +67,7 @@ instance Serializable LogEntry where
     -- TODO(DarinM223): implement this
 
 data Log = Log
-    { entries :: [LogEntry]
+    { _entries :: [LogEntry]
     }
 
 newtype LogT e m a = LogT { unLogT :: ReaderT (TVar Log) m a }
@@ -58,27 +75,18 @@ newtype LogT e m a = LogT { unLogT :: ReaderT (TVar Log) m a }
 
 instance (Monad m) => LogM (LogT e m) where
     -- TODO(DarinM223): implement this
+    firstIndex = undefined
+    lastIndex = undefined
+    deleteRange = undefined
 
 instance (Monad m, Entry e) => LogME e (LogT e m) where
     -- TODO(DarinM223): implement this
+    loadEntry = undefined
+    storeEntry = undefined
+    storeEntries = undefined
 
 instance (StorageM m) => StorageM (LogT e m) where
-    cleanupExpired = lift . cleanupExpired
-
 instance (StorageMK k m) => StorageMK k (LogT e m) where
-    deleteValue = lift . deleteValue
-
 instance (StorageMKV k v m) => StorageMKV k v (LogT e m) where
-    getValue = lift . getValue
-    setValue k v = lift $ setValue k v
-    replaceValue k v = lift $ replaceValue k v
-
 instance (LogM m) => LogM (ReaderT r m) where
-    firstIndex = lift firstIndex
-    lastIndex = lift lastIndex
-    deleteRange k v = lift $ deleteRange k v
-
 instance (LogME e m) => LogME e (ReaderT r m) where
-    loadEntry = lift . loadEntry
-    storeEntry = lift . storeEntry
-    storeEntries = lift . storeEntries
