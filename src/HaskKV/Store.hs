@@ -14,6 +14,7 @@ import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Maybe (fromJust)
 import Data.Time
+import HaskKV.Utils
 
 import qualified Data.Map as M
 import qualified Data.Heap as H
@@ -102,9 +103,9 @@ instance (MonadIO m, Ord k, Storable v) => StorageMKV k v (MemStoreT k v m) wher
     setValue k v = liftIO . modifyTVarIO (setMemStore k v) =<< ask
     replaceValue k v = liftIO . stateTVarIO (replaceMemStore k v) =<< ask
 
-instance (StorageM m) => StorageM (ReaderT r m) where
-instance (StorageMK k m) => StorageMK k (ReaderT r m) where
-instance (StorageMKV k v m) => StorageMKV k v (ReaderT r m) where
+instance (StorageM m) => StorageM (ReaderT r m)
+instance (StorageMK k m) => StorageMK k (ReaderT r m)
+instance (StorageMKV k v m) => StorageMKV k v (ReaderT r m)
 
 checkAndSet :: (StorageMKV k v m) => Int -> k -> (v -> v) -> m Bool
 checkAndSet attempts k f
@@ -116,16 +117,6 @@ checkAndSet attempts k f
             Just (Just _) -> return True
             Just Nothing  -> checkAndSet (attempts - 1) k f
             _             -> return False
-
-stateTVarIO :: (s -> (a, s)) -> TVar s -> IO a
-stateTVarIO f v = atomically $ do
-    s <- readTVar v
-    let (r, s') = f s
-    writeTVar v s'
-    return r
-
-modifyTVarIO :: (a -> a) -> TVar a -> IO ()
-modifyTVarIO f v = atomically $ modifyTVar v f
 
 getMemStore :: (Ord k) => k -> MemStore k v -> Maybe v
 getMemStore k s = _map s M.!? k
@@ -172,8 +163,3 @@ cleanupMemStore curr s = case minHeapMaybe (_heap s) of
     _ -> s
   where
     diff a b = realToFrac (diffUTCTime a b)
-
-minHeapMaybe :: H.Heap a -> Maybe a
-minHeapMaybe h
-    | H.null h  = Nothing
-    | otherwise = Just $ H.minimum h

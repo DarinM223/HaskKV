@@ -4,6 +4,9 @@ import Control.Concurrent.STM
 import Control.Monad.Reader
 import HaskKV.Serialize (Serializable)
 import HaskKV.Store
+import HaskKV.Utils
+
+import qualified Data.IntMap as IM
 
 class (Serializable l) => Entry l where
     entryIndex :: l -> Int
@@ -33,19 +36,15 @@ class (Monad m) => LogM m where
 
 class (LogM m, Entry e) => LogME e m where
     -- | Gets a log entry at the specified index.
-    loadEntry :: Int -> m e
-
-    -- | Stores a log entry.
-    storeEntry :: e -> m ()
+    loadEntry :: Int -> m (Maybe e)
 
     -- | Stores multiple log entries.
     storeEntries :: [e] -> m ()
 
-    default loadEntry :: (MonadTrans t, LogME e m', m ~ t m') => Int -> m e
+    default loadEntry :: (MonadTrans t, LogME e m', m ~ t m')
+                      => Int
+                      -> m (Maybe e)
     loadEntry = lift . loadEntry
-
-    default storeEntry :: (MonadTrans t, LogME e m', m ~ t m') => e -> m ()
-    storeEntry = lift . storeEntry
 
     default storeEntries :: (MonadTrans t, LogME e m', m ~ t m') => [e] -> m ()
     storeEntries = lift . storeEntries
@@ -66,27 +65,36 @@ instance Entry LogEntry where
 instance Serializable LogEntry where
     -- TODO(DarinM223): implement this
 
-data Log = Log
-    { _entries :: [LogEntry]
+data Log e = Log
+    { _entries :: IM.IntMap e
+    , _highIdx :: Int
+    , _lowIdx  :: Int
     }
 
-newtype LogT e m a = LogT { unLogT :: ReaderT (TVar Log) m a }
-    deriving (Functor, Applicative, Monad, MonadIO, MonadTrans)
+newtype LogT e m a = LogT { unLogT :: ReaderT (TVar (Log e)) m a }
+    deriving
+        ( Functor, Applicative, Monad, MonadIO, MonadTrans
+        , MonadReader (TVar (Log e))
+        )
 
-instance (Monad m) => LogM (LogT e m) where
-    -- TODO(DarinM223): implement this
-    firstIndex = undefined
-    lastIndex = undefined
-    deleteRange = undefined
+instance (MonadIO m) => LogM (LogT e m) where
+    firstIndex = return . _lowIdx =<< liftIO . readTVarIO =<< ask
+    lastIndex = return . _highIdx =<< liftIO . readTVarIO =<< ask
+    deleteRange a b = liftIO . modifyTVarIO (deleteRangeLog a b) =<< ask
 
-instance (Monad m, Entry e) => LogME e (LogT e m) where
-    -- TODO(DarinM223): implement this
-    loadEntry = undefined
-    storeEntry = undefined
-    storeEntries = undefined
+instance (MonadIO m, Entry e) => LogME e (LogT e m) where
+    loadEntry k =
+        return . IM.lookup k . _entries =<< liftIO . readTVarIO =<< ask
+    storeEntries es = liftIO . modifyTVarIO (storeEntriesLog es) =<< ask
 
-instance (StorageM m) => StorageM (LogT e m) where
-instance (StorageMK k m) => StorageMK k (LogT e m) where
-instance (StorageMKV k v m) => StorageMKV k v (LogT e m) where
-instance (LogM m) => LogM (ReaderT r m) where
-instance (LogME e m) => LogME e (ReaderT r m) where
+instance (StorageM m) => StorageM (LogT e m)
+instance (StorageMK k m) => StorageMK k (LogT e m)
+instance (StorageMKV k v m) => StorageMKV k v (LogT e m)
+instance (LogM m) => LogM (ReaderT r m)
+instance (LogME e m) => LogME e (ReaderT r m)
+
+deleteRangeLog :: Int -> Int -> Log e -> Log e
+deleteRangeLog = undefined
+
+storeEntriesLog :: [e] -> Log e -> Log e
+storeEntriesLog = undefined
