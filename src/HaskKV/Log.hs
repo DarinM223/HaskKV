@@ -2,6 +2,7 @@ module HaskKV.Log where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
+import Data.List
 import HaskKV.Serialize (Serializable)
 import HaskKV.Store
 import HaskKV.Utils
@@ -49,20 +50,32 @@ class (LogM m, Entry e) => LogME e m where
     default storeEntries :: (MonadTrans t, LogME e m', m ~ t m') => [e] -> m ()
     storeEntries = lift . storeEntries
 
-data LogEntry = LogEntry
-    { _term :: Int
-    , _data :: LogEntryData
+type TID = Int
+
+data LogEntry k v = LogEntry
+    { _term  :: Int
+    , _index :: Int
+    , _data  :: LogEntryData k v
     } deriving (Show, Eq)
 
-data LogEntryData
-    = Insert
-    | Change
-    deriving (Show, Eq)
+data LogEntryData k v = Insert TID k
+                      | Change TID k v
+                      | Transaction Transaction
+                      | Checkpoint Checkpoint
+                      deriving (Show, Eq)
 
-instance Entry LogEntry where
-    -- TODO(DarinM223): implement this
+data Transaction = Start TID
+                 | Commit TID
+                 | Abort TID
+                 deriving (Show, Eq)
 
-instance Serializable LogEntry where
+data Checkpoint = Begin [TID] | End deriving (Show, Eq)
+
+instance Entry (LogEntry k v) where
+    entryIndex = _index
+    entryTerm = _term
+
+instance Serializable (LogEntry k v) where
     -- TODO(DarinM223): implement this
 
 data Log e = Log
@@ -94,7 +107,23 @@ instance (LogM m) => LogM (ReaderT r m)
 instance (LogME e m) => LogME e (ReaderT r m)
 
 deleteRangeLog :: Int -> Int -> Log e -> Log e
-deleteRangeLog = undefined
+deleteRangeLog min max l =
+    l { _lowIdx = lowIndex', _highIdx = highIndex', _entries = entries' }
+  where
+    entries' = foldl' (flip IM.delete) (_entries l) [min..max]
+    lowIndex = if min <= _lowIdx l then max + 1 else _lowIdx l
+    highIndex = if max >= _highIdx l then min - 1 else _highIdx l
+    (lowIndex', highIndex') = if lowIndex > highIndex
+        then (0, 0)
+        else (lowIndex, highIndex)
 
-storeEntriesLog :: [e] -> Log e -> Log e
-storeEntriesLog = undefined
+storeEntriesLog :: (Entry e) => [e] -> Log e -> Log e
+storeEntriesLog es l = foldl' addEntry l es
+  where
+    addEntry l e =
+        l { _entries = entries', _lowIdx = lowIndex, _highIdx = highIndex }
+      where
+        index = (entryIndex e)
+        entries' = IM.insert index e (_entries l)
+        lowIndex = if _lowIdx l == 0 then index else _lowIdx l
+        highIndex = if index > _highIdx l then index else _highIdx l

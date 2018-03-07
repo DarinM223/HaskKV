@@ -2,11 +2,11 @@ module HaskKV.State where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
-import HaskKV.Log (LogEntry, LogM, LogME, LogT (..))
+import HaskKV.Log (LogM, LogME, LogT (..))
 import HaskKV.Serialize (Serializable)
 import HaskKV.Store (StorageM, StorageMK, StorageMKV, MemStoreT)
 
-data RaftMessage
+data RaftMessage e
     = RequestVote
         { _candidateID :: Int
         , _term        :: Int
@@ -18,12 +18,12 @@ data RaftMessage
         , _leaderId    :: Int
         , _prevLogIdx  :: Int
         , _prevLogTerm :: Int
-        , _entries     :: [LogEntry]
+        , _entries     :: [e]
         , _commitIdx   :: Int
         }
     | Response Int Bool
 
-instance Serializable RaftMessage where
+instance Serializable (RaftMessage e) where
     -- TODO(DarinM223): implement this
 
 data RaftState = RaftState
