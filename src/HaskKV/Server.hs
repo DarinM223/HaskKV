@@ -3,15 +3,20 @@ module HaskKV.Server where
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Monad.Reader
+import Data.Int
+import Data.Word
+import Data.Binary
 import HaskKV.Log (LogM, LogME)
 import HaskKV.Store (StorageM, StorageMK, StorageMKV)
 
 import qualified Network.Socket as S
+import qualified Data.ByteString.Lazy as BS
+import qualified Network.Socket.ByteString.Lazy as NBS
 
 class (Monad m) => ServerM msg m where
     send      :: msg -> m ()
     broadcast :: msg -> m ()
-    recv      :: m msg
+    recv      :: m (Maybe msg)
 
     default send :: (MonadTrans t, ServerM msg m', m ~ t m') => msg -> m ()
     send = lift . send
@@ -19,7 +24,7 @@ class (Monad m) => ServerM msg m where
     default broadcast :: (MonadTrans t, ServerM msg m', m ~ t m') => msg -> m ()
     broadcast = lift . send
 
-    default recv :: (MonadTrans t, ServerM msg m', m ~ t m') => m msg
+    default recv :: (MonadTrans t, ServerM msg m', m ~ t m') => m (Maybe msg)
     recv = lift recv
 
 data ServerState msg = ServerState
@@ -28,17 +33,40 @@ data ServerState msg = ServerState
     , _sendLock  :: MVar ()
     }
 
-newtype ServerT msg m a = ServerT { unServerT :: ReaderT (ServerState msg) m a }
-    deriving ( Functor, Applicative, Monad, MonadIO, MonadTrans
-             , MonadReader (ServerState msg)
-             )
+type MsgLen = Word16
 
-instance (MonadIO m) => ServerM msg (ServerT msg m) where
-    send = undefined
+newtype ServerT msg m a = ServerT { unServerT :: ReaderT (ServerState msg) m a }
+    deriving
+        ( Functor, Applicative, Monad, MonadIO, MonadTrans
+        , MonadReader (ServerState msg)
+        )
+
+instance (MonadIO m, Binary msg) => ServerM msg (ServerT msg m) where
+    send msg = do
+        s <- ask
+        liftIO $ withMVar (_sendLock s) $ \_ -> do
+            NBS.send (_socket s) encodedLen
+            NBS.send (_socket s) encodedMsg
+            return ()
+      where
+        encodedMsg = encode msg
+        msgLen = fromIntegral $ BS.length encodedMsg :: MsgLen
+        encodedLen = encode msgLen
+
     broadcast msg = do
         chan <- _broadcast <$> ask
         liftIO $ writeChan chan msg
-    recv = undefined
+
+    recv = do
+        sock <- _socket <$> ask
+        msgLenS <- liftIO $ NBS.recv sock msgLenLen
+        let msgLen = decode msgLenS :: MsgLen
+        if (isEOT msgLen)
+            then do
+                msg <- liftIO $ NBS.recv sock $ fromIntegral msgLen
+                let message = decode msg :: msg
+                return $ Just message
+            else return Nothing
 
 instance (StorageM m) => StorageM (ServerT msg m)
 instance (StorageMK k m) => StorageMK k (ServerT msg m)
@@ -46,3 +74,9 @@ instance (StorageMKV k v m) => StorageMKV k v (ServerT msg m)
 instance (LogM m) => LogM (ServerT msg m)
 instance (LogME e m) => LogME e (ServerT msg m)
 instance (ServerM msg m) => ServerM msg (ReaderT r m)
+
+msgLenLen :: Int64
+msgLenLen = 2
+
+isEOT :: MsgLen -> Bool
+isEOT = (== 0)

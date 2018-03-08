@@ -34,8 +34,12 @@ data RaftState = RaftState
     }
 
 newtype RaftT k v e m a = RaftT
-    { unRaftT :: ReaderT (TVar RaftState) (ServerT (RaftMessage e) (LogT e (MemStoreT k v m))) a }
-    deriving
+    { unRaftT :: ReaderT (TVar RaftState)
+                 (ServerT (RaftMessage e)
+                 (LogT e
+                 (MemStoreT k v m)))
+                 a
+    } deriving
         ( Functor, Applicative, Monad, MonadIO
         , MonadReader (TVar RaftState)
         , LogM, LogME e
