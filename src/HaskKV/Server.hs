@@ -1,89 +1,48 @@
 module HaskKV.Server where
 
-import Control.Concurrent (forkIO)
 import Control.Concurrent.Chan
-import Control.Concurrent.STM
-import Control.Monad.IO.Class
-import Data.Binary
-import Data.Function (fix)
-import Data.Int
-import HaskKV.Log (LogEntry)
-import HaskKV.State (RaftMessage)
-import HaskKV.Store (MemStore, Storable, execMemStoreTVar)
-import Network.Socket
+import Control.Concurrent.MVar
+import Control.Monad.Reader
+import HaskKV.Log (LogM, LogME)
+import HaskKV.Store (StorageM, StorageMK, StorageMKV)
 
-import qualified Data.ByteString.Lazy as BS
-import qualified Network.Socket.ByteString.Lazy as NBS
+import qualified Network.Socket as S
 
-type MsgLen = Word16
-type Message = RaftMessage (LogEntry Int Int)
+class (Monad m) => ServerM msg m where
+    send      :: msg -> m ()
+    broadcast :: msg -> m ()
+    recv      :: m msg
 
-msgLenLen :: Int64
-msgLenLen = 2
+    default send :: (MonadTrans t, ServerM msg m', m ~ t m') => msg -> m ()
+    send = lift . send
 
-isEOT :: MsgLen -> Bool
-isEOT = (== 0)
+    default broadcast :: (MonadTrans t, ServerM msg m', m ~ t m') => msg -> m ()
+    broadcast = lift . send
 
-sendMessage :: Socket -> Message -> IO ()
-sendMessage sock msg = do
-    NBS.send sock encodedLen
-    NBS.send sock encodedMsg
-    return ()
-  where
-    encodedMsg = encode msg
-    msgLen = fromIntegral $ BS.length encodedMsg :: MsgLen
-    encodedLen = encode msgLen
+    default recv :: (MonadTrans t, ServerM msg m', m ~ t m') => m msg
+    recv = lift recv
 
-recvMessage :: Socket -> IO (Maybe Message)
-recvMessage sock = do
-    msgLenS <- liftIO $ NBS.recv sock msgLenLen
-    let msgLen = decode msgLenS :: MsgLen
-    if (isEOT msgLen)
-        then do
-            msg <- liftIO $ NBS.recv sock $ fromIntegral msgLen
-            let message = decode msg :: Message
-            return $ Just message
-        else return Nothing
+data ServerState msg = ServerState
+    { _socket    :: S.Socket
+    , _broadcast :: Chan msg
+    , _sendLock  :: MVar ()
+    }
 
-runServer :: (Ord k, Storable v) => TVar (MemStore k v) -> IO ()
-runServer var = do
-    sock <- socket AF_INET Stream 0
-    setSocketOption sock ReuseAddr 1
-    bind sock (SockAddrInet 4242 iNADDR_ANY)
-    listen sock 2
+newtype ServerT msg m a = ServerT { unServerT :: ReaderT (ServerState msg) m a }
+    deriving ( Functor, Applicative, Monad, MonadIO, MonadTrans
+             , MonadReader (ServerState msg)
+             )
 
-    chan <- newChan
+instance (MonadIO m) => ServerM msg (ServerT msg m) where
+    send = undefined
+    broadcast msg = do
+        chan <- _broadcast <$> ask
+        liftIO $ writeChan chan msg
+    recv = undefined
 
-    -- TODO(DarinM223): read config and fork threads to handle every worker
-    -- in the config.
-
-    mainLoop sock chan var
-
-mainLoop :: (Ord k, Storable v)
-         => Socket
-         -> Chan Message
-         -> TVar (MemStore k v)
-         -> IO ()
-mainLoop sock chan var = do
-    conn <- accept sock
-    forkIO $ execMemStoreTVar (runConn chan conn) var
-    mainLoop sock chan var
-
-runConn :: (MonadIO m)
-        => Chan Message
-        -> (Socket, SockAddr)
-        -> m ()
-runConn chan (sock, _) = do
-    commLine <- liftIO $ dupChan chan
-
-    -- Reads from broadcast channel and
-    -- sends broadcast messages back to client.
-    liftIO . forkIO . fix $ \loop -> do
-        msg <- readChan commLine
-        liftIO $ sendMessage sock msg
-        loop
-
-    fix $ \loop -> do
-        msgMaybe <- liftIO $ recvMessage sock
-        mapM_ (liftIO . sendMessage sock) msgMaybe
-        loop
+instance (StorageM m) => StorageM (ServerT msg m)
+instance (StorageMK k m) => StorageMK k (ServerT msg m)
+instance (StorageMKV k v m) => StorageMKV k v (ServerT msg m)
+instance (LogM m) => LogM (ServerT msg m)
+instance (LogME e m) => LogME e (ServerT msg m)
+instance (ServerM msg m) => ServerM msg (ReaderT r m)
