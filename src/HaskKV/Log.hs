@@ -2,14 +2,15 @@ module HaskKV.Log where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
+import Data.Binary
 import Data.List
-import HaskKV.Serialize (Serializable)
+import GHC.Generics
 import HaskKV.Store
 import HaskKV.Utils
 
 import qualified Data.IntMap as IM
 
-class (Serializable l) => Entry l where
+class (Binary l) => Entry l where
     entryIndex :: l -> Int
     entryTerm  :: l -> Int
 
@@ -56,27 +57,29 @@ data LogEntry k v = LogEntry
     { _term  :: Int
     , _index :: Int
     , _data  :: LogEntryData k v
-    } deriving (Show, Eq)
+    } deriving (Show, Eq, Generic)
 
 data LogEntryData k v = Insert TID k
                       | Change TID k v
                       | Transaction Transaction
                       | Checkpoint Checkpoint
-                      deriving (Show, Eq)
+                      deriving (Show, Eq, Generic)
 
 data Transaction = Start TID
                  | Commit TID
                  | Abort TID
-                 deriving (Show, Eq)
+                 deriving (Show, Eq, Generic)
 
-data Checkpoint = Begin [TID] | End deriving (Show, Eq)
+data Checkpoint = Begin [TID] | End deriving (Show, Eq, Generic)
 
-instance Entry (LogEntry k v) where
+instance (Binary k, Binary v) => Entry (LogEntry k v) where
     entryIndex = _index
     entryTerm = _term
 
-instance Serializable (LogEntry k v) where
-    -- TODO(DarinM223): implement this
+instance (Binary k, Binary v) => Binary (LogEntryData k v)
+instance Binary Transaction
+instance Binary Checkpoint
+instance (Binary k, Binary v) => Binary (LogEntry k v)
 
 data Log e = Log
     { _entries :: IM.IntMap e

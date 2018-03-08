@@ -2,8 +2,9 @@ module HaskKV.State where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
+import Data.Binary
+import GHC.Generics
 import HaskKV.Log (LogM, LogME, LogT (..))
-import HaskKV.Serialize (Serializable)
 import HaskKV.Store (StorageM, StorageMK, StorageMKV, MemStoreT)
 
 data RaftMessage e
@@ -22,9 +23,9 @@ data RaftMessage e
         , _commitIdx   :: Int
         }
     | Response Int Bool
+    deriving (Show, Eq, Generic)
 
-instance Serializable (RaftMessage e) where
-    -- TODO(DarinM223): implement this
+instance (Binary e) => Binary (RaftMessage e)
 
 data RaftState = RaftState
     { _currTerm :: Int
