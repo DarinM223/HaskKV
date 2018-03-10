@@ -4,9 +4,9 @@ import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Binary
 import GHC.Generics
-import HaskKV.Log (LogM, LogME, LogT (..))
-import HaskKV.Server (ServerM, ServerT)
-import HaskKV.Store (StorageM, StorageMK, StorageMKV, StoreT)
+import HaskKV.Log (Entry, Log, LogM, LogME, LogT (..))
+import HaskKV.Server (ServerState, ServerM, ServerT)
+import HaskKV.Store (StorageM, StorageMK, StorageMKV, Store, StoreT)
 
 data RaftMessage e
     = RequestVote
@@ -46,3 +46,35 @@ newtype RaftT k v e m a = RaftT
         , StorageM, StorageMK k, StorageMKV k v
         , ServerM (RaftMessage e)
         )
+
+execRaftT :: (MonadIO m, Entry e)
+          => RaftT k v e m a
+          -> Store k v
+          -> Log e
+          -> ServerState (RaftMessage e)
+          -> RaftState
+          -> m a
+execRaftT m store log state raft = undefined
+
+execRaftTVar :: (MonadIO m, Entry e)
+             => RaftT k v e m a
+             -> TVar (Store k v)
+             -> TVar (Log e)
+             -> ServerState (RaftMessage e)
+             -> TVar RaftState
+             -> m a
+execRaftTVar m store log state raft = undefined
+
+data Params k v e = Params
+    { _store       :: TVar (Store k v)
+    , _log         :: TVar (Log e)
+    , _serverState :: ServerState (RaftMessage e)
+    , _raftState   :: TVar RaftState
+    }
+
+execRaftTParams :: (MonadIO m, Entry e)
+                => RaftT k v e m a
+                -> Params k v e
+                -> m a
+execRaftTParams m p =
+    execRaftTVar m (_store p) (_log p) (_serverState p) (_raftState p)

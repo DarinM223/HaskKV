@@ -7,16 +7,16 @@ import Control.Monad.IO.Class
 import Data.Binary
 import Data.Function (fix)
 import Data.Int
-import HaskKV.Log (LogEntry)
-import HaskKV.Raft (RaftMessage)
-import HaskKV.Store (Store, Storable, execStoreTVar)
+import HaskKV.Log (Entry, LogEntry)
+import HaskKV.Raft (Params, RaftMessage, RaftState, execRaftTParams)
+import HaskKV.Store (Store, Storable)
 import Network.Socket
 
+import qualified HaskKV.Server as S
 import qualified Data.ByteString.Lazy as BS
 import qualified Network.Socket.ByteString.Lazy as NBS
 
 type MsgLen = Word16
-type Message = RaftMessage (LogEntry Int Int)
 
 msgLenLen :: Int64
 msgLenLen = 2
@@ -24,29 +24,8 @@ msgLenLen = 2
 isEOT :: MsgLen -> Bool
 isEOT = (== 0)
 
-sendMessage :: Socket -> Message -> IO ()
-sendMessage sock msg = do
-    NBS.send sock encodedLen
-    NBS.send sock encodedMsg
-    return ()
-  where
-    encodedMsg = encode msg
-    msgLen = fromIntegral $ BS.length encodedMsg :: MsgLen
-    encodedLen = encode msgLen
-
-recvMessage :: Socket -> IO (Maybe Message)
-recvMessage sock = do
-    msgLenS <- liftIO $ NBS.recv sock msgLenLen
-    let msgLen = decode msgLenS :: MsgLen
-    if (isEOT msgLen)
-        then do
-            msg <- liftIO $ NBS.recv sock $ fromIntegral msgLen
-            let message = decode msg :: Message
-            return $ Just message
-        else return Nothing
-
-runServer :: (Ord k, Storable v) => TVar (Store k v) -> IO ()
-runServer var = do
+runServer :: (Ord k, Storable v, Entry e) => Params k v e -> IO ()
+runServer params = do
     sock <- socket AF_INET Stream 0
     setSocketOption sock ReuseAddr 1
     bind sock (SockAddrInet 4242 iNADDR_ANY)
@@ -57,33 +36,22 @@ runServer var = do
     -- TODO(DarinM223): read config and fork threads to handle every worker
     -- in the config.
 
-    mainLoop sock chan var
+    mainLoop sock chan params
 
-mainLoop :: (Ord k, Storable v)
+mainLoop :: (Ord k, Storable v, Entry e)
          => Socket
-         -> Chan Message
-         -> TVar (Store k v)
+         -> Chan (RaftMessage e)
+         -> Params k v e
          -> IO ()
-mainLoop sock chan var = do
+mainLoop sock chan params = do
     conn <- accept sock
-    forkIO $ execStoreTVar (runConn chan conn) var
-    mainLoop sock chan var
-
-runConn :: (MonadIO m)
-        => Chan Message
-        -> (Socket, SockAddr)
-        -> m ()
-runConn chan (sock, _) = do
     commLine <- liftIO $ dupChan chan
+    -- TODO(DarinM223): use copy of params with channel as commLine
+    -- forkIO $ execRaftTParams runConn params
+    mainLoop sock chan params
 
-    -- Reads from broadcast channel and
-    -- sends broadcast messages back to client.
-    liftIO . forkIO . fix $ \loop -> do
-        msg <- readChan commLine
-        liftIO $ sendMessage sock msg
-        loop
-
-    fix $ \loop -> do
-        msgMaybe <- liftIO $ recvMessage sock
-        mapM_ (liftIO . sendMessage sock) msgMaybe
-        loop
+runConn :: (S.ServerM msg m) => m ()
+runConn = do
+    msgMaybe <- S.recv
+    mapM_ S.send msgMaybe
+    runConn

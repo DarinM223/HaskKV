@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module HaskKV.Server where
 
 import Control.Concurrent (forkIO)
@@ -14,7 +16,7 @@ import qualified Network.Socket as S
 import qualified Data.ByteString.Lazy as BS
 import qualified Network.Socket.ByteString.Lazy as NBS
 
-class (Monad m) => ServerM msg m where
+class (Monad m) => ServerM msg m | m -> msg where
     send      :: msg -> m ()
     broadcast :: msg -> m ()
     recv      :: m (Maybe msg)
