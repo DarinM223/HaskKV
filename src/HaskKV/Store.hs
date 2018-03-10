@@ -1,14 +1,4 @@
-module HaskKV.Store
-    ( Storable (..)
-    , StorageM (..)
-    , StorageMK (..)
-    , StorageMKV (..)
-    , MemStore (..)
-    , MemStoreT (..)
-    , execMemStoreT
-    , execMemStoreTVar
-    , checkAndSet
-    ) where
+module HaskKV.Store where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
@@ -74,34 +64,34 @@ class (StorageMK k s, Storable v) => StorageMKV k v s where
     replaceValue k v = lift $ replaceValue k v
 
 -- | An in-memory storage implementation.
-data MemStore k v = MemStore
+data Store k v = Store
     { _map  :: M.Map k v
     , _heap :: H.Heap (Time, k)
     } deriving (Show)
 
-newtype MemStoreT k v m a = MemStoreT
-    { unMemStoreT :: ReaderT (TVar (MemStore k v)) m a
+newtype StoreT k v m a = StoreT
+    { unStoreT :: ReaderT (TVar (Store k v)) m a
     } deriving
         ( Functor, Applicative, Monad, MonadIO, MonadTrans
-        , MonadReader (TVar (MemStore k v))
+        , MonadReader (TVar (Store k v))
         )
 
-execMemStoreT :: (MonadIO m) => MemStoreT k v m b -> MemStore k v -> m b
-execMemStoreT (MemStoreT (ReaderT f)) = f <=< liftIO . newTVarIO
+execStoreT :: (MonadIO m) => StoreT k v m b -> Store k v -> m b
+execStoreT (StoreT (ReaderT f)) = f <=< liftIO . newTVarIO
 
-execMemStoreTVar :: MemStoreT k v m b -> TVar (MemStore k v) -> m b
-execMemStoreTVar (MemStoreT (ReaderT f)) = f
+execStoreTVar :: StoreT k v m b -> TVar (Store k v) -> m b
+execStoreTVar (StoreT (ReaderT f)) = f
 
-instance (MonadIO m, Ord k, Storable v) => StorageM (MemStoreT k v m) where
-    cleanupExpired t = liftIO . modifyTVarIO (cleanupMemStore t) =<< ask
+instance (MonadIO m, Ord k, Storable v) => StorageM (StoreT k v m) where
+    cleanupExpired t = liftIO . modifyTVarIO (cleanupStore t) =<< ask
 
-instance (MonadIO m, Ord k, Storable v) => StorageMK k (MemStoreT k v m) where
-    deleteValue k = liftIO . modifyTVarIO (deleteMemStore k) =<< ask
+instance (MonadIO m, Ord k, Storable v) => StorageMK k (StoreT k v m) where
+    deleteValue k = liftIO . modifyTVarIO (deleteStore k) =<< ask
 
-instance (MonadIO m, Ord k, Storable v) => StorageMKV k v (MemStoreT k v m) where
-    getValue k = return . getMemStore k =<< liftIO . readTVarIO =<< ask
-    setValue k v = liftIO . modifyTVarIO (setMemStore k v) =<< ask
-    replaceValue k v = liftIO . stateTVarIO (replaceMemStore k v) =<< ask
+instance (MonadIO m, Ord k, Storable v) => StorageMKV k v (StoreT k v m) where
+    getValue k = return . getStore k =<< liftIO . readTVarIO =<< ask
+    setValue k v = liftIO . modifyTVarIO (setStore k v) =<< ask
+    replaceValue k v = liftIO . stateTVarIO (replaceStore k v) =<< ask
 
 instance (StorageM m) => StorageM (ReaderT r m)
 instance (StorageMK k m) => StorageMK k (ReaderT r m)
@@ -118,22 +108,22 @@ checkAndSet attempts k f
             Just Nothing  -> checkAndSet (attempts - 1) k f
             _             -> return False
 
-getMemStore :: (Ord k) => k -> MemStore k v -> Maybe v
-getMemStore k s = _map s M.!? k
+getStore :: (Ord k) => k -> Store k v -> Maybe v
+getStore k s = _map s M.!? k
 
-setMemStore :: (Ord k, Storable v) => k -> v -> MemStore k v -> MemStore k v
-setMemStore k v s = s { _map = M.insert k v' $ _map s }
+setStore :: (Ord k, Storable v) => k -> v -> Store k v -> Store k v
+setStore k v s = s { _map = M.insert k v' $ _map s }
   where
     maybeV = _map s M.!? k
     maybeCas' = (+ 1) . version <$> maybeV
     v' = maybe v id (setVersion <$> maybeCas' <*> pure v)
 
-replaceMemStore :: (Ord k, Storable v)
-                => k
-                -> v
-                -> MemStore k v
-                -> (Maybe CAS, MemStore k v)
-replaceMemStore k v s
+replaceStore :: (Ord k, Storable v)
+             => k
+             -> v
+             -> Store k v
+             -> (Maybe CAS, Store k v)
+replaceStore k v s
     | equalCAS  = (Just cas', s { _map = M.insert k v' $ _map s })
     | otherwise = (Nothing, s)
   where
@@ -142,24 +132,24 @@ replaceMemStore k v s
     cas' = version v + 1
     v' = setVersion cas' v
 
-deleteMemStore :: (Ord k) => k -> MemStore k v -> MemStore k v
-deleteMemStore k s = s { _map = M.delete k $ _map s }
+deleteStore :: (Ord k) => k -> Store k v -> Store k v
+deleteStore k s = s { _map = M.delete k $ _map s }
 
-cleanupMemStore :: (Ord k, Storable v) => Time -> MemStore k v -> MemStore k v
-cleanupMemStore curr s = case minHeapMaybe (_heap s) of
+cleanupStore :: (Ord k, Storable v) => Time -> Store k v -> Store k v
+cleanupStore curr s = case minHeapMaybe (_heap s) of
     Just (t, k) | diff t curr <= 0 ->
         let (_, h') = fromJust . H.viewMin $ _heap s
-            v       = getMemStore k s
+            v       = getStore k s
         in
             -- Only delete key from store if it hasn't been
             -- replaced/removed after it was set.
             if maybe False ((== 0) . diff t . expireTime) v
                 then
-                    cleanupMemStore curr
-                    . deleteMemStore k
+                    cleanupStore curr
+                    . deleteStore k
                     $ s { _heap = h' }
                 else
-                    cleanupMemStore curr s { _heap = h' }
+                    cleanupStore curr s { _heap = h' }
     _ -> s
   where
     diff a b = realToFrac (diffUTCTime a b)

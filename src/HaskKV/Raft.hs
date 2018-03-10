@@ -6,7 +6,7 @@ import Data.Binary
 import GHC.Generics
 import HaskKV.Log (LogM, LogME, LogT (..))
 import HaskKV.Server (ServerM, ServerT)
-import HaskKV.Store (StorageM, StorageMK, StorageMKV, MemStoreT)
+import HaskKV.Store (StorageM, StorageMK, StorageMKV, StoreT)
 
 data RaftMessage e
     = RequestVote
@@ -37,7 +37,7 @@ newtype RaftT k v e m a = RaftT
     { unRaftT :: ReaderT (TVar RaftState)
                  (ServerT (RaftMessage e)
                  (LogT e
-                 (MemStoreT k v m)))
+                 (StoreT k v m)))
                  a
     } deriving
         ( Functor, Applicative, Monad, MonadIO

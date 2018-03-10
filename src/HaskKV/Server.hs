@@ -1,5 +1,6 @@
 module HaskKV.Server where
 
+import Control.Concurrent (forkIO)
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Monad.Reader
@@ -41,17 +42,16 @@ newtype ServerT msg m a = ServerT { unServerT :: ReaderT (ServerState msg) m a }
         , MonadReader (ServerState msg)
         )
 
+execServerT :: (MonadIO m, Binary msg)
+            => ServerT msg m a
+            -> ServerState msg
+            -> m a
+execServerT m s = do
+    liftIO $ forkIO $ listenToBroadcast s
+    runReaderT (unServerT m) s
+
 instance (MonadIO m, Binary msg) => ServerM msg (ServerT msg m) where
-    send msg = do
-        s <- ask
-        liftIO $ withMVar (_sendLock s) $ \_ -> do
-            NBS.send (_socket s) encodedLen
-            NBS.send (_socket s) encodedMsg
-            return ()
-      where
-        encodedMsg = encode msg
-        msgLen = fromIntegral $ BS.length encodedMsg :: MsgLen
-        encodedLen = encode msgLen
+    send msg = liftIO . sendMessage msg =<< ask
 
     broadcast msg = do
         chan <- _broadcast <$> ask
@@ -74,6 +74,24 @@ instance (StorageMKV k v m) => StorageMKV k v (ServerT msg m)
 instance (LogM m) => LogM (ServerT msg m)
 instance (LogME e m) => LogME e (ServerT msg m)
 instance (ServerM msg m) => ServerM msg (ReaderT r m)
+
+listenToBroadcast :: (Binary msg) => ServerState msg -> IO ()
+listenToBroadcast s = do
+    let chan = _broadcast s
+    msg <- readChan chan
+    sendMessage msg s
+    listenToBroadcast s
+
+sendMessage :: (Binary msg) => msg -> ServerState msg -> IO ()
+sendMessage msg s =
+    withMVar (_sendLock s) $ \_ -> do
+        NBS.send (_socket s) encodedLen
+        NBS.send (_socket s) encodedMsg
+        return ()
+  where
+    encodedMsg = encode msg
+    msgLen = fromIntegral $ BS.length encodedMsg :: MsgLen
+    encodedLen = encode msgLen
 
 msgLenLen :: Int64
 msgLenLen = 2

@@ -93,6 +93,12 @@ newtype LogT e m a = LogT { unLogT :: ReaderT (TVar (Log e)) m a }
         , MonadReader (TVar (Log e))
         )
 
+execLogT :: (MonadIO m) => LogT e m a -> Log e -> m a
+execLogT (LogT (ReaderT f)) = f <=< liftIO . newTVarIO
+
+execLogTVar :: LogT e m a -> TVar (Log e) -> m a
+execLogTVar (LogT (ReaderT f)) = f
+
 instance (MonadIO m) => LogM (LogT e m) where
     firstIndex = return . _lowIdx =<< liftIO . readTVarIO =<< ask
     lastIndex = return . _highIdx =<< liftIO . readTVarIO =<< ask

@@ -9,7 +9,7 @@ import Data.Function (fix)
 import Data.Int
 import HaskKV.Log (LogEntry)
 import HaskKV.Raft (RaftMessage)
-import HaskKV.Store (MemStore, Storable, execMemStoreTVar)
+import HaskKV.Store (Store, Storable, execStoreTVar)
 import Network.Socket
 
 import qualified Data.ByteString.Lazy as BS
@@ -45,7 +45,7 @@ recvMessage sock = do
             return $ Just message
         else return Nothing
 
-runServer :: (Ord k, Storable v) => TVar (MemStore k v) -> IO ()
+runServer :: (Ord k, Storable v) => TVar (Store k v) -> IO ()
 runServer var = do
     sock <- socket AF_INET Stream 0
     setSocketOption sock ReuseAddr 1
@@ -62,11 +62,11 @@ runServer var = do
 mainLoop :: (Ord k, Storable v)
          => Socket
          -> Chan Message
-         -> TVar (MemStore k v)
+         -> TVar (Store k v)
          -> IO ()
 mainLoop sock chan var = do
     conn <- accept sock
-    forkIO $ execMemStoreTVar (runConn chan conn) var
+    forkIO $ execStoreTVar (runConn chan conn) var
     mainLoop sock chan var
 
 runConn :: (MonadIO m)
