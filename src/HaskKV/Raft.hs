@@ -4,9 +4,9 @@ import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Binary
 import GHC.Generics
-import HaskKV.Log (Entry, Log, LogM, LogME, LogT (..))
+import HaskKV.Log (Entry, Log, LogM, LogT (..))
 import HaskKV.Server (ServerState, ServerM, ServerT)
-import HaskKV.Store (StorageM, StorageMK, StorageMKV, Store, StoreT)
+import HaskKV.Store (StorageM, Store, StoreT)
 
 data RaftMessage e
     = RequestVote
@@ -42,9 +42,7 @@ newtype RaftT k v e m a = RaftT
     } deriving
         ( Functor, Applicative, Monad, MonadIO
         , MonadReader (TVar RaftState)
-        , LogM, LogME e
-        , StorageM, StorageMK k, StorageMKV k v
-        , ServerM (RaftMessage e)
+        , LogM e, StorageM k v, ServerM (RaftMessage e)
         )
 
 execRaftT :: (MonadIO m, Entry e)

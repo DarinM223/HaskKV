@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module HaskKV.Log where
 
 import Control.Concurrent.STM
@@ -14,42 +16,41 @@ class (Binary l) => Entry l where
     entryIndex :: l -> Int
     entryTerm  :: l -> Int
 
-class (Monad m) => LogM m where
+class (Monad m) => LogM e m | m -> e where
     -- | Returns the first index written.
     firstIndex :: m Int
 
     -- | Returns the last index written.
     lastIndex :: m Int
 
-    -- | Deletes entries in an inclusive range.
-    deleteRange :: Int -> Int -> m ()
-
-    default firstIndex :: (MonadTrans t, LogM m', m ~ t m') => m Int
-    firstIndex = lift firstIndex
-
-    default lastIndex :: (MonadTrans t, LogM m', m ~ t m') => m Int
-    lastIndex = lift lastIndex
-
-    default deleteRange :: (MonadTrans t, LogM m', m ~ t m')
-                        => Int
-                        -> Int
-                        -> m ()
-    deleteRange a b = lift $ deleteRange a b
-
-class (LogM m, Entry e) => LogME e m where
     -- | Gets a log entry at the specified index.
     loadEntry :: Int -> m (Maybe e)
 
     -- | Stores multiple log entries.
     storeEntries :: [e] -> m ()
 
-    default loadEntry :: (MonadTrans t, LogME e m', m ~ t m')
+    -- | Deletes entries in an inclusive range.
+    deleteRange :: Int -> Int -> m ()
+
+    default firstIndex :: (MonadTrans t, LogM e m', m ~ t m') => m Int
+    firstIndex = lift firstIndex
+
+    default lastIndex :: (MonadTrans t, LogM e m', m ~ t m') => m Int
+    lastIndex = lift lastIndex
+
+    default loadEntry :: (MonadTrans t, LogM e m', m ~ t m')
                       => Int
                       -> m (Maybe e)
     loadEntry = lift . loadEntry
 
-    default storeEntries :: (MonadTrans t, LogME e m', m ~ t m') => [e] -> m ()
+    default storeEntries :: (MonadTrans t, LogM e m', m ~ t m') => [e] -> m ()
     storeEntries = lift . storeEntries
+
+    default deleteRange :: (MonadTrans t, LogM e m', m ~ t m')
+                        => Int
+                        -> Int
+                        -> m ()
+    deleteRange a b = lift $ deleteRange a b
 
 type TID = Int
 
@@ -99,21 +100,16 @@ execLogT (LogT (ReaderT f)) = f <=< liftIO . newTVarIO
 execLogTVar :: LogT e m a -> TVar (Log e) -> m a
 execLogTVar (LogT (ReaderT f)) = f
 
-instance (MonadIO m) => LogM (LogT e m) where
+instance (MonadIO m, Entry e) => LogM e (LogT e m) where
     firstIndex = return . _lowIdx =<< liftIO . readTVarIO =<< ask
     lastIndex = return . _highIdx =<< liftIO . readTVarIO =<< ask
-    deleteRange a b = liftIO . modifyTVarIO (deleteRangeLog a b) =<< ask
-
-instance (MonadIO m, Entry e) => LogME e (LogT e m) where
     loadEntry k =
         return . IM.lookup k . _entries =<< liftIO . readTVarIO =<< ask
     storeEntries es = liftIO . modifyTVarIO (storeEntriesLog es) =<< ask
+    deleteRange a b = liftIO . modifyTVarIO (deleteRangeLog a b) =<< ask
 
-instance (StorageM m) => StorageM (LogT e m)
-instance (StorageMK k m) => StorageMK k (LogT e m)
-instance (StorageMKV k v m) => StorageMKV k v (LogT e m)
-instance (LogM m) => LogM (ReaderT r m)
-instance (LogME e m) => LogME e (ReaderT r m)
+instance (StorageM k v m) => StorageM k v (LogT e m)
+instance (LogM e m) => LogM e (ReaderT r m)
 
 deleteRangeLog :: Int -> Int -> Log e -> Log e
 deleteRangeLog min max l =

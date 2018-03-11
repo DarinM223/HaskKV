@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module HaskKV.Store where
 
 import Control.Concurrent.STM
@@ -17,23 +19,7 @@ class Storable v where
     version    :: v -> CAS
     setVersion :: CAS -> v -> v
 
-class (Monad s) => StorageM s where
-    -- | Deletes all values that passed the expiration time.
-    cleanupExpired :: Time -> s ()
-
-    default cleanupExpired :: (MonadTrans t, StorageM s', s ~ t s')
-                           => Time
-                           -> s ()
-    cleanupExpired = lift . cleanupExpired
-
-class (StorageM s, Ord k) => StorageMK k s where
-    -- | Deletes a value in the store given a key.
-    deleteValue :: k -> s ()
-
-    default deleteValue :: (MonadTrans t, StorageMK k s', s ~ t s') => k -> s ()
-    deleteValue = lift . deleteValue
-
-class (StorageMK k s, Storable v) => StorageMKV k v s where
+class (Monad s, Ord k, Storable v) => StorageM k v s | s -> k v where
     -- | Gets a value from the store given a key.
     getValue :: k -> s (Maybe v)
 
@@ -46,22 +32,37 @@ class (StorageMK k s, Storable v) => StorageMKV k v s where
     -- Nothing otherwise.
     replaceValue :: k -> v -> s (Maybe CAS)
 
-    default getValue :: (MonadTrans t, StorageMKV k v s', s ~ t s')
+    -- | Deletes a value in the store given a key.
+    deleteValue :: k -> s ()
+
+    -- | Deletes all values that passed the expiration time.
+    cleanupExpired :: Time -> s ()
+
+    default getValue :: (MonadTrans t, StorageM k v s', s ~ t s')
                      => k
                      -> s (Maybe v)
     getValue = lift . getValue
 
-    default setValue :: (MonadTrans t, StorageMKV k v s', s ~ t s')
+    default setValue :: (MonadTrans t, StorageM k v s', s ~ t s')
                      => k
                      -> v
                      -> s ()
     setValue k v = lift $ setValue k v
 
-    default replaceValue :: (MonadTrans t, StorageMKV k v s', s ~ t s')
+    default replaceValue :: (MonadTrans t, StorageM k v s', s ~ t s')
                          => k
                          -> v
                          -> s (Maybe CAS)
     replaceValue k v = lift $ replaceValue k v
+
+    default deleteValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> s ()
+    deleteValue = lift . deleteValue
+
+    default cleanupExpired :: (MonadTrans t, StorageM k v s', s ~ t s')
+                           => Time
+                           -> s ()
+    cleanupExpired = lift . cleanupExpired
+
 
 -- | An in-memory storage implementation.
 data Store k v = Store
@@ -82,22 +83,16 @@ execStoreT (StoreT (ReaderT f)) = f <=< liftIO . newTVarIO
 execStoreTVar :: StoreT k v m b -> TVar (Store k v) -> m b
 execStoreTVar (StoreT (ReaderT f)) = f
 
-instance (MonadIO m, Ord k, Storable v) => StorageM (StoreT k v m) where
-    cleanupExpired t = liftIO . modifyTVarIO (cleanupStore t) =<< ask
-
-instance (MonadIO m, Ord k, Storable v) => StorageMK k (StoreT k v m) where
-    deleteValue k = liftIO . modifyTVarIO (deleteStore k) =<< ask
-
-instance (MonadIO m, Ord k, Storable v) => StorageMKV k v (StoreT k v m) where
+instance (MonadIO m, Ord k, Storable v) => StorageM k v (StoreT k v m) where
     getValue k = return . getStore k =<< liftIO . readTVarIO =<< ask
     setValue k v = liftIO . modifyTVarIO (setStore k v) =<< ask
     replaceValue k v = liftIO . stateTVarIO (replaceStore k v) =<< ask
+    deleteValue k = liftIO . modifyTVarIO (deleteStore k) =<< ask
+    cleanupExpired t = liftIO . modifyTVarIO (cleanupStore t) =<< ask
 
-instance (StorageM m) => StorageM (ReaderT r m)
-instance (StorageMK k m) => StorageMK k (ReaderT r m)
-instance (StorageMKV k v m) => StorageMKV k v (ReaderT r m)
+instance (StorageM k v m) => StorageM k v (ReaderT r m)
 
-checkAndSet :: (StorageMKV k v m) => Int -> k -> (v -> v) -> m Bool
+checkAndSet :: (StorageM k v m) => Int -> k -> (v -> v) -> m Bool
 checkAndSet attempts k f
     | attempts == 0 = return False
     | otherwise = do

@@ -9,8 +9,8 @@ import Control.Monad.Reader
 import Data.Int
 import Data.Word
 import Data.Binary
-import HaskKV.Log (LogM, LogME)
-import HaskKV.Store (StorageM, StorageMK, StorageMKV)
+import HaskKV.Log (LogM)
+import HaskKV.Store (StorageM)
 
 import qualified Network.Socket as S
 import qualified Data.ByteString.Lazy as BS
@@ -70,11 +70,8 @@ instance (MonadIO m, Binary msg) => ServerM msg (ServerT msg m) where
                 return $ Just message
             else return Nothing
 
-instance (StorageM m) => StorageM (ServerT msg m)
-instance (StorageMK k m) => StorageMK k (ServerT msg m)
-instance (StorageMKV k v m) => StorageMKV k v (ServerT msg m)
-instance (LogM m) => LogM (ServerT msg m)
-instance (LogME e m) => LogME e (ServerT msg m)
+instance (StorageM k v m) => StorageM k v (ServerT msg m)
+instance (LogM e m) => LogM e (ServerT msg m)
 instance (ServerM msg m) => ServerM msg (ReaderT r m)
 
 listenToBroadcast :: (Binary msg) => ServerState msg -> IO ()
