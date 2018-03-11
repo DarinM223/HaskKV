@@ -4,9 +4,9 @@ import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Binary
 import GHC.Generics
-import HaskKV.Log (Entry, Log, LogM, LogT (..))
-import HaskKV.Server (ServerState, ServerM, ServerT)
-import HaskKV.Store (StorageM, Store, StoreT)
+import HaskKV.Log (execLogTVar, Entry, Log, LogM, LogT (..))
+import HaskKV.Server (execServerT, ServerState, ServerM, ServerT)
+import HaskKV.Store (execStoreTVar, StorageM, Store, StoreT)
 
 data RaftMessage e
     = RequestVote
@@ -52,7 +52,11 @@ execRaftT :: (MonadIO m, Entry e)
           -> ServerState (RaftMessage e)
           -> RaftState
           -> m a
-execRaftT m store log state raft = undefined
+execRaftT m store log state raft = do
+    storeVar <- liftIO $ newTVarIO store
+    logVar <- liftIO $ newTVarIO log
+    raftVar <- liftIO $ newTVarIO raft
+    execRaftTVar m storeVar logVar state raftVar
 
 execRaftTVar :: (MonadIO m, Entry e)
              => RaftT k v e m a
@@ -61,7 +65,13 @@ execRaftTVar :: (MonadIO m, Entry e)
              -> ServerState (RaftMessage e)
              -> TVar RaftState
              -> m a
-execRaftTVar m store log state raft = undefined
+execRaftTVar m store log state raft
+    = flip execStoreTVar store
+    . flip execLogTVar log
+    . flip execServerT state
+    . flip runReaderT raft
+    . unRaftT
+    $ m
 
 data Params k v e = Params
     { _store       :: TVar (Store k v)
