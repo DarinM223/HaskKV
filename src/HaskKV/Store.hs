@@ -63,6 +63,16 @@ class (Monad s, Ord k, Storable v) => StorageM k v s | s -> k v where
                            -> s ()
     cleanupExpired = lift . cleanupExpired
 
+data StoreValue v = StoreValue
+    { _expireTime :: Time
+    , _version    :: CAS
+    , _value      :: v
+    } deriving (Show, Eq)
+
+instance Storable (StoreValue v) where
+    expireTime = _expireTime
+    version = _version
+    setVersion cas s = s { _version = cas }
 
 -- | An in-memory storage implementation.
 data Store k v = Store
@@ -102,6 +112,18 @@ checkAndSet attempts k f
             Just (Just _) -> return True
             Just Nothing  -> checkAndSet (attempts - 1) k f
             _             -> return False
+
+createStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
+createStoreValue seconds version val = do
+    currTime <- getCurrentTime
+    let newTime = addUTCTime diff currTime
+    return $ StoreValue
+        { _version = version, _expireTime = newTime, _value = val }
+  where
+    diff = fromRational . toRational . secondsToDiffTime $ seconds
+
+emptyStore :: Store k v
+emptyStore = Store { _map = M.empty, _heap = H.empty }
 
 getStore :: (Ord k) => k -> Store k v -> Maybe v
 getStore k s = _map s M.!? k

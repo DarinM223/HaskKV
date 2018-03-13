@@ -93,3 +93,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - haskv
+    - tasty
+    - tasty-hunit
+    - tasty-quickcheck
