@@ -160,7 +160,7 @@ cleanupStore curr s = case minHeapMaybe (_heap s) of
         in
             -- Only delete key from store if it hasn't been
             -- replaced/removed after it was set.
-            if maybe False ((== 0) . diff t . expireTime) v
+            if maybe False ((== 0) . diff curr . expireTime) v
                 then
                     cleanupStore curr
                     . deleteStore k
