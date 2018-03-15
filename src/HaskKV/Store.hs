@@ -38,29 +38,19 @@ class (Monad s, Ord k, Storable v) => StorageM k v s | s -> k v where
     -- | Deletes all values that passed the expiration time.
     cleanupExpired :: Time -> s ()
 
-    default getValue :: (MonadTrans t, StorageM k v s', s ~ t s')
-                     => k
-                     -> s (Maybe v)
+    default getValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> s (Maybe v)
     getValue = lift . getValue
 
-    default setValue :: (MonadTrans t, StorageM k v s', s ~ t s')
-                     => k
-                     -> v
-                     -> s ()
+    default setValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> v -> s ()
     setValue k v = lift $ setValue k v
 
-    default replaceValue :: (MonadTrans t, StorageM k v s', s ~ t s')
-                         => k
-                         -> v
-                         -> s (Maybe CAS)
+    default replaceValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> v -> s (Maybe CAS)
     replaceValue k v = lift $ replaceValue k v
 
     default deleteValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> s ()
     deleteValue = lift . deleteValue
 
-    default cleanupExpired :: (MonadTrans t, StorageM k v s', s ~ t s')
-                           => Time
-                           -> s ()
+    default cleanupExpired :: (MonadTrans t, StorageM k v s', s ~ t s') => Time -> s ()
     cleanupExpired = lift . cleanupExpired
 
 data StoreValue v = StoreValue

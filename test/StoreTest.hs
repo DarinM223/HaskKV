@@ -40,7 +40,7 @@ unitTests = testGroup "Unit tests"
         expire6Sec <- liftIO $ createStoreValue 6 1 "value4"
         forM_ (zip [1..] [expire1Sec, expire2Sec, expire2Sec', expire6Sec]) $ \(k, v) ->
             setValue k v
-        liftIO $ threadDelay 3000000
+        -- liftIO $ threadDelay 3000000
         liftIO getCurrentTime >>= cleanupExpired
         getValue 1 >>= liftIO . (@=? Nothing)
         getValue 2 >>= liftIO . (@=? Nothing)

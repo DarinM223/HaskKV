@@ -38,18 +38,13 @@ class (Monad m) => LogM e m | m -> e where
     default lastIndex :: (MonadTrans t, LogM e m', m ~ t m') => m Int
     lastIndex = lift lastIndex
 
-    default loadEntry :: (MonadTrans t, LogM e m', m ~ t m')
-                      => Int
-                      -> m (Maybe e)
+    default loadEntry :: (MonadTrans t, LogM e m', m ~ t m') => Int -> m (Maybe e)
     loadEntry = lift . loadEntry
 
     default storeEntries :: (MonadTrans t, LogM e m', m ~ t m') => [e] -> m ()
     storeEntries = lift . storeEntries
 
-    default deleteRange :: (MonadTrans t, LogM e m', m ~ t m')
-                        => Int
-                        -> Int
-                        -> m ()
+    default deleteRange :: (MonadTrans t, LogM e m', m ~ t m') => Int -> Int -> m ()
     deleteRange a b = lift $ deleteRange a b
 
 type TID = Int

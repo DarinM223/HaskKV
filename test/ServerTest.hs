@@ -9,6 +9,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import HaskKV.Server
+import HaskKV.TCPConn
 
 import qualified Data.ByteString.Lazy as BS
 import qualified Network.Socket.ByteString.Lazy as NBS
@@ -16,31 +17,31 @@ import qualified Network.Socket.ByteString.Lazy as NBS
 tests :: TestTree
 tests = testGroup "Server tests" [unitTests]
 
+testPort :: PortNumber
+testPort = 4242
+
 unitTests :: TestTree
 unitTests = testGroup "Unit tests"
-    [ withResource (openSocket 4242) close $ \getRecvSock ->
-      withResource (openSocket 4343) close $ \getSendSock -> testCase "Receives message" $ do
-        sendSock <- getSendSock
-        recvSock <- getRecvSock
+    [ testCase "Receives message" $ do
         lock <- newMVar ()
         chan <- newChan
-        let state = ServerState { _socket = sock, _broadcast = chan, _sendLock = lock }
-        flip execServerT state $ do
-            let msg = 2 :: Int
-                encodedMsg = encode msg
-                msgLen = fromIntegral $ BS.length encodedMsg :: MsgLen
-                encodedLen = encode msgLen
-            liftIO $ NBS.send sock encodedLen
-            liftIO $ NBS.send sock encodedMsg
-            maybeMsg <- recv
-            liftIO $ maybeMsg @?= Just (2 :: Int)
+        let makeParams = \sock -> ServerState { _socket = sock, _broadcast = chan, _sendLock = lock }
+            handler = \_ state -> flip execServerT state $ do
+                maybeMsg <- recv
+                liftIO $ maybeMsg @?= Just (2 :: Int)
+        runServer testPort makeParams (\_ -> return ()) handler
+        sendSock <- connectSocket "localhost" testPort
+        let msg = 2 :: Int
+            encodedMsg = encode msg
+            msgLen = fromIntegral $ BS.length encodedMsg :: MsgLen
+            encodedLen = encode msgLen
+        NBS.send sendSock encodedLen
+        NBS.send sendSock encodedMsg
         return ()
     ]
 
-openSocket :: PortNumber -> IO Socket
-openSocket addr = do
+connectSocket :: String -> PortNumber -> IO Socket
+connectSocket host port = do
     sock <- socket AF_INET Stream 0
-    setSocketOption sock ReuseAddr 1
-    bind sock (SockAddrInet addr iNADDR_ANY)
-    listen sock 1
+    connect sock (SockAddrInet port iNADDR_ANY)
     return sock
