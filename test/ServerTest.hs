@@ -1,7 +1,7 @@
 module ServerTest (tests) where
 
 import Control.Concurrent (threadDelay)
-import Control.Concurrent.Async (wait, withAsync)
+import Control.Concurrent.Async (concurrently, wait, withAsync)
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
 import Control.Monad.IO.Class
@@ -18,6 +18,12 @@ import qualified Network.Socket as S
 
 tests :: TestTree
 tests = testGroup "Server tests" [unitTests]
+
+mapConcurrentlyIO_ :: [IO a] -> IO ()
+mapConcurrentlyIO_ [] = return ()
+mapConcurrentlyIO_ (x:xs) = do
+    concurrently x $ mapConcurrentlyIO_ xs
+    return ()
 
 unitTests :: TestTree
 unitTests = testGroup "Unit tests"
@@ -41,19 +47,15 @@ unitTests = testGroup "Unit tests"
         chan1 <- dupChan broadcastChan
         chan2 <- dupChan broadcastChan
         chan3 <- dupChan broadcastChan
-        withAsync (broadcastServer "4244" chan1 lock1) $ \asyncServer1 ->
-          withAsync (broadcastServer "4245" chan2 lock2) $ \asyncServer2 ->
-            withAsync (broadcastServer "4246" chan3 lock3) $ \asyncServer3 ->
-              withAsync (client "4244" readServerM lock1) $ \asyncClient1 ->
-                withAsync (client "4245" readServerM lock2) $ \asyncClient2 ->
-                  withAsync (client "4246" readServerM lock3) $ \asyncClient3 -> do
-                    writeChan broadcastChan (2 :: Int)
-                    wait asyncServer1
-                    wait asyncServer2
-                    wait asyncServer3
-                    wait asyncClient1
-                    wait asyncClient2
-                    wait asyncClient3
+        mapConcurrentlyIO_
+            [ broadcastServer "4244" chan1 lock1
+            , broadcastServer "4245" chan2 lock2
+            , broadcastServer "4246" chan3 lock3
+            , client "4244" readServerM lock1
+            , client "4245" readServerM lock2
+            , client "4246" readServerM lock3
+            , writeChan broadcastChan (2 :: Int)
+            ]
         return ()
 
     runTest :: (MVar () -> IO a) -> (MVar () -> IO b) -> IO ()
