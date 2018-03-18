@@ -63,7 +63,7 @@ instance (MonadIO m, Binary msg) => ServerM msg (ServerT msg m) where
         sock <- _socket <$> ask
         msgLenS <- liftIO $ NBS.recv sock msgLenLen
         let msgLen = decode msgLenS :: MsgLen
-        if (isEOT msgLen)
+        if isEOT msgLen
             then do
                 msg <- liftIO $ NBS.recv sock $ fromIntegral msgLen
                 let message = decode msg :: msg
