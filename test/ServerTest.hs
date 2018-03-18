@@ -45,14 +45,9 @@ unitTests = testGroup "Unit tests"
     server lock = listen "127.0.0.1" "4242" $ \(lsock, _) -> do
         putMVar lock ()
         accept lsock $ \(csock, _) -> do
-            msgLenS <- NBS.recv csock 2
-            let msgLen = decode msgLenS :: Word16
-            msgS <- NBS.recv csock $ fromIntegral msgLen
-            let msg = decode msgS :: Int
-            msg @?= 2
-            {-chan <- newChan-}
-            {-let state = ServerState { _socket = csock, _broadcast = chan, _sendLock = lock }-}
-            {-flip execServerT state $ do-}
-            {-    msg <- recv-}
-            {-    liftIO $ msg @?= Just (2 :: Int)-}
+            chan <- newChan
+            let state = ServerState { _socket = csock, _broadcast = chan, _sendLock = lock }
+            flip execServerT state $ do
+                msg <- recv
+                liftIO $ msg @?= Just (2 :: Int)
         return ()
