@@ -19,7 +19,7 @@ class Storable v where
     version    :: v -> CAS
     setVersion :: CAS -> v -> v
 
-class (Monad s, Ord k, Storable v) => StorageM k v s | s -> k v where
+class (Monad s, Show k, Ord k, Storable v) => StorageM k v s | s -> k v where
     -- | Gets a value from the store given a key.
     getValue :: k -> s (Maybe v)
 
@@ -64,10 +64,14 @@ instance Storable (StoreValue v) where
     version = _version
     setVersion cas s = s { _version = cas }
 
+newtype HeapVal k = HeapVal (Time, k) deriving (Show, Eq)
+instance (Eq k) => Ord (HeapVal k) where
+    compare (HeapVal a) (HeapVal b) = compare (fst a) (fst b)
+
 -- | An in-memory storage implementation.
 data Store k v = Store
     { _map  :: M.Map k v
-    , _heap :: H.Heap (Time, k)
+    , _heap :: H.Heap (HeapVal k)
     } deriving (Show)
 
 newtype StoreT k v m a = StoreT
@@ -83,7 +87,13 @@ execStoreT (StoreT (ReaderT f)) = f <=< liftIO . newTVarIO
 execStoreTVar :: StoreT k v m b -> TVar (Store k v) -> m b
 execStoreTVar (StoreT (ReaderT f)) = f
 
-instance (MonadIO m, Ord k, Storable v) => StorageM k v (StoreT k v m) where
+instance
+    ( MonadIO m
+    , Ord k
+    , Show k
+    , Storable v
+    ) => StorageM k v (StoreT k v m) where
+
     getValue k = return . getStore k =<< liftIO . readTVarIO =<< ask
     setValue k v = liftIO . modifyTVarIO (setStore k v) =<< ask
     replaceValue k v = liftIO . stateTVarIO (replaceStore k v) =<< ask
@@ -119,11 +129,15 @@ getStore :: (Ord k) => k -> Store k v -> Maybe v
 getStore k s = _map s M.!? k
 
 setStore :: (Ord k, Storable v) => k -> v -> Store k v -> Store k v
-setStore k v s = s { _map = M.insert k v' $ _map s }
+setStore k v s = s
+    { _map  = M.insert k v' $ _map s
+    , _heap = H.insert (HeapVal (time, k)) $ _heap s
+    }
   where
     maybeV = _map s M.!? k
     maybeCas' = (+ 1) . version <$> maybeV
     v' = maybe v id (setVersion <$> maybeCas' <*> pure v)
+    time = expireTime v'
 
 replaceStore :: (Ord k, Storable v)
              => k
@@ -142,15 +156,15 @@ replaceStore k v s
 deleteStore :: (Ord k) => k -> Store k v -> Store k v
 deleteStore k s = s { _map = M.delete k $ _map s }
 
-cleanupStore :: (Ord k, Storable v) => Time -> Store k v -> Store k v
+cleanupStore :: (Show k, Ord k, Storable v) => Time -> Store k v -> Store k v
 cleanupStore curr s = case minHeapMaybe (_heap s) of
-    Just (t, k) | diff t curr <= 0 ->
+    Just (HeapVal (t, k)) | diff t curr <= 0 ->
         let (_, h') = fromJust . H.viewMin $ _heap s
             v       = getStore k s
         in
             -- Only delete key from store if it hasn't been
             -- replaced/removed after it was set.
-            if maybe False ((== 0) . diff curr . expireTime) v
+            if maybe False ((== 0) . diff t . expireTime) v
                 then
                     cleanupStore curr
                     . deleteStore k
