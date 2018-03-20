@@ -20,6 +20,7 @@ class (Monad m) => ServerM msg m | m -> msg where
     send      :: msg -> m ()
     broadcast :: msg -> m ()
     recv      :: m (Maybe msg)
+    serverID  :: m Int
 
     default send :: (MonadTrans t, ServerM msg m', m ~ t m') => msg -> m ()
     send = lift . send
@@ -30,10 +31,14 @@ class (Monad m) => ServerM msg m | m -> msg where
     default recv :: (MonadTrans t, ServerM msg m', m ~ t m') => m (Maybe msg)
     recv = lift recv
 
+    default serverID :: (MonadTrans t, ServerM msg m', m ~ t m') => m Int
+    serverID = lift serverID
+
 data ServerState msg = ServerState
-    { _socket    :: S.Socket
-    , _broadcast :: Chan msg
-    , _sendLock  :: MVar ()
+    { _socket     :: S.Socket
+    , _broadcast  :: Chan msg
+    , _sendLock   :: MVar ()
+    , _serverIdx  :: Int
     }
 
 type MsgLen = Word16
@@ -69,6 +74,8 @@ instance (MonadIO m, Binary msg) => ServerM msg (ServerT msg m) where
                 let message = decode msg :: msg
                 return $ Just message
             else return Nothing
+
+    serverID = _serverIdx <$> ask
 
 instance (StorageM k v m) => StorageM k v (ServerT msg m)
 instance (LogM e m) => LogM e (ServerT msg m)
