@@ -14,11 +14,12 @@ data StateType
     deriving (Show, Eq)
 
 data RaftState = RaftState
-    { _stateType   :: StateType
-    , _currTerm    :: Int
-    , _votedFor    :: Int
-    , _commitIndex :: Int
-    , _lastApplied :: Int
-    , _lastRecv    :: Time
-    , _timeout     :: Int
+    { _stateType    :: StateType
+    , _currTerm     :: Int
+    , _votedFor     :: Int
+    , _commitIndex  :: Int
+    , _lastApplied  :: Int
+    , _lastRecv     :: Time
+    , _timeout      :: Integer
+    , _mainServerID :: Int
     } deriving (Show, Eq)

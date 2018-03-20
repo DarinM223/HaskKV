@@ -2,11 +2,20 @@ module HaskKV.Raft.Follower where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
+import HaskKV.Log
+import HaskKV.Raft.Message
 import HaskKV.Raft.State
-import HaskKV.Server
 import HaskKV.Raft.Utils
+import HaskKV.Server
 
-runFollower :: (MonadReader (TVar RaftState) m, ServerM msg m, Eq msg) => m ()
+runFollower :: ( MonadIO m
+               , MonadReader (TVar RaftState) m
+               , LogM e m
+               , ServerM (RaftMessage e) m
+               , Entry e
+               , Eq e
+               )
+            => m ()
 runFollower = do
     msg <- recv
     when (msg /= Nothing) resetTimeout

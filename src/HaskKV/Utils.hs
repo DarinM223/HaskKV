@@ -11,7 +11,7 @@ stateTVarIO f v = atomically $ do
     return r
 
 modifyTVarIO :: (a -> a) -> TVar a -> IO ()
-modifyTVarIO f v = atomically $ modifyTVar v f
+modifyTVarIO f v = atomically $ modifyTVar' v f
 
 minHeapMaybe :: H.Heap a -> Maybe a
 minHeapMaybe h
