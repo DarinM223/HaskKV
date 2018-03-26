@@ -4,7 +4,7 @@ import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Binary
 import HaskKV.Log (execLogTVar, Log, LogM, LogT (..))
-import HaskKV.Server (execServerT, ServerState, ServerM, ServerT)
+import HaskKV.Server (execServerT, ServerError, ServerState, ServerM, ServerT)
 import HaskKV.Store (execStoreTVar, StorageM, Store, StoreT)
 
 newtype RaftT s msg k v e m a = RaftT
@@ -16,7 +16,7 @@ newtype RaftT s msg k v e m a = RaftT
     } deriving
         ( Functor, Applicative, Monad, MonadIO
         , MonadReader (TVar s)
-        , LogM e, StorageM k v, ServerM (msg e)
+        , LogM e, StorageM k v, ServerM (msg e) ServerError
         )
 
 execRaftT :: (MonadIO m, Binary (msg e))

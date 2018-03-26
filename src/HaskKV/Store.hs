@@ -39,18 +39,15 @@ class (Monad s, Show k, Ord k, Storable v) => StorageM k v s | s -> k v where
     cleanupExpired :: Time -> s ()
 
     default getValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> s (Maybe v)
-    getValue = lift . getValue
-
     default setValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> v -> s ()
-    setValue k v = lift $ setValue k v
-
     default replaceValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> v -> s (Maybe CAS)
-    replaceValue k v = lift $ replaceValue k v
-
     default deleteValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> s ()
-    deleteValue = lift . deleteValue
-
     default cleanupExpired :: (MonadTrans t, StorageM k v s', s ~ t s') => Time -> s ()
+
+    getValue = lift . getValue
+    setValue k v = lift $ setValue k v
+    replaceValue k v = lift $ replaceValue k v
+    deleteValue = lift . deleteValue
     cleanupExpired = lift . cleanupExpired
 
 data StoreValue v = StoreValue
@@ -166,7 +163,7 @@ cleanupStore curr s = case minHeapMaybe (_heap s) of
             -- replaced/removed after it was set.
             if maybe False ((== 0) . diff t . expireTime) v
                 then
-                    cleanupStore curr
+                      cleanupStore curr
                     . deleteStore k
                     $ s { _heap = h' }
                 else

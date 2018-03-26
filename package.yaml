@@ -24,11 +24,14 @@ dependencies:
 - async
 - binary
 - bytestring
+- conduit
+- conduit-extra
 - containers
 - heaps
 - mtl
 - network
 - network-simple
+- rolling-queue
 - stm
 - time
 
