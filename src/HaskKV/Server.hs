@@ -64,22 +64,34 @@ execServerT :: (MonadIO m, Binary msg)
             -> ServerState msg
             -> m a
 execServerT m s = do
+    -- TODO(DarinM223): separate this out so that tests can use a different
+    -- conduit sink/source (lists, etc)
     liftIO $ forkIO $ runTCPServer (serverSettings 4000 "*") $ \appData ->
         runConduit
             $ appSource appData
            .| CL.mapMaybe (decode . fromStrict)
            .| sinkRollingQueue (_messages s)
 
+    -- TODO(DarinM223): for every RollingQueue in outgoing, sink it to the
+    -- appropriate socket.
+
     liftIO $ Timer.reset (_timer s) (_timeout s)
     runReaderT (unServerT m) s
 
-instance
-    ( MonadIO m
-    , Binary msg
-    ) => ServerM msg ServerError (ServerT msg m) where
+instance (MonadIO m) => ServerM msg ServerError (ServerT msg m) where
+    send i msg = do
+        s <- ask
+        let rq = IM.lookup i . _outgoing $ s
+        mapM_ (liftIO . atomically . flip RQ.write msg) rq
 
-    send = undefined
-    broadcast = undefined
+    broadcast msg
+        = liftIO
+        . atomically
+        . mapM_ (flip RQ.write msg)
+        . IM.elems
+        . _outgoing
+      =<< ask
+
     recv = do
         s <- ask
         msg <- liftIO . atomically $
@@ -88,54 +100,6 @@ instance
         liftIO $ Timer.reset (_timer s) (_timeout s)
         return msg
 
-{-instance (MonadIO m, Binary msg) => ServerM msg (ServerT msg m) where-}
-{-    -- TODO(DarinM223): write to specific socket (refactor to take in-}
-{-    -- server id)-}
-{-    send msg = liftIO . sendMessage msg =<< ask-}
-
-{-    -- TODO(DarinM223): write to all sockets-}
-{-    broadcast msg = do-}
-{-        chan <- _broadcast <$> ask-}
-{-        liftIO $ writeChan chan msg-}
-
-{-    -- TODO(DarinM223): read from -}
-{-    recv = do-}
-{-        sock <- _socket <$> ask-}
-{-        msgLenS <- liftIO $ NBS.recv sock msgLenLen-}
-{-        let msgLen = decode msgLenS :: MsgLen-}
-{-        if not $ isEOT msgLen-}
-{-            then do-}
-{-                msg <- liftIO $ NBS.recv sock $ fromIntegral msgLen-}
-{-                let message = decode msg :: msg-}
-{-                return $ Just message-}
-{-            else return Nothing-}
-
-{-    serverID = _serverIdx <$> ask-}
-
 instance (StorageM k v m) => StorageM k v (ServerT msg m)
 instance (LogM e m) => LogM e (ServerT msg m)
 instance (ServerM msg e m) => ServerM msg e (ReaderT r m)
-
-{-listenToBroadcast :: (Binary msg) => ServerState msg -> IO ()-}
-{-listenToBroadcast s = do-}
-{-    let chan = _broadcast s-}
-{-    msg <- readChan chan-}
-{-    sendMessage msg s-}
-{-    listenToBroadcast s-}
-
-{-sendMessage :: (Binary msg) => msg -> ServerState msg -> IO ()-}
-{-sendMessage msg s =-}
-{-    withMVar (_sendLock s) $ \_ -> do-}
-{-        NBS.send (_socket s) encodedLen-}
-{-        NBS.send (_socket s) encodedMsg-}
-{-        return ()-}
-{-  where-}
-{-    encodedMsg = encode msg-}
-{-    msgLen = fromIntegral $ BS.length encodedMsg :: MsgLen-}
-{-    encodedLen = encode msgLen-}
-
-{-msgLenLen :: Int64-}
-{-msgLenLen = 2-}
-
-{-isEOT :: MsgLen -> Bool-}
-{-isEOT = (== 0)-}

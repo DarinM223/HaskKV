@@ -2,8 +2,6 @@ module HaskKV.Raft.Utils where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
-import Data.Time
-import GHC.Records
 import HaskKV.Log
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
