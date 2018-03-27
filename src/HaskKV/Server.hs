@@ -6,13 +6,14 @@ import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Binary
-import Data.ByteString.Lazy
 import Data.Conduit
 import Data.Conduit.Network
 import HaskKV.Log (LogM)
 import HaskKV.Store (StorageM)
 import HaskKV.Utils
 
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.Conduit.List as CL
 import qualified Data.IntMap as IM
 import qualified Data.STM.RollingQueue as RQ
@@ -49,6 +50,27 @@ createServerState backpressure timeout = do
         , _timeout  = timeout
         }
 
+runServer :: (Binary msg)
+          => Int
+          -> HostPreference
+          -> IM.IntMap ClientSettings
+          -> ServerState msg
+          -> IO ()
+runServer port host clients s = do
+    liftIO $ forkIO $ runTCPServer (serverSettings port host) $ \appData ->
+        runConduit
+            $ appSource appData
+           .| CL.mapMaybe (decode . BL.fromStrict)
+           .| sinkRollingQueue (_messages s)
+
+    forM_ (IM.assocs clients) $ \(i, settings) -> do
+        forM_ (IM.lookup i . _outgoing $ s) $ \rq -> do
+            liftIO $ forkIO $ runTCPClient settings $ \appData ->
+                runConduit
+                    $ sourceRollingQueue rq
+                   .| CL.map (B.concat . BL.toChunks . encode)
+                   .| appSink appData
+
 data ServerError = Timeout
                  | EOF
                  deriving (Show, Eq)
@@ -64,17 +86,6 @@ execServerT :: (MonadIO m, Binary msg)
             -> ServerState msg
             -> m a
 execServerT m s = do
-    -- TODO(DarinM223): separate this out so that tests can use a different
-    -- conduit sink/source (lists, etc)
-    liftIO $ forkIO $ runTCPServer (serverSettings 4000 "*") $ \appData ->
-        runConduit
-            $ appSource appData
-           .| CL.mapMaybe (decode . fromStrict)
-           .| sinkRollingQueue (_messages s)
-
-    -- TODO(DarinM223): for every RollingQueue in outgoing, sink it to the
-    -- appropriate socket.
-
     liftIO $ Timer.reset (_timer s) (_timeout s)
     runReaderT (unServerT m) s
 
