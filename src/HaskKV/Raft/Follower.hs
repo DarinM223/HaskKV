@@ -13,7 +13,6 @@ runFollower :: ( MonadIO m
                , LogM e m
                , ServerM (RaftMessage e) ServerError m
                , Entry e
-               , Eq e
                )
             => m ()
 runFollower = do

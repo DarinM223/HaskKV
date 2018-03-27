@@ -81,7 +81,7 @@ newtype ServerT msg m a = ServerT { unServerT :: ReaderT (ServerState msg) m a }
         , MonadReader (ServerState msg)
         )
 
-execServerT :: (MonadIO m, Binary msg)
+execServerT :: (MonadIO m)
             => ServerT msg m a
             -> ServerState msg
             -> m a

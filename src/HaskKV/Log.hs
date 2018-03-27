@@ -2,13 +2,10 @@
 
 module HaskKV.Log where
 
-import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Binary
 import Data.List
 import GHC.Generics
-import HaskKV.Store
-import HaskKV.Utils
 
 import qualified Data.IntMap as IM
 
@@ -44,6 +41,8 @@ class (Monad m) => LogM e m | m -> e where
     storeEntries = lift . storeEntries
     deleteRange a b = lift $ deleteRange a b
 
+instance (LogM e m) => LogM e (ReaderT r m)
+
 type TID = Int
 
 data LogEntry k v = LogEntry
@@ -78,30 +77,10 @@ data Log e = Log
     { _entries :: IM.IntMap e
     , _highIdx :: Int
     , _lowIdx  :: Int
-    }
+    } deriving (Show)
 
-newtype LogT e m a = LogT { unLogT :: ReaderT (TVar (Log e)) m a }
-    deriving
-        ( Functor, Applicative, Monad, MonadIO, MonadTrans
-        , MonadReader (TVar (Log e))
-        )
-
-execLogT :: (MonadIO m) => LogT e m a -> Log e -> m a
-execLogT (LogT (ReaderT f)) = f <=< liftIO . newTVarIO
-
-execLogTVar :: LogT e m a -> TVar (Log e) -> m a
-execLogTVar (LogT (ReaderT f)) = f
-
-instance (MonadIO m, Entry e) => LogM e (LogT e m) where
-    firstIndex = return . _lowIdx =<< liftIO . readTVarIO =<< ask
-    lastIndex = return . _highIdx =<< liftIO . readTVarIO =<< ask
-    loadEntry k =
-        return . IM.lookup k . _entries =<< liftIO . readTVarIO =<< ask
-    storeEntries es = liftIO . modifyTVarIO (storeEntriesLog es) =<< ask
-    deleteRange a b = liftIO . modifyTVarIO (deleteRangeLog a b) =<< ask
-
-instance (StorageM k v m) => StorageM k v (LogT e m)
-instance (LogM e m) => LogM e (ReaderT r m)
+emptyLog :: Log e
+emptyLog = Log { _entries = IM.empty, _highIdx = 0, _lowIdx = 0 }
 
 deleteRangeLog :: Int -> Int -> Log e -> Log e
 deleteRangeLog min max l =
