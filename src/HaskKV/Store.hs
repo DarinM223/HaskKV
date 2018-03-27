@@ -81,11 +81,11 @@ newtype StoreT k v e m a = StoreT
         , MonadReader (TVar (Store k v e))
         )
 
-execStoreT :: (MonadIO m) => StoreT k v e m b -> Store k v e -> m b
-execStoreT (StoreT (ReaderT f)) = f <=< liftIO . newTVarIO
+runStoreT :: (MonadIO m) => StoreT k v e m b -> Store k v e -> m b
+runStoreT (StoreT (ReaderT f)) = f <=< liftIO . newTVarIO
 
-execStoreTVar :: StoreT k v e m b -> TVar (Store k v e) -> m b
-execStoreTVar (StoreT (ReaderT f)) = f
+runStoreTVar :: StoreT k v e m b -> TVar (Store k v e) -> m b
+runStoreTVar (StoreT (ReaderT f)) = f
 
 instance
     ( MonadIO m

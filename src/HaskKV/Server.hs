@@ -81,11 +81,11 @@ newtype ServerT msg m a = ServerT { unServerT :: ReaderT (ServerState msg) m a }
         , MonadReader (ServerState msg)
         )
 
-execServerT :: (MonadIO m)
-            => ServerT msg m a
-            -> ServerState msg
-            -> m a
-execServerT m s = do
+runServerT :: (MonadIO m)
+           => ServerT msg m a
+           -> ServerState msg
+           -> m a
+runServerT m s = do
     liftIO $ Timer.reset (_timer s) (_timeout s)
     runReaderT (unServerT m) s
 

@@ -32,3 +32,9 @@ sourceRollingQueue q = go
 sinkRollingQueue :: (MonadIO m) => RQ.RollingQueue a -> ConduitM a o m ()
 sinkRollingQueue q =
     awaitForever (liftIO . atomically . RQ.write q)
+
+sourceRQOne :: (MonadIO m) => RQ.RollingQueue o -> ConduitM i o m ()
+sourceRQOne q = do
+    (e, _) <- liftIO $ atomically $ RQ.read q
+    yield e
+    return ()

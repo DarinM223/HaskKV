@@ -3,8 +3,8 @@ module HaskKV.Raft where
 import Control.Concurrent.STM
 import Control.Monad.Reader
 import HaskKV.Log (LogM)
-import HaskKV.Server (execServerT, ServerError, ServerState, ServerM, ServerT)
-import HaskKV.Store (execStoreTVar, StorageM, Store, StoreT)
+import HaskKV.Server (runServerT, ServerError, ServerState, ServerM, ServerT)
+import HaskKV.Store (runStoreTVar, StorageM, Store, StoreT)
 
 newtype RaftT s msg k v e m a = RaftT
     { unRaftT :: ReaderT (TVar s)
@@ -17,26 +17,26 @@ newtype RaftT s msg k v e m a = RaftT
         , LogM e, StorageM k v, ServerM (msg e) ServerError
         )
 
-execRaftT :: (MonadIO m)
-          => RaftT s msg k v e m a
-          -> Store k v e
-          -> ServerState (msg e)
-          -> s
-          -> m a
-execRaftT m store state raft = do
+runRaftT :: (MonadIO m)
+         => RaftT s msg k v e m a
+         -> Store k v e
+         -> ServerState (msg e)
+         -> s
+         -> m a
+runRaftT m store state raft = do
     storeVar <- liftIO $ newTVarIO store
     raftVar <- liftIO $ newTVarIO raft
-    execRaftTVar m storeVar state raftVar
+    runRaftTVar m storeVar state raftVar
 
-execRaftTVar :: (MonadIO m)
-             => RaftT s msg k v e m a
-             -> TVar (Store k v e)
-             -> ServerState (msg e)
-             -> TVar s
-             -> m a
-execRaftTVar m store state raft
-    = flip execStoreTVar store
-    . flip execServerT state
+runRaftTVar :: (MonadIO m)
+            => RaftT s msg k v e m a
+            -> TVar (Store k v e)
+            -> ServerState (msg e)
+            -> TVar s
+            -> m a
+runRaftTVar m store state raft
+    = flip runStoreTVar store
+    . flip runServerT state
     . flip runReaderT raft
     . unRaftT
     $ m
@@ -47,9 +47,9 @@ data Params s msg k v e = Params
     , _raftState   :: TVar s
     }
 
-execRaftTParams :: (MonadIO m)
-                => RaftT s msg k v e m a
-                -> Params s msg k v e
-                -> m a
-execRaftTParams m p =
-    execRaftTVar m (_store p) (_serverState p) (_raftState p)
+runRaftTParams :: (MonadIO m)
+               => RaftT s msg k v e m a
+               -> Params s msg k v e
+               -> m a
+runRaftTParams m p =
+    runRaftTVar m (_store p) (_serverState p) (_raftState p)
