@@ -3,45 +3,77 @@
 module HaskKV.Server where
 
 import Control.Concurrent (forkIO)
-import Control.Concurrent.Chan
-import Control.Concurrent.MVar
+import Control.Concurrent.STM
 import Control.Monad.Reader
-import Data.Int
-import Data.Word
 import Data.Binary
+import Data.Conduit
+import Data.Conduit.Network
 import HaskKV.Log (LogM)
 import HaskKV.Store (StorageM)
+import HaskKV.Utils
 
-import qualified Network.Socket as S
-import qualified Data.ByteString.Lazy as BS
-import qualified Network.Socket.ByteString.Lazy as NBS
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.Conduit.List as CL
+import qualified Data.IntMap as IM
+import qualified Data.STM.RollingQueue as RQ
+import qualified HaskKV.Timer as Timer
 
-class (Monad m) => ServerM msg m | m -> msg where
-    send      :: msg -> m ()
+class (Monad m) => ServerM msg e m | m -> msg e where
+    send      :: Int -> msg -> m ()
     broadcast :: msg -> m ()
-    recv      :: m (Maybe msg)
-    serverID  :: m Int
+    recv      :: m (Either e msg)
 
-    default send :: (MonadTrans t, ServerM msg m', m ~ t m') => msg -> m ()
-    send = lift . send
+    default send :: (MonadTrans t, ServerM msg e m', m ~ t m') => Int -> msg -> m ()
+    default broadcast :: (MonadTrans t, ServerM msg e m', m ~ t m') => msg -> m ()
+    default recv :: (MonadTrans t, ServerM msg e m', m ~ t m') => m (Either e msg)
 
-    default broadcast :: (MonadTrans t, ServerM msg m', m ~ t m') => msg -> m ()
-    broadcast = lift . send
-
-    default recv :: (MonadTrans t, ServerM msg m', m ~ t m') => m (Maybe msg)
+    send i m = lift $ send i m
+    broadcast = lift . broadcast
     recv = lift recv
 
-    default serverID :: (MonadTrans t, ServerM msg m', m ~ t m') => m Int
-    serverID = lift serverID
-
 data ServerState msg = ServerState
-    { _socket     :: S.Socket
-    , _broadcast  :: Chan msg
-    , _sendLock   :: MVar ()
-    , _serverIdx  :: Int
+    { _messages :: RQ.RollingQueue msg
+    , _timer    :: Timer.Timer
+    , _outgoing :: IM.IntMap (RQ.RollingQueue msg)
+    , _timeout  :: Int
     }
 
-type MsgLen = Word16
+createServerState :: Int -> Int -> IO (ServerState msg)
+createServerState backpressure timeout = do
+    messages <- RQ.newIO backpressure
+    timer <- Timer.newIO
+    return ServerState
+        { _messages = messages
+        , _timer    = timer
+        , _outgoing = IM.empty
+        , _timeout  = timeout
+        }
+
+runServer :: (Binary msg)
+          => Int
+          -> HostPreference
+          -> IM.IntMap ClientSettings
+          -> ServerState msg
+          -> IO ()
+runServer port host clients s = do
+    liftIO $ forkIO $ runTCPServer (serverSettings port host) $ \appData ->
+        runConduit
+            $ appSource appData
+           .| CL.mapMaybe (decode . BL.fromStrict)
+           .| sinkRollingQueue (_messages s)
+
+    forM_ (IM.assocs clients) $ \(i, settings) -> do
+        forM_ (IM.lookup i . _outgoing $ s) $ \rq -> do
+            liftIO $ forkIO $ runTCPClient settings $ \appData ->
+                runConduit
+                    $ sourceRollingQueue rq
+                   .| CL.map (B.concat . BL.toChunks . encode)
+                   .| appSink appData
+
+data ServerError = Timeout
+                 | EOF
+                 deriving (Show, Eq)
 
 newtype ServerT msg m a = ServerT { unServerT :: ReaderT (ServerState msg) m a }
     deriving
@@ -49,58 +81,36 @@ newtype ServerT msg m a = ServerT { unServerT :: ReaderT (ServerState msg) m a }
         , MonadReader (ServerState msg)
         )
 
-execServerT :: (MonadIO m, Binary msg)
-            => ServerT msg m a
-            -> ServerState msg
-            -> m a
-execServerT m s = do
-    liftIO $ forkIO $ listenToBroadcast s
+runServerT :: (MonadIO m)
+           => ServerT msg m a
+           -> ServerState msg
+           -> m a
+runServerT m s = do
+    liftIO $ Timer.reset (_timer s) (_timeout s)
     runReaderT (unServerT m) s
 
-instance (MonadIO m, Binary msg) => ServerM msg (ServerT msg m) where
-    send msg = liftIO . sendMessage msg =<< ask
+instance (MonadIO m) => ServerM msg ServerError (ServerT msg m) where
+    send i msg = do
+        s <- ask
+        let rq = IM.lookup i . _outgoing $ s
+        mapM_ (liftIO . atomically . flip RQ.write msg) rq
 
-    broadcast msg = do
-        chan <- _broadcast <$> ask
-        liftIO $ writeChan chan msg
+    broadcast msg
+        = liftIO
+        . atomically
+        . mapM_ (flip RQ.write msg)
+        . IM.elems
+        . _outgoing
+      =<< ask
 
     recv = do
-        sock <- _socket <$> ask
-        msgLenS <- liftIO $ NBS.recv sock msgLenLen
-        let msgLen = decode msgLenS :: MsgLen
-        if not $ isEOT msgLen
-            then do
-                msg <- liftIO $ NBS.recv sock $ fromIntegral msgLen
-                let message = decode msg :: msg
-                return $ Just message
-            else return Nothing
-
-    serverID = _serverIdx <$> ask
+        s <- ask
+        msg <- liftIO . atomically $
+            (const (Left Timeout) <$> Timer.await (_timer s))
+            `orElse` (Right . fst <$> RQ.read (_messages s))
+        liftIO $ Timer.reset (_timer s) (_timeout s)
+        return msg
 
 instance (StorageM k v m) => StorageM k v (ServerT msg m)
 instance (LogM e m) => LogM e (ServerT msg m)
-instance (ServerM msg m) => ServerM msg (ReaderT r m)
-
-listenToBroadcast :: (Binary msg) => ServerState msg -> IO ()
-listenToBroadcast s = do
-    let chan = _broadcast s
-    msg <- readChan chan
-    sendMessage msg s
-    listenToBroadcast s
-
-sendMessage :: (Binary msg) => msg -> ServerState msg -> IO ()
-sendMessage msg s =
-    withMVar (_sendLock s) $ \_ -> do
-        NBS.send (_socket s) encodedLen
-        NBS.send (_socket s) encodedMsg
-        return ()
-  where
-    encodedMsg = encode msg
-    msgLen = fromIntegral $ BS.length encodedMsg :: MsgLen
-    encodedLen = encode msgLen
-
-msgLenLen :: Int64
-msgLenLen = 2
-
-isEOT :: MsgLen -> Bool
-isEOT = (== 0)
+instance (ServerM msg e m) => ServerM msg e (ReaderT r m)

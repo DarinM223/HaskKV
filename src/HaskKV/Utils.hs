@@ -1,7 +1,10 @@
 module HaskKV.Utils where
 
 import Control.Concurrent.STM
+import Control.Monad.IO.Class
+import Data.Conduit
 import qualified Data.Heap as H
+import qualified Data.STM.RollingQueue as RQ
 
 stateTVarIO :: (s -> (a, s)) -> TVar s -> IO a
 stateTVarIO f v = atomically $ do
@@ -17,3 +20,21 @@ minHeapMaybe :: H.Heap a -> Maybe a
 minHeapMaybe h
     | H.null h  = Nothing
     | otherwise = Just $ H.minimum h
+
+sourceRollingQueue :: (MonadIO m) => RQ.RollingQueue o -> ConduitM i o m b
+sourceRollingQueue q = go
+  where
+    go = do
+        (e, _) <- liftIO $ atomically $ RQ.read q
+        yield e
+        go
+
+sinkRollingQueue :: (MonadIO m) => RQ.RollingQueue a -> ConduitM a o m ()
+sinkRollingQueue q =
+    awaitForever (liftIO . atomically . RQ.write q)
+
+sourceRQOne :: (MonadIO m) => RQ.RollingQueue o -> ConduitM i o m ()
+sourceRQOne q = do
+    (e, _) <- liftIO $ atomically $ RQ.read q
+    yield e
+    return ()

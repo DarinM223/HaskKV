@@ -6,8 +6,10 @@ import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Maybe (fromJust)
 import Data.Time
+import HaskKV.Log
 import HaskKV.Utils
 
+import qualified Data.IntMap as IM
 import qualified Data.Map as M
 import qualified Data.Heap as H
 
@@ -39,18 +41,15 @@ class (Monad s, Show k, Ord k, Storable v) => StorageM k v s | s -> k v where
     cleanupExpired :: Time -> s ()
 
     default getValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> s (Maybe v)
-    getValue = lift . getValue
-
     default setValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> v -> s ()
-    setValue k v = lift $ setValue k v
-
     default replaceValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> v -> s (Maybe CAS)
-    replaceValue k v = lift $ replaceValue k v
-
     default deleteValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> s ()
-    deleteValue = lift . deleteValue
-
     default cleanupExpired :: (MonadTrans t, StorageM k v s', s ~ t s') => Time -> s ()
+
+    getValue = lift . getValue
+    setValue k v = lift $ setValue k v
+    replaceValue k v = lift $ replaceValue k v
+    deleteValue = lift . deleteValue
     cleanupExpired = lift . cleanupExpired
 
 data StoreValue v = StoreValue
@@ -69,36 +68,51 @@ instance (Eq k) => Ord (HeapVal k) where
     compare (HeapVal a) (HeapVal b) = compare (fst a) (fst b)
 
 -- | An in-memory storage implementation.
-data Store k v = Store
+data Store k v e = Store
     { _map  :: M.Map k v
     , _heap :: H.Heap (HeapVal k)
+    , _log  :: Log e
     } deriving (Show)
 
-newtype StoreT k v m a = StoreT
-    { unStoreT :: ReaderT (TVar (Store k v)) m a
+newtype StoreT k v e m a = StoreT
+    { unStoreT :: ReaderT (TVar (Store k v e)) m a
     } deriving
         ( Functor, Applicative, Monad, MonadIO, MonadTrans
-        , MonadReader (TVar (Store k v))
+        , MonadReader (TVar (Store k v e))
         )
 
-execStoreT :: (MonadIO m) => StoreT k v m b -> Store k v -> m b
-execStoreT (StoreT (ReaderT f)) = f <=< liftIO . newTVarIO
+runStoreT :: (MonadIO m) => StoreT k v e m b -> Store k v e -> m b
+runStoreT (StoreT (ReaderT f)) = f <=< liftIO . newTVarIO
 
-execStoreTVar :: StoreT k v m b -> TVar (Store k v) -> m b
-execStoreTVar (StoreT (ReaderT f)) = f
+runStoreTVar :: StoreT k v e m b -> TVar (Store k v e) -> m b
+runStoreTVar (StoreT (ReaderT f)) = f
 
 instance
     ( MonadIO m
     , Ord k
     , Show k
     , Storable v
-    ) => StorageM k v (StoreT k v m) where
+    ) => StorageM k v (StoreT k v e m) where
 
     getValue k = return . getStore k =<< liftIO . readTVarIO =<< ask
     setValue k v = liftIO . modifyTVarIO (setStore k v) =<< ask
     replaceValue k v = liftIO . stateTVarIO (replaceStore k v) =<< ask
     deleteValue k = liftIO . modifyTVarIO (deleteStore k) =<< ask
     cleanupExpired t = liftIO . modifyTVarIO (cleanupStore t) =<< ask
+
+instance (MonadIO m, Entry e) => LogM e (StoreT k v e m) where
+    firstIndex = return . _lowIdx . _log =<< liftIO . readTVarIO =<< ask
+    lastIndex = return . _highIdx . _log =<< liftIO . readTVarIO =<< ask
+    loadEntry k =
+        return . IM.lookup k . _entries . _log =<< liftIO . readTVarIO =<< ask
+    storeEntries es
+        = liftIO
+        . modifyTVarIO (\s -> s { _log = storeEntriesLog es (_log s) })
+      =<< ask
+    deleteRange a b
+        = liftIO
+        . modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
+      =<< ask
 
 instance (StorageM k v m) => StorageM k v (ReaderT r m)
 
@@ -122,13 +136,13 @@ createStoreValue seconds version val = do
   where
     diff = fromRational . toRational . secondsToDiffTime $ seconds
 
-emptyStore :: Store k v
-emptyStore = Store { _map = M.empty, _heap = H.empty }
+emptyStore :: Store k v e
+emptyStore = Store { _map = M.empty, _heap = H.empty, _log = emptyLog }
 
-getStore :: (Ord k) => k -> Store k v -> Maybe v
+getStore :: (Ord k) => k -> Store k v e -> Maybe v
 getStore k s = _map s M.!? k
 
-setStore :: (Ord k, Storable v) => k -> v -> Store k v -> Store k v
+setStore :: (Ord k, Storable v) => k -> v -> Store k v e -> Store k v e
 setStore k v s = s
     { _map  = M.insert k v' $ _map s
     , _heap = H.insert (HeapVal (time, k)) $ _heap s
@@ -142,8 +156,8 @@ setStore k v s = s
 replaceStore :: (Ord k, Storable v)
              => k
              -> v
-             -> Store k v
-             -> (Maybe CAS, Store k v)
+             -> Store k v e
+             -> (Maybe CAS, Store k v e)
 replaceStore k v s
     | equalCAS  = (Just cas', s { _map = M.insert k v' $ _map s })
     | otherwise = (Nothing, s)
@@ -153,10 +167,13 @@ replaceStore k v s
     cas' = version v + 1
     v' = setVersion cas' v
 
-deleteStore :: (Ord k) => k -> Store k v -> Store k v
+deleteStore :: (Ord k) => k -> Store k v e -> Store k v e
 deleteStore k s = s { _map = M.delete k $ _map s }
 
-cleanupStore :: (Show k, Ord k, Storable v) => Time -> Store k v -> Store k v
+cleanupStore :: (Show k, Ord k, Storable v)
+             => Time
+             -> Store k v e
+             -> Store k v e
 cleanupStore curr s = case minHeapMaybe (_heap s) of
     Just (HeapVal (t, k)) | diff t curr <= 0 ->
         let (_, h') = fromJust . H.viewMin $ _heap s
@@ -166,7 +183,7 @@ cleanupStore curr s = case minHeapMaybe (_heap s) of
             -- replaced/removed after it was set.
             if maybe False ((== 0) . diff t . expireTime) v
                 then
-                    cleanupStore curr
+                      cleanupStore curr
                     . deleteStore k
                     $ s { _heap = h' }
                 else

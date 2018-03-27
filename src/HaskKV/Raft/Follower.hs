@@ -11,13 +11,12 @@ import HaskKV.Server
 runFollower :: ( MonadIO m
                , MonadReader (TVar RaftState) m
                , LogM e m
-               , ServerM (RaftMessage e) m
+               , ServerM (RaftMessage e) ServerError m
                , Entry e
-               , Eq e
                )
             => m ()
 runFollower = do
     msg <- recv
-    when (msg /= Nothing) resetTimeout
-    isTimeout <- timedOut
-    when isTimeout $ startElection
+    case msg of
+        Left Timeout -> startElection
+        _            -> return ()
