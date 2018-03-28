@@ -11,12 +11,15 @@ import HaskKV.Server
 runFollower :: ( MonadIO m
                , MonadReader (TVar RaftState) m
                , LogM e m
-               , ServerM (RaftMessage e) ServerError m
+               , ServerM (RaftMessage e) ServerEvent m
                , Entry e
                )
             => m ()
 runFollower = do
     msg <- recv
     case msg of
-        Left Timeout -> startElection
-        _            -> return ()
+        Left ElectionTimeout -> do
+            reset ElectionTimeout
+            startElection
+        Left HeartbeatTimeout -> reset HeartbeatTimeout
+        _ -> return () -- TODO(DarinM223): respond to RPCs from candidates and leaders

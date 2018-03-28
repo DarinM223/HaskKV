@@ -11,7 +11,7 @@ import HaskKV.Utils
 startElection :: ( MonadReader (TVar RaftState) m
                  , MonadIO m
                  , LogM e m
-                 , ServerM (RaftMessage e) ServerError m
+                 , ServerM (RaftMessage e) ServerEvent m
                  , Entry e
                  )
               => m ()

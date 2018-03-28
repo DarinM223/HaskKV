@@ -6,6 +6,8 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 
+newtype Timeout = Timeout { unTimeout :: Int }
+
 data Timer = Timer
     { _thread :: TMVar ThreadId
     , _var    :: TMVar ()
@@ -23,12 +25,12 @@ newIO = do
     var <- newEmptyTMVarIO
     return $ Timer thread var
 
-reset :: (MonadIO m) => Timer -> Int -> m ()
-reset t i = liftIO $ do
+reset :: (MonadIO m) => Timer -> Timeout -> m ()
+reset t (Timeout timeout) = liftIO $ do
     cancel t
 
     n <- forkIO $ do
-        threadDelay i
+        threadDelay timeout
         atomically $ tryPutTMVar (_var t) ()
         return ()
 
