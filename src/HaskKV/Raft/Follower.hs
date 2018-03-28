@@ -1,7 +1,6 @@
 module HaskKV.Raft.Follower where
 
-import Control.Concurrent.STM
-import Control.Monad.Reader
+import Control.Monad.State
 import HaskKV.Log
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
@@ -9,7 +8,7 @@ import HaskKV.Raft.Utils
 import HaskKV.Server
 
 runFollower :: ( MonadIO m
-               , MonadReader (TVar RaftState) m
+               , MonadState RaftState m
                , LogM e m
                , ServerM (RaftMessage e) ServerEvent m
                , Entry e

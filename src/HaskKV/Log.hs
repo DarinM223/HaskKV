@@ -3,6 +3,7 @@
 module HaskKV.Log where
 
 import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Data.Binary
 import Data.List
 import GHC.Generics
@@ -42,6 +43,7 @@ class (Monad m) => LogM e m | m -> e where
     deleteRange a b = lift $ deleteRange a b
 
 instance (LogM e m) => LogM e (ReaderT r m)
+instance (LogM e m) => LogM e (StateT s m)
 
 type TID = Int
 

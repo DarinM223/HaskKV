@@ -28,6 +28,7 @@ dependencies:
 - conduit-extra
 - containers
 - heaps
+- lens
 - mtl
 - network
 - network-simple

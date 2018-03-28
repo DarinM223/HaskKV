@@ -4,6 +4,7 @@ module HaskKV.Store where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Data.Maybe (fromJust)
 import Data.Time
 import HaskKV.Log
@@ -115,6 +116,7 @@ instance (MonadIO m, Entry e) => LogM e (StoreT k v e m) where
       =<< ask
 
 instance (StorageM k v m) => StorageM k v (ReaderT r m)
+instance (StorageM k v m) => StorageM k v (StateT s m)
 
 checkAndSet :: (StorageM k v m) => Int -> k -> (v -> v) -> m Bool
 checkAndSet attempts k f

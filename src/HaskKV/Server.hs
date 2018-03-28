@@ -5,6 +5,7 @@ module HaskKV.Server where
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Control.Monad.Reader
+import Control.Monad.State.Strict
 import Data.Binary
 import Data.Conduit
 import Data.Conduit.Network
@@ -142,3 +143,4 @@ instance (MonadIO m) => ServerM msg ServerEvent (ServerT msg m) where
 instance (StorageM k v m) => StorageM k v (ServerT msg m)
 instance (LogM e m) => LogM e (ServerT msg m)
 instance (ServerM msg e m) => ServerM msg e (ReaderT r m)
+instance (ServerM msg e m) => ServerM msg e (StateT s m)
