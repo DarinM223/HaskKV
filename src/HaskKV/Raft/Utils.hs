@@ -18,7 +18,7 @@ startElection = do
     sid <- use serverID
     stateType .= Candidate 1
     currTerm %= (+ 1)
-    votedFor .= sid
+    votedFor .= Just sid
 
     Just lastEntry <- lastIndex >>= loadEntry
     currTerm' <- use currTerm

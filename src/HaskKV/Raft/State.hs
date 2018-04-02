@@ -19,7 +19,8 @@ data StateType
 data RaftState = RaftState
     { _stateType   :: StateType
     , _currTerm    :: Int
-    , _votedFor    :: Int
+    , _votedFor    :: Maybe Int
+    , _leader      :: Maybe Int
     , _commitIndex :: Int
     , _lastApplied :: Int
     , _serverID    :: Int

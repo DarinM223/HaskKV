@@ -3,6 +3,7 @@ module HaskKV.Raft.Follower where
 import Control.Monad.State
 import HaskKV.Log
 import HaskKV.Raft.Message
+import HaskKV.Raft.RPC
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
 import HaskKV.Server
@@ -20,5 +21,7 @@ runFollower = do
         Left ElectionTimeout -> do
             reset ElectionTimeout
             startElection
-        Left HeartbeatTimeout -> reset HeartbeatTimeout
-        _ -> return () -- TODO(DarinM223): respond to RPCs from candidates and leaders
+        Left HeartbeatTimeout    -> reset HeartbeatTimeout
+        Right rv@RequestVote{}   -> get >>= handleRequestVote rv
+        Right ae@AppendEntries{} -> get >>= handleAppendEntries ae
+        _ -> return ()
