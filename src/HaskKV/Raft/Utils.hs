@@ -20,11 +20,13 @@ startElection = do
     currTerm %= (+ 1)
     votedFor .= Just sid
 
-    Just lastEntry <- lastIndex >>= loadEntry
+    lastEntry <- lastIndex >>= loadEntry
     currTerm' <- use currTerm
-    broadcast $ RequestVote
+    mapM_ (broadcastVote sid currTerm') lastEntry
+  where
+    broadcastVote sid currTerm lastEntry = broadcast $ RequestVote
         { _candidateID = sid
-        , _term        = currTerm'
+        , _term        = currTerm
         , _lastLogIdx  = entryIndex lastEntry
         , _lastLogTerm = entryTerm lastEntry
         }
