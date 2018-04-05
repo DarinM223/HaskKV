@@ -24,4 +24,10 @@ runFollower = do
         Left HeartbeatTimeout    -> reset HeartbeatTimeout
         Right rv@RequestVote{}   -> get >>= handleRequestVote rv
         Right ae@AppendEntries{} -> get >>= handleAppendEntries ae
-        _ -> return ()
+        Right resp@Response{}    -> get >>= handleFollowerResponse resp
+
+handleFollowerResponse msg@(Response RequestVote{} term _) s
+    | term > _currTerm s = transitionToFollower msg
+    | otherwise          = return ()
+
+handleFollowerResponse _ _ = return ()

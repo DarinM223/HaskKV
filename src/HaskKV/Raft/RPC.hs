@@ -6,6 +6,7 @@ import GHC.Records
 import HaskKV.Log
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
+import HaskKV.Raft.Utils
 import HaskKV.Server
 
 handleRequestVote :: ( ServerM (RaftMessage e) ServerEvent m
@@ -17,11 +18,10 @@ handleRequestVote :: ( ServerM (RaftMessage e) ServerEvent m
                   -> RaftState
                   -> m ()
 handleRequestVote rv s
-    | getField @"_term" rv < _currTerm s || _leader s == Nothing =
-        send (_candidateID rv) $ Response rv (_currTerm s) False
+    | existingLeader rv s                = fail rv s
+    | getField @"_term" rv < _currTerm s = fail rv s
     | getField @"_term" rv > _currTerm s = do
-        stateType .= Follower
-        currTerm .= getField @"_term" rv
+        transitionToFollower rv
         get >>= handleRequestVote rv
     | canVote (_candidateID rv) s = do
         lastEntry <- lastIndex >>= loadEntry
@@ -32,13 +32,16 @@ handleRequestVote rv s
                 votedFor .= Just (_candidateID rv)
                 reset ElectionTimeout
             else
-                send (_candidateID rv) $ Response rv (_currTerm s) False
-    | otherwise = send (_candidateID rv) $ Response rv (_currTerm s) False
+                fail rv s
+    | otherwise = fail rv s
   where
+    existingLeader rv s = _leader s /= Nothing
+                       && _leader s /= Just (_candidateID rv)
     canVote cid s = _votedFor s == Nothing || _votedFor s == Just cid
     checkValid rv e = (checkIndex rv e, checkTerm rv e)
     checkIndex rv e = _lastLogIdx rv >= entryIndex e
     checkTerm rv e = _lastLogTerm rv >= entryTerm e
+    fail rv s = send (_candidateID rv) $ Response rv (_currTerm s) False
 
 handleAppendEntries :: ( ServerM (RaftMessage e) ServerEvent m
                        , MonadState RaftState m
@@ -52,8 +55,7 @@ handleAppendEntries ae s
     | getField @"_term" ae < _currTerm s =
         send (_leaderId ae) $ Response ae (_currTerm s) False
     | getField @"_term" ae > _currTerm s = do
-        stateType .= Follower
-        currTerm .= getField @"_term" ae
+        transitionToFollower ae
         get >>= handleAppendEntries ae
     | otherwise = do
         leader .= Just (_leaderId ae)

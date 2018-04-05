@@ -15,6 +15,7 @@ data StateType
         , _matchIndex :: [Int]
         }
     deriving (Show, Eq)
+makePrisms ''StateType
 
 data RaftState = RaftState
     { _stateType   :: StateType

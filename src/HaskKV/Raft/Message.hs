@@ -18,7 +18,11 @@ data RaftMessage e
         , _entries     :: [e]
         , _commitIdx   :: Int
         }
-    | Response (RaftMessage e) Int Bool
+    | Response
+        { _message :: RaftMessage e
+        , _term    :: Int
+        , _success :: Bool
+        }
     deriving (Show, Eq, Generic)
 
 instance (Binary e) => Binary (RaftMessage e)
