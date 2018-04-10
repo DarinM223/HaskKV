@@ -21,23 +21,23 @@ import qualified Data.STM.RollingQueue as RQ
 import qualified HaskKV.Timer as Timer
 
 class (Monad m) => ServerM msg e m | m -> msg e where
-    send       :: Int -> msg -> m ()
-    broadcast  :: msg -> m ()
-    recv       :: m (Either e msg)
-    reset      :: e -> m ()
-    numServers :: m Int
+    send      :: Int -> msg -> m ()
+    broadcast :: msg -> m ()
+    recv      :: m (Either e msg)
+    reset     :: e -> m ()
+    serverIds :: m [Int]
 
     default send :: (MonadTrans t, ServerM msg e m', m ~ t m') => Int -> msg -> m ()
     default broadcast :: (MonadTrans t, ServerM msg e m', m ~ t m') => msg -> m ()
     default recv :: (MonadTrans t, ServerM msg e m', m ~ t m') => m (Either e msg)
     default reset :: (MonadTrans t, ServerM msg e m', m ~ t m') => e -> m ()
-    default numServers :: (MonadTrans t, ServerM msg e m', m ~ t m') => m Int 
+    default serverIds :: (MonadTrans t, ServerM msg e m', m ~ t m') => m [Int]
 
     send i m = lift $ send i m
     broadcast = lift . broadcast
     recv = lift recv
     reset = lift . reset
-    numServers = lift numServers
+    serverIds = lift serverIds
 
 newtype Capacity = Capacity { unCapacity :: Int }
 
@@ -143,7 +143,7 @@ instance (MonadIO m) => ServerM msg ServerEvent (ServerT msg m) where
     reset ElectionTimeout = ask >>= \s ->
         liftIO $ Timer.reset (_electionTimer s) (_electionTimeout s)
 
-    numServers = IM.size . _outgoing <$> ask
+    serverIds = IM.keys . _outgoing <$> ask
 
 instance (StorageM k v m) => StorageM k v (ServerT msg m)
 instance (LogM e m) => LogM e (ServerT msg m)

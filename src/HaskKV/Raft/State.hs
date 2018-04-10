@@ -5,14 +5,16 @@ module HaskKV.Raft.State where
 import Control.Lens
 import Data.Time
 
+import qualified Data.IntMap as IM
+
 type Time = UTCTime
 
 data StateType
     = Follower
     | Candidate Int
     | Leader
-        { _nextIndex  :: [Int]
-        , _matchIndex :: [Int]
+        { _nextIndex  :: IM.IntMap Int
+        , _matchIndex :: IM.IntMap Int
         }
     deriving (Show, Eq)
 makePrisms ''StateType

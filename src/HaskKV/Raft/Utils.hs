@@ -8,6 +8,8 @@ import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Server
 
+import qualified Data.IntMap as IM
+
 transitionToFollower :: (MonadState RaftState m, HasField "_term" msg Int)
                      => msg
                      -> m ()
@@ -16,18 +18,46 @@ transitionToFollower msg = do
     currTerm .= getField @"_term" msg
     return ()
 
+transitionToLeader :: ( LogM e m
+                      , MonadState RaftState m
+                      , ServerM (RaftMessage e) ServerEvent m
+                      , Entry e
+                      , HasField "_term" msg Int
+                      )
+                   => msg
+                   -> m ()
 transitionToLeader msg = do
     reset HeartbeatTimeout
-    -- TODO(DarinM223): implement this
-    undefined
+    lastEntry <- lastIndex >>= loadEntry
+    serverID' <- use serverID
+
+    mapM_ (broadcastAppend serverID' $ getField @"_term" msg) lastEntry
+    mapM_ setLeader lastEntry
+  where
+    broadcastAppend sid term entry = broadcast $ AppendEntries
+        { _term        = term
+        , _leaderId    = sid
+        , _prevLogIdx  = entryIndex entry
+        , _prevLogTerm = entryTerm entry
+        , _entries     = []
+        , _commitIdx   = 0
+        }
+    setLeader entry = do
+        ids <- serverIds
+        let initNextIndex = entryIndex entry + 1
+            nextIndexes   = IM.fromList . fmap (flip (,) initNextIndex) $ ids
+            matchIndexes  = IM.fromList . fmap (flip (,) 0) $ ids
+        stateType .= Leader { _nextIndex  = nextIndexes
+                            , _matchIndex = matchIndexes
+                            }
+        return ()
 
 quorumSize :: (ServerM msg ServerEvent m) => m Int
 quorumSize = do
-    servers <- numServers
+    servers <- length <$> serverIds
     return $ servers `quot` 2 + 1
 
 startElection :: ( MonadState RaftState m
-                 , MonadIO m
                  , LogM e m
                  , ServerM (RaftMessage e) ServerEvent m
                  , Entry e
