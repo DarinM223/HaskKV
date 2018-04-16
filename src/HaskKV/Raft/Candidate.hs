@@ -2,6 +2,7 @@ module HaskKV.Raft.Candidate where
 
 import Control.Lens
 import Control.Monad.State
+import Data.Maybe
 import HaskKV.Log
 import HaskKV.Raft.Message
 import HaskKV.Raft.RPC
@@ -32,6 +33,8 @@ handleCandidateResponse msg@(Response RequestVote{} term success) s
     | success == True = do
         stateType._Candidate %= (+ 1)
         votesMaybe <- preuse (stateType._Candidate)
-        let votes = maybe 0 id votesMaybe
+        let votes = fromMaybe 0 votesMaybe
         quorumSize' <- quorumSize
         when (votes >= quorumSize') $ transitionToLeader msg
+
+handleCandidateResponse _ _ = return ()

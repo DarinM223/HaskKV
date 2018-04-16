@@ -5,7 +5,7 @@ module HaskKV.Store where
 import Control.Concurrent.STM
 import Control.Monad.Reader
 import Control.Monad.State.Strict
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Time
 import HaskKV.Log
 import HaskKV.Utils
@@ -152,7 +152,7 @@ setStore k v s = s
   where
     maybeV = _map s M.!? k
     maybeCas' = (+ 1) . version <$> maybeV
-    v' = maybe v id (setVersion <$> maybeCas' <*> pure v)
+    v' = fromMaybe v (setVersion <$> maybeCas' <*> pure v)
     time = expireTime v'
 
 replaceStore :: (Ord k, Storable v)

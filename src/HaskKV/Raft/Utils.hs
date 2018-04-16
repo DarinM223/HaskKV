@@ -16,7 +16,6 @@ transitionToFollower :: (MonadState RaftState m, HasField "_term" msg Int)
 transitionToFollower msg = do
     stateType .= Follower
     currTerm .= getField @"_term" msg
-    return ()
 
 transitionToLeader :: ( LogM e m
                       , MonadState RaftState m
@@ -47,10 +46,11 @@ transitionToLeader msg = do
         let initNextIndex = entryIndex entry + 1
             nextIndexes   = IM.fromList . fmap (flip (,) initNextIndex) $ ids
             matchIndexes  = IM.fromList . fmap (flip (,) 0) $ ids
-        stateType .= Leader { _nextIndex  = nextIndexes
-                            , _matchIndex = matchIndexes
-                            }
-        return ()
+            leaderState   = LeaderState
+                { _nextIndex  = nextIndexes
+                , _matchIndex = matchIndexes
+                }
+        stateType .= Leader leaderState
 
 quorumSize :: (ServerM msg ServerEvent m) => m Int
 quorumSize = do

@@ -9,13 +9,16 @@ import qualified Data.IntMap as IM
 
 type Time = UTCTime
 
+data LeaderState = LeaderState
+    { _nextIndex  :: IM.IntMap Int
+    , _matchIndex :: IM.IntMap Int
+    } deriving (Show, Eq)
+makeFieldsNoPrefix ''LeaderState
+
 data StateType
     = Follower
     | Candidate Int
-    | Leader
-        { _nextIndex  :: IM.IntMap Int
-        , _matchIndex :: IM.IntMap Int
-        }
+    | Leader LeaderState
     deriving (Show, Eq)
 makePrisms ''StateType
 
