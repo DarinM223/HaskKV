@@ -28,20 +28,23 @@ handleRequestVote rv s
         let validLog = maybe (True, True) (checkValid rv) lastEntry
         if validLog == (True, True)
             then do
-                send (_candidateID rv) $ Response rv (_currTerm s) True
+                send (_candidateID rv) $ successResponse s
                 votedFor .= Just (_candidateID rv)
                 reset ElectionTimeout
             else
                 fail rv s
     | otherwise = fail rv s
   where
+    successResponse s = Response rv (_currTerm s) True (_serverID s)
+    failResponse s = Response rv (_currTerm s) False (_serverID s)
+
     existingLeader rv s = _leader s /= Nothing
                        && _leader s /= Just (_candidateID rv)
     canVote cid s = _votedFor s == Nothing || _votedFor s == Just cid
     checkValid rv e = (checkIndex rv e, checkTerm rv e)
     checkIndex rv e = _lastLogIdx rv >= entryIndex e
     checkTerm rv e = _lastLogTerm rv >= entryTerm e
-    fail rv s = send (_candidateID rv) $ Response rv (_currTerm s) False
+    fail rv = send (_candidateID rv) . failResponse
 
 handleAppendEntries :: ( ServerM (RaftMessage e) ServerEvent m
                        , MonadState RaftState m
@@ -53,7 +56,7 @@ handleAppendEntries :: ( ServerM (RaftMessage e) ServerEvent m
                     -> m ()
 handleAppendEntries ae s
     | getField @"_term" ae < _currTerm s =
-        send (_leaderId ae) $ Response ae (_currTerm s) False
+        send (_leaderId ae) $ failResponse s
     | getField @"_term" ae > _currTerm s = do
         transitionToFollower ae
         get >>= handleAppendEntries ae
@@ -81,10 +84,21 @@ handleAppendEntries ae s
                 when (_commitIdx ae > commitIndex') $
                     commitIndex .= (min lastEntryIndex $ _commitIdx ae)
 
-                send (_leaderId ae) $ Response ae (_currTerm s) True
-            _ -> send (_leaderId ae) $ Response ae (_currTerm s) False
+                send (_leaderId ae) $ successResponse s
+            _ -> send (_leaderId ae) $ failResponse s
   where
-    findStart :: (LogM e m, Entry e) => Int -> [(Int, e)] -> m (Maybe Int)
+    successResponse s = Response ae (_currTerm s) True (_serverID s)
+    failResponse s = Response ae (_currTerm s) False (_serverID s)
+
+    -- Returns the first index in the entries that doesn't exist in the log
+    -- or is different from the existing entry in the log.
+    --
+    -- If there is an existing entry that has a different term, that
+    -- entry and all entries after it are cleared from the log.
+    findStart :: (LogM e m, Entry e)
+              => Int        -- Index of the last entry in the log.
+              -> [(Int, e)] -- Entries to append with their indexes.
+              -> m (Maybe Int)
     findStart _ [] = return Nothing
     findStart lastIndex ((i, e):es)
         | entryIndex e > lastIndex = return $ Just i

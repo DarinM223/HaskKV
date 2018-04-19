@@ -28,7 +28,7 @@ runCandidate = do
         Right ae@AppendEntries{} -> get >>= handleAppendEntries ae
         Right resp@Response{}    -> get >>= handleCandidateResponse resp
 
-handleCandidateResponse msg@(Response RequestVote{} term success) s
+handleCandidateResponse msg@(Response RequestVote{} term success _) s
     | term > _currTerm s = transitionToFollower msg
     | success == True = do
         stateType._Candidate %= (+ 1)

@@ -22,6 +22,7 @@ data RaftMessage e
         { _message :: RaftMessage e
         , _term    :: Int
         , _success :: Bool
+        , _sender  :: Int
         }
     deriving (Show, Eq, Generic)
 

@@ -26,7 +26,7 @@ runFollower = do
         Right ae@AppendEntries{} -> get >>= handleAppendEntries ae
         Right resp@Response{}    -> get >>= handleFollowerResponse resp
 
-handleFollowerResponse msg@(Response RequestVote{} term _) s
+handleFollowerResponse msg@(Response RequestVote{} term _ _) s
     | term > _currTerm s = transitionToFollower msg
     | otherwise          = return ()
 

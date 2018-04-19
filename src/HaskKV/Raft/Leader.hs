@@ -29,6 +29,7 @@ runLeader = do
             lastEntry <- lastIndex >>= loadEntry
             serverID' <- use serverID
 
+            -- Update the highest replicated index for our server.
             stateType._Leader.matchIndex %= ( IM.insert serverID'
                                             . maybe 0 entryIndex
                                             $ lastEntry
@@ -39,9 +40,17 @@ runLeader = do
         Right rv@RequestVote{}   -> get >>= handleRequestVote rv
         Right ae@AppendEntries{} -> get >>= handleAppendEntries ae
         Right resp@Response{}    -> get >>= handleLeaderResponse resp
-    return ()
 
-handleLeaderResponse = undefined
+handleLeaderResponse msg@(Response AppendEntries{} term success sender) s
+    | term < _currTerm s = return ()
+    | term > _currTerm s = transitionToFollower msg
+    | not success = do
+        -- TODO(DarinM223): decrement nextIndex and "retry"
+        return ()
+    | otherwise = do
+        -- TODO(DarinM223): update nextIndex and matchIndex
+        return ()
+handleLeaderResponse _ _ = return ()
 
 sendAppendEntries :: ( MonadState RaftState m
                      , LogM e m
@@ -61,7 +70,7 @@ sendAppendEntries entry commitIndex' id = do
         nextIndex = IM.lookup id =<< nextIndexes
 
     entries <- case nextIndex of
-            Just ni -> fromMaybe [] <$> getEntries [] lastIndex ni
+            Just ni -> fromMaybe [] <$> getEntries [] ni lastIndex
             Nothing -> return []
 
     serverID' <- use serverID
@@ -88,13 +97,18 @@ sendAppendEntries entry commitIndex' id = do
                 , _commitIdx   = commitIndex'
                 }
   where
-    getEntries :: (Entry e, LogM e m) => [e] -> Int -> Int -> m (Maybe [e])
-    getEntries entries index nextIndex
+    -- Returns a list of entries from nextIndex to lastIndex.
+    getEntries :: (Entry e, LogM e m)
+               => [e] -- Currently building list. Should be initialized to [].
+               -> Int -- The nextIndex of the follower.
+               -> Int -- The lastIndex of the leader.
+               -> m (Maybe [e])
+    getEntries entries nextIndex index
         | index <= nextIndex = return $ Just entries
         | otherwise = do
             entry <- loadEntry index
             case entry of
-                Just e  -> getEntries (e:entries) (prevIndex index) nextIndex
+                Just e  -> getEntries (e:entries) nextIndex (prevIndex index)
                 Nothing -> return Nothing
 
 prevIndex :: Int -> Int
