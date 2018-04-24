@@ -37,20 +37,21 @@ runLeader = do
             ids <- serverIds
             let otherServerIds = filter (/= serverID') ids
             mapM_ (sendAppendEntries lastEntry commitIndex') otherServerIds
-        Right rv@RequestVote{}   -> get >>= handleRequestVote rv
-        Right ae@AppendEntries{} -> get >>= handleAppendEntries ae
-        Right resp@Response{}    -> get >>= handleLeaderResponse resp
+        Right rv@RequestVote{}       -> get >>= handleRequestVote rv
+        Right ae@AppendEntries{}     -> get >>= handleAppendEntries ae
+        Right (Response sender resp) -> get >>= handleLeaderResponse sender resp
 
-handleLeaderResponse msg@(Response AppendEntries{} term success sender) s
+handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
     | term < _currTerm s = return ()
     | term > _currTerm s = transitionToFollower msg
-    | not success = do
-        -- TODO(DarinM223): decrement nextIndex and "retry"
-        return ()
+    | not success =
+        stateType._Leader.nextIndex %= IM.adjust prevIndex sender
     | otherwise = do
-        -- TODO(DarinM223): update nextIndex and matchIndex
-        return ()
-handleLeaderResponse _ _ = return ()
+        stateType._Leader.matchIndex %= IM.adjust (max lastIndex) sender
+        stateType._Leader.nextIndex %= IM.adjust (max (lastIndex + 1)) sender
+        -- TODO(DarinM223): set commit index
+
+handleLeaderResponse _ _ _ = return ()
 
 sendAppendEntries :: ( MonadState RaftState m
                      , LogM e m

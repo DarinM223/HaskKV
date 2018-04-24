@@ -26,9 +26,9 @@ runCandidate = do
         Left HeartbeatTimeout    -> reset HeartbeatTimeout
         Right rv@RequestVote{}   -> get >>= handleRequestVote rv
         Right ae@AppendEntries{} -> get >>= handleAppendEntries ae
-        Right resp@Response{}    -> get >>= handleCandidateResponse resp
+        Right (Response _ resp)  -> get >>= handleCandidateResponse resp
 
-handleCandidateResponse msg@(Response RequestVote{} term success _) s
+handleCandidateResponse msg@(VoteResponse term success) s
     | term > _currTerm s = transitionToFollower msg
     | success == True = do
         stateType._Candidate %= (+ 1)

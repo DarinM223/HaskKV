@@ -35,8 +35,8 @@ handleRequestVote rv s
                 fail rv s
     | otherwise = fail rv s
   where
-    successResponse s = Response rv (_currTerm s) True (_serverID s)
-    failResponse s = Response rv (_currTerm s) False (_serverID s)
+    successResponse s = Response (_serverID s) $ VoteResponse (_currTerm s) True
+    failResponse s = Response (_serverID s) $ VoteResponse (_currTerm s) False
 
     existingLeader rv s = _leader s /= Nothing
                        && _leader s /= Just (_candidateID rv)
@@ -84,11 +84,13 @@ handleAppendEntries ae s
                 when (_commitIdx ae > commitIndex') $
                     commitIndex .= (min lastEntryIndex $ _commitIdx ae)
 
-                send (_leaderId ae) $ successResponse s
+                send (_leaderId ae) $ successResponse lastEntryIndex s
             _ -> send (_leaderId ae) $ failResponse s
   where
-    successResponse s = Response ae (_currTerm s) True (_serverID s)
-    failResponse s = Response ae (_currTerm s) False (_serverID s)
+    successResponse lastIndex s = Response (_serverID s)
+                                $ AppendResponse (_currTerm s) True lastIndex
+    failResponse s = Response (_serverID s)
+                   $ AppendResponse (_currTerm s) False 0
 
     -- Returns the first index in the entries that doesn't exist in the log
     -- or is different from the existing entry in the log.
