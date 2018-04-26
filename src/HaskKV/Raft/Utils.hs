@@ -52,14 +52,14 @@ transitionToLeader msg = do
                 }
         stateType .= Leader leaderState
 
-quorumSize :: (ServerM msg ServerEvent m) => m Int
+quorumSize :: (ServerM msg e m) => m Int
 quorumSize = do
     servers <- length <$> serverIds
     return $ servers `quot` 2 + 1
 
 startElection :: ( MonadState RaftState m
                  , LogM e m
-                 , ServerM (RaftMessage e) ServerEvent m
+                 , ServerM (RaftMessage e) event m
                  , Entry e
                  )
               => m ()

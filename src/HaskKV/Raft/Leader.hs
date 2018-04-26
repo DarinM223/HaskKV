@@ -3,6 +3,7 @@ module HaskKV.Raft.Leader where
 import Control.Lens
 import Control.Monad.State
 import Data.Maybe
+import Data.List
 import HaskKV.Log
 import HaskKV.Raft.Message
 import HaskKV.Raft.RPC
@@ -49,13 +50,29 @@ handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
     | otherwise = do
         stateType._Leader.matchIndex %= IM.adjust (max lastIndex) sender
         stateType._Leader.nextIndex %= IM.adjust (max (lastIndex + 1)) sender
-        -- TODO(DarinM223): set commit index
+
+        -- If there exists an N such that N > commitIndex,
+        -- a majority of matchIndex[i] >= N, and
+        -- log[N].term = currentTerm, set commitIndex = N.
+        quorumIndex' <- quorumIndex
+        when (quorumIndex' > _commitIndex s) $
+            commitIndex .= quorumIndex'
 
 handleLeaderResponse _ _ _ = return ()
 
+quorumIndex :: ( MonadState RaftState m
+               , ServerM msg event m
+               )
+            => m Int
+quorumIndex = do
+    matchIndexes <- maybe [] IM.elems <$> preuse (stateType._Leader.matchIndex)
+    quorumSize' <- quorumSize
+    let sorted = sortBy (flip compare) matchIndexes
+    return $ sorted !! (quorumSize' - 1)
+
 sendAppendEntries :: ( MonadState RaftState m
                      , LogM e m
-                     , ServerM (RaftMessage e) ServerEvent m
+                     , ServerM (RaftMessage e) event m
                      , Entry e
                      )
                   => Maybe e
