@@ -4,6 +4,7 @@ import Control.Lens
 import Control.Monad.State
 import GHC.Records
 import HaskKV.Log
+import HaskKV.Log.Utils
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
@@ -67,14 +68,9 @@ handleAppendEntries ae s
         reset ElectionTimeout
         case (prevLogEntry, lastLogEntry) of
             (Just entry, Just lastEntry) | entryTerm entry == _prevLogTerm ae -> do
-                entriesStart <- findStart (entryIndex lastEntry)
-                              . zip [0..]
-                              . getField @"_entries"
-                              $ ae
-
-                let newEntries = case entriesStart of
-                        Just start -> drop start $ getField @"_entries" ae
-                        Nothing    -> []
+                newEntries <- diffEntriesWithLog (entryIndex lastEntry)
+                            . getField @"_entries"
+                            $ ae
                 storeEntries newEntries
 
                 let lastEntryIndex = if (null newEntries)
@@ -91,23 +87,3 @@ handleAppendEntries ae s
                                 $ AppendResponse (_currTerm s) True lastIndex
     failResponse s = Response (_serverID s)
                    $ AppendResponse (_currTerm s) False 0
-
-    -- Returns the first index in the entries that doesn't exist in the log
-    -- or is different from the existing entry in the log.
-    --
-    -- If there is an existing entry that has a different term, that
-    -- entry and all entries after it are cleared from the log.
-    findStart :: (LogM e m, Entry e)
-              => Int        -- Index of the last entry in the log.
-              -> [(Int, e)] -- Entries to append with their indexes.
-              -> m (Maybe Int)
-    findStart _ [] = return Nothing
-    findStart lastIndex ((i, e):es)
-        | entryIndex e > lastIndex = return $ Just i
-        | otherwise = do
-            storeEntry <- loadEntry $ entryIndex e
-            case storeEntry of
-                Just se | entryTerm e /= entryTerm se -> do
-                    deleteRange (entryIndex e) lastIndex
-                    return $ Just i
-                _ -> findStart lastIndex es

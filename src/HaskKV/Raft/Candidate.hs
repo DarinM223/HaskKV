@@ -32,8 +32,7 @@ handleCandidateResponse msg@(VoteResponse term success) s
     | term > _currTerm s = transitionToFollower msg
     | success == True = do
         stateType._Candidate %= (+ 1)
-        votesMaybe <- preuse (stateType._Candidate)
-        let votes = fromMaybe 0 votesMaybe
+        votes <- fromMaybe 0 <$> preuse (stateType._Candidate)
         quorumSize' <- quorumSize
         when (votes >= quorumSize') $ transitionToLeader msg
 

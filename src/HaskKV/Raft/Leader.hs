@@ -5,6 +5,7 @@ import Control.Monad.State
 import Data.Maybe
 import Data.List
 import HaskKV.Log
+import HaskKV.Log.Utils
 import HaskKV.Raft.Message
 import HaskKV.Raft.RPC
 import HaskKV.Raft.State
@@ -54,9 +55,9 @@ handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
         -- If there exists an N such that N > commitIndex,
         -- a majority of matchIndex[i] >= N, and
         -- log[N].term = currentTerm, set commitIndex = N.
-        quorumIndex' <- quorumIndex
-        when (quorumIndex' > _commitIndex s) $
-            commitIndex .= quorumIndex'
+        n <- quorumIndex
+        when (n > _commitIndex s) $
+            commitIndex .= n
 
 handleLeaderResponse _ _ _ = return ()
 
@@ -88,7 +89,7 @@ sendAppendEntries entry commitIndex' id = do
         nextIndex = IM.lookup id =<< nextIndexes
 
     entries <- case nextIndex of
-            Just ni -> fromMaybe [] <$> getEntries [] ni lastIndex
+            Just ni -> fromMaybe [] <$> entryRange ni lastIndex
             Nothing -> return []
 
     serverID' <- use serverID
@@ -114,20 +115,3 @@ sendAppendEntries entry commitIndex' id = do
                 , _entries     = entries
                 , _commitIdx   = commitIndex'
                 }
-  where
-    -- Returns a list of entries from nextIndex to lastIndex.
-    getEntries :: (Entry e, LogM e m)
-               => [e] -- Currently building list. Should be initialized to [].
-               -> Int -- The nextIndex of the follower.
-               -> Int -- The lastIndex of the leader.
-               -> m (Maybe [e])
-    getEntries entries nextIndex index
-        | index <= nextIndex = return $ Just entries
-        | otherwise = do
-            entry <- loadEntry index
-            case entry of
-                Just e  -> getEntries (e:entries) nextIndex (prevIndex index)
-                Nothing -> return Nothing
-
-prevIndex :: Int -> Int
-prevIndex index = if index <= 0 then 0 else index - 1

@@ -8,6 +8,7 @@ import Control.Monad.State.Strict
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Time
 import HaskKV.Log
+import HaskKV.Log.InMem
 import HaskKV.Utils
 
 import qualified Data.IntMap as IM
