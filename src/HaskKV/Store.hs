@@ -54,6 +54,13 @@ class (Monad s, Show k, Ord k, Storable v) => StorageM k v s | s -> k v where
     deleteValue = lift . deleteValue
     cleanupExpired = lift . cleanupExpired
 
+class (StorageM k v m, LogM e m) => ApplyEntryM k v e m | m -> k v e where
+    -- | Applies a log entry.
+    apply :: e -> m ()
+
+    default apply :: (MonadTrans t, ApplyEntryM k v e m', m ~ t m') => e -> m ()
+    apply = lift . apply
+
 data StoreValue v = StoreValue
     { _expireTime :: Time
     , _version    :: CAS
@@ -115,6 +122,16 @@ instance (MonadIO m, Entry e) => LogM e (StoreT k v e m) where
         = liftIO
         . modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
       =<< ask
+
+instance
+    ( MonadIO m
+    , Ord k
+    , Show k
+    , Storable v
+    , Entry e
+    ) => ApplyEntryM k v e (StoreT k v e m) where
+
+    apply _ = liftIO $ putStrLn $ "Apply entry code here"
 
 instance (StorageM k v m) => StorageM k v (ReaderT r m)
 instance (StorageM k v m) => StorageM k v (StateT s m)
