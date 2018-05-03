@@ -2,9 +2,11 @@ module HaskKV.Config where
 
 import Data.Conduit.Network
 import Data.List
+import Data.Maybe
 import Control.Monad
 import HaskKV.Server
 import HaskKV.Timer
+import Text.Read
 
 import qualified Data.ByteString.Char8 as C
 import qualified Data.IntMap as IM
@@ -24,7 +26,10 @@ data Config = Config
     } deriving (Show, Eq)
 
 parseConfig :: Config -> [String] -> Config
-parseConfig c = setData c . fmap attrsToServerData . splitIntoThrees
+parseConfig c = setData c
+              . catMaybes
+              . fmap attrsToServerData
+              . splitIntoThrees
   where
     splitIntoThrees (a:b:c:xs) = [a, b, c]:splitIntoThrees xs
     splitIntoThrees _          = []
@@ -32,10 +37,9 @@ parseConfig c = setData c . fmap attrsToServerData . splitIntoThrees
     setData c d = c { _serverData = d }
 
     attrsToServerData [id, host, port] = ServerData
-        { _id   = read id
-        , _host = host
-        , _port = read port
-        }
+                                     <$> readMaybe id
+                                     <*> pure host
+                                     <*> readMaybe port
     attrsToServerData _ = error "Invalid attributes"
 
 readConfig :: Config -> FilePath -> IO Config

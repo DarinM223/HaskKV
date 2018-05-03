@@ -33,4 +33,7 @@ handleArgs (path:sid:_) = do
         settings = configToSettings sid' config
     mapM_ (\p -> runServer p "*" settings serverState) port
     runRaftTParams run params
-handleArgs _ = putStrLn "Invalid arguments passed"
+handleArgs _ = do
+    putStrLn "Invalid arguments passed"
+    putStrLn "Arguments are:"
+    putStrLn "[config path] [server id]"

@@ -2,8 +2,9 @@
 
 module HaskKV.Server where
 
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM
+import Control.Exception
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Binary
@@ -67,6 +68,9 @@ createServerState backpressure electionTimeout heartbeatTimeout = do
         , _heartbeatTimeout = heartbeatTimeout
         }
 
+retryTimeout :: Int
+retryTimeout = 1000000
+
 runServer :: (Binary msg)
           => Int
           -> HostPreference
@@ -82,11 +86,21 @@ runServer port host clients s = do
 
     forM_ (IM.assocs clients) $ \(i, settings) -> do
         forM_ (IM.lookup i . _outgoing $ s) $ \rq -> do
-            liftIO $ forkIO $ runTCPClient settings $ \appData ->
-                runConduit
-                    $ sourceRollingQueue rq
-                   .| CL.map (B.concat . BL.toChunks . encode)
-                   .| appSink appData
+            liftIO $ forkIO $ connectClient settings rq
+  where
+    connectClient settings rq = do
+        r <- try $ runTCPClient settings (connectStream rq)
+        case r of
+            Left (_ :: SomeException) -> do
+                putStrLn "Error connecting to server, retrying"
+                threadDelay retryTimeout
+                connectClient settings rq
+            Right _ -> return ()
+
+    connectStream rq appData = runConduit
+                             $ sourceRollingQueue rq
+                            .| CL.map (B.concat . BL.toChunks . encode)
+                            .| appSink appData
 
 data ServerEvent = ElectionTimeout
                  | HeartbeatTimeout
