@@ -10,7 +10,7 @@ import Data.Binary
 import Data.Conduit
 import Data.Conduit.Network
 import HaskKV.Log (LogM)
-import HaskKV.Store (StorageM)
+import HaskKV.Store (ApplyEntryM, StorageM)
 import HaskKV.Utils
 
 import qualified Data.ByteString as B
@@ -39,7 +39,7 @@ class (Monad m) => ServerM msg e m | m -> msg e where
     reset = lift . reset
     serverIds = lift serverIds
 
-newtype Capacity = Capacity { unCapacity :: Int }
+newtype Capacity = Capacity { unCapacity :: Int } deriving (Show, Eq)
 
 data ServerState msg = ServerState
     { _messages         :: RQ.RollingQueue msg
@@ -146,6 +146,7 @@ instance (MonadIO m) => ServerM msg ServerEvent (ServerT msg m) where
     serverIds = IM.keys . _outgoing <$> ask
 
 instance (StorageM k v m) => StorageM k v (ServerT msg m)
+instance (ApplyEntryM k v e m) => ApplyEntryM k v e (ServerT msg m)
 instance (LogM e m) => LogM e (ServerT msg m)
 instance (ServerM msg e m) => ServerM msg e (ReaderT r m)
 instance (ServerM msg e m) => ServerM msg e (StateT s m)

@@ -5,8 +5,11 @@ module HaskKV.Store where
 import Control.Concurrent.STM
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Data.Binary
+import Data.Binary.Orphans ()
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Time
+import GHC.Generics
 import HaskKV.Log
 import HaskKV.Log.InMem
 import HaskKV.Utils
@@ -65,7 +68,9 @@ data StoreValue v = StoreValue
     { _expireTime :: Time
     , _version    :: CAS
     , _value      :: v
-    } deriving (Show, Eq)
+    } deriving (Show, Eq, Generic)
+
+instance (Binary v) => Binary (StoreValue v)
 
 instance Storable (StoreValue v) where
     expireTime = _expireTime
@@ -135,6 +140,8 @@ instance
 
 instance (StorageM k v m) => StorageM k v (ReaderT r m)
 instance (StorageM k v m) => StorageM k v (StateT s m)
+instance (ApplyEntryM k v e m) => ApplyEntryM k v e (ReaderT r m)
+instance (ApplyEntryM k v e m) => ApplyEntryM k v e (StateT s m)
 
 checkAndSet :: (StorageM k v m) => Int -> k -> (v -> v) -> m Bool
 checkAndSet attempts k f

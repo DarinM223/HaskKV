@@ -32,3 +32,14 @@ data RaftState = RaftState
     , _serverID    :: Int
     } deriving (Show, Eq)
 makeFieldsNoPrefix ''RaftState
+
+createRaftState :: Int -> RaftState
+createRaftState sid = RaftState
+    { _stateType   = Follower
+    , _currTerm    = 0
+    , _votedFor    = Nothing
+    , _leader      = Nothing
+    , _commitIndex = 0
+    , _lastApplied = 0
+    , _serverID    = sid
+    }

@@ -6,7 +6,7 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 
-newtype Timeout = Timeout { unTimeout :: Int }
+newtype Timeout = Timeout { unTimeout :: Int } deriving (Show, Eq)
 
 data Timer = Timer
     { _thread :: TMVar ThreadId
