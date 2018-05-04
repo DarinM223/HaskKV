@@ -7,6 +7,7 @@ import HaskKV.Log
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Server
+import System.Log.Logger
 
 import qualified Data.IntMap as IM
 
@@ -79,3 +80,14 @@ startElection = do
         , _lastLogIdx  = entryIndex lastEntry
         , _lastLogTerm = entryTerm lastEntry
         }
+
+debug :: (MonadIO m, MonadState RaftState m) => String -> m ()
+debug text = do
+    sid <- use serverID
+    stateType' <- use stateType
+    let stateText = case stateType' of
+            Follower    -> "Follower"
+            Candidate _ -> "Candidate"
+            Leader _    -> "Leader"
+    let serverName = "Server " ++ show sid ++ " [" ++ stateText ++ "]:"
+    liftIO $ debugM (show sid) (serverName ++ text)

@@ -29,6 +29,7 @@ dependencies:
 - conduit-extra
 - containers
 - heaps
+- hslogger
 - lens
 - mtl
 - network

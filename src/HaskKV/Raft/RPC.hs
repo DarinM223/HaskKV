@@ -10,7 +10,8 @@ import HaskKV.Raft.State
 import HaskKV.Raft.Utils
 import HaskKV.Server
 
-handleRequestVote :: ( ServerM (RaftMessage e) ServerEvent m
+handleRequestVote :: ( MonadIO m
+                     , ServerM (RaftMessage e) ServerEvent m
                      , MonadState RaftState m
                      , LogM e m
                      , Entry e
@@ -22,6 +23,7 @@ handleRequestVote rv s
     | existingLeader rv s                = fail rv s
     | getField @"_term" rv < _currTerm s = fail rv s
     | getField @"_term" rv > _currTerm s = do
+        debug "Transitioning to follower"
         transitionToFollower rv
         get >>= handleRequestVote rv
     | canVote (_candidateID rv) s = do
@@ -29,6 +31,7 @@ handleRequestVote rv s
         let validLog = maybe (True, True) (checkValid rv) lastEntry
         if validLog == (True, True)
             then do
+                debug $ "Sending vote to " ++ show (_candidateID rv)
                 send (_candidateID rv) $ successResponse s
                 votedFor .= Just (_candidateID rv)
                 reset ElectionTimeout
@@ -47,7 +50,8 @@ handleRequestVote rv s
     checkTerm rv e = _lastLogTerm rv >= entryTerm e
     fail rv = send (_candidateID rv) . failResponse
 
-handleAppendEntries :: ( ServerM (RaftMessage e) ServerEvent m
+handleAppendEntries :: ( MonadIO m
+                       , ServerM (RaftMessage e) ServerEvent m
                        , MonadState RaftState m
                        , LogM e m
                        , Entry e
@@ -59,6 +63,7 @@ handleAppendEntries ae s
     | getField @"_term" ae < _currTerm s =
         send (_leaderId ae) $ failResponse s
     | getField @"_term" ae > _currTerm s = do
+        debug "Transitioning to follower"
         transitionToFollower ae
         get >>= handleAppendEntries ae
     | otherwise = do
@@ -76,6 +81,8 @@ handleAppendEntries ae s
                 let lastEntryIndex = if (null newEntries)
                         then entryIndex lastEntry
                         else entryIndex $ last newEntries
+                when (lastEntryIndex /= entryIndex lastEntry) $
+                    debug $ "Storing entries to index " ++ show lastEntryIndex
                 commitIndex' <- use commitIndex
                 when (_commitIdx ae > commitIndex') $
                     commitIndex .= (min lastEntryIndex $ _commitIdx ae)

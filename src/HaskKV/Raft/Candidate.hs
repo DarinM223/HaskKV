@@ -21,6 +21,7 @@ runCandidate = do
     msg <- recv
     case msg of
         Left ElectionTimeout -> do
+            debug "Restarting election"
             reset ElectionTimeout
             startElection
         Left HeartbeatTimeout    -> reset HeartbeatTimeout
@@ -29,11 +30,16 @@ runCandidate = do
         Right (Response _ resp)  -> get >>= handleCandidateResponse resp
 
 handleCandidateResponse msg@(VoteResponse term success) s
-    | term > _currTerm s = transitionToFollower msg
+    | term > _currTerm s = do
+        debug "Transitioning to follower"
+        transitionToFollower msg
     | success == True = do
         stateType._Candidate %= (+ 1)
         votes <- fromMaybe 0 <$> preuse (stateType._Candidate)
+        debug $ "Received " ++ show votes ++ " votes"
         quorumSize' <- quorumSize
-        when (votes >= quorumSize') $ transitionToLeader msg
+        when (votes >= quorumSize') $ do
+            debug "Transitioning to leader"
+            transitionToLeader msg
 
 handleCandidateResponse _ _ = return ()

@@ -38,6 +38,7 @@ runLeader = do
                                             )
             ids <- serverIds
             let otherServerIds = filter (/= serverID') ids
+            debug "Sending AppendEntries"
             mapM_ (sendAppendEntries lastEntry commitIndex') otherServerIds
         Right rv@RequestVote{}       -> get >>= handleRequestVote rv
         Right ae@AppendEntries{}     -> get >>= handleAppendEntries ae
@@ -46,9 +47,11 @@ runLeader = do
 handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
     | term < _currTerm s = return ()
     | term > _currTerm s = transitionToFollower msg
-    | not success =
+    | not success = do
+        debug $ "Decrementing next index for server " ++ show sender
         stateType._Leader.nextIndex %= IM.adjust prevIndex sender
     | otherwise = do
+        debug $ "Updating indexes for server " ++ show sender
         stateType._Leader.matchIndex %= IM.adjust (max lastIndex) sender
         stateType._Leader.nextIndex %= IM.adjust (max (lastIndex + 1)) sender
 
@@ -56,7 +59,8 @@ handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
         -- a majority of matchIndex[i] >= N, and
         -- log[N].term = currentTerm, set commitIndex = N.
         n <- quorumIndex
-        when (n > _commitIndex s) $
+        when (n > _commitIndex s) $ do
+            debug $ "Updating commit index to " ++ show n
             commitIndex .= n
 
 handleLeaderResponse _ _ _ = return ()

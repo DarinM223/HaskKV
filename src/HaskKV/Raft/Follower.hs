@@ -19,6 +19,7 @@ runFollower = do
     msg <- recv
     case msg of
         Left ElectionTimeout -> do
+            debug "Starting election"
             reset ElectionTimeout
             startElection
         Left HeartbeatTimeout    -> reset HeartbeatTimeout

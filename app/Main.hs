@@ -3,6 +3,7 @@ module Main where
 import Control.Concurrent.STM
 import HaskKV
 import System.Environment (getArgs)
+import System.Log.Logger
 
 main :: IO ()
 main = getArgs >>= handleArgs
@@ -14,11 +15,13 @@ type MyParams = Params RaftState RaftMessage MyKey MyValue MyEntry
 
 handleArgs :: [String] -> IO ()
 handleArgs (path:sid:_) = do
+    updateGlobalLogger sid (setLevel DEBUG)
+
     let sid'       = read sid :: Int
         initConfig = Config
             { _backpressure     = Capacity 100
-            , _electionTimeout  = Timeout (2000 :: Int)
-            , _heartbeatTimeout = Timeout (2000 :: Int)
+            , _electionTimeout  = Timeout (2000000 :: Int)
+            , _heartbeatTimeout = Timeout (2000000 :: Int)
             , _serverData       = []
             }
     config <- readConfig initConfig path
