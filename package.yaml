@@ -36,6 +36,7 @@ dependencies:
 - network-simple
 - rolling-queue
 - stm
+- streaming-commons
 - time
 
 default-extensions:

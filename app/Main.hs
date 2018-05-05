@@ -16,6 +16,7 @@ type MyParams = Params RaftState RaftMessage MyKey MyValue MyEntry
 handleArgs :: [String] -> IO ()
 handleArgs (path:sid:_) = do
     updateGlobalLogger sid (setLevel DEBUG)
+    updateGlobalLogger "conduit" (setLevel DEBUG)
 
     let sid'       = read sid :: Int
         initConfig = Config
@@ -25,7 +26,7 @@ handleArgs (path:sid:_) = do
             , _serverData       = []
             }
     config <- readConfig initConfig path
-    serverState <- configToServerState config
+    serverState <- configToServerState sid' config
     store <- newTVarIO emptyStore
     let params = Params
             { _store       = store

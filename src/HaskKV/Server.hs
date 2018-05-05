@@ -10,9 +10,11 @@ import Control.Monad.State.Strict
 import Data.Binary
 import Data.Conduit
 import Data.Conduit.Network
+import Data.Streaming.Network.Internal
 import HaskKV.Log (LogM)
 import HaskKV.Store (ApplyEntryM, StorageM)
 import HaskKV.Utils
+import System.Log.Logger
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -78,29 +80,36 @@ runServer :: (Binary msg)
           -> ServerState msg
           -> IO ()
 runServer port host clients s = do
-    liftIO $ forkIO $ runTCPServer (serverSettings port host) $ \appData ->
-        runConduit
-            $ appSource appData
-           .| CL.mapMaybe (decode . BL.fromStrict)
-           .| sinkRollingQueue (_messages s)
+    liftIO $ forkIO $ runTCPServer (serverSettings port host) $ \appData -> do
+        runConduit $ appSource appData
+                  .| CL.mapMaybe (decode . BL.fromStrict)
+                  .| CL.mapM_ (liftIO . debugM "conduit" . ("Receiving: " ++))
+                  .| sinkRollingQueue (_messages s)
 
     forM_ (IM.assocs clients) $ \(i, settings) -> do
         forM_ (IM.lookup i . _outgoing $ s) $ \rq -> do
             liftIO $ forkIO $ connectClient settings rq
   where
     connectClient settings rq = do
-        r <- try $ runTCPClient settings (connectStream rq)
-        case r of
-            Left (_ :: SomeException) -> do
-                putStrLn "Error connecting to server, retrying"
-                threadDelay retryTimeout
-                connectClient settings rq
-            Right _ -> return ()
+        let connect appData = putStrLn "Connected to server"
+                           >> connectStream rq appData
 
-    connectStream rq appData = runConduit
-                             $ sourceRollingQueue rq
-                            .| CL.map (B.concat . BL.toChunks . encode)
-                            .| appSink appData
+        debugM "conduit" $ "Connecting to host "
+                        ++ show (clientHost settings)
+                        ++ " and port "
+                        ++ show (clientPort settings)
+
+        catch (runTCPClient settings connect) $ \(_ :: SomeException) -> do
+            putStrLn "Error connecting to server, retrying"
+            threadDelay retryTimeout
+            connectClient settings rq
+
+    connectStream rq appData
+        = runConduit
+        $ sourceRollingQueue rq
+       .| CL.map (B.concat . BL.toChunks . encode)
+       .| CL.mapM_ (liftIO . debugM "conduit" . ("Sending: " ++) . show)
+       .| appSink appData
 
 data ServerEvent = ElectionTimeout
                  | HeartbeatTimeout

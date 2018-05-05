@@ -72,13 +72,13 @@ startElection = do
 
     lastEntry <- lastIndex >>= loadEntry
     currTerm' <- use currTerm
-    mapM_ (broadcastVote sid currTerm') lastEntry
-  where
-    broadcastVote sid currTerm lastEntry = broadcast $ RequestVote
+    let lastEntryIndex = maybe 0 entryIndex lastEntry
+        lastEntryTerm  = maybe 0 entryTerm lastEntry
+    broadcast RequestVote
         { _candidateID = sid
-        , _term        = currTerm
-        , _lastLogIdx  = entryIndex lastEntry
-        , _lastLogTerm = entryTerm lastEntry
+        , _term        = currTerm'
+        , _lastLogIdx  = lastEntryIndex
+        , _lastLogTerm = lastEntryTerm
         }
 
 debug :: (MonadIO m, MonadState RaftState m) => String -> m ()
