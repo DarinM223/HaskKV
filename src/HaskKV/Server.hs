@@ -73,22 +73,23 @@ createServerState backpressure electionTimeout heartbeatTimeout = do
 retryTimeout :: Int
 retryTimeout = 1000000
 
-runServer :: (Binary msg)
+runServer :: (Binary msg, Show msg)
           => Int
           -> HostPreference
           -> IM.IntMap ClientSettings
           -> ServerState msg
           -> IO ()
 runServer port host clients s = do
-    liftIO $ forkIO $ runTCPServer (serverSettings port host) $ \appData -> do
-        runConduit $ appSource appData
-                  .| CL.mapMaybe (decode . BL.fromStrict)
-                  .| CL.mapM_ (liftIO . debugM "conduit" . ("Receiving: " ++))
-                  .| sinkRollingQueue (_messages s)
+    forkIO $ runTCPServer (serverSettings port host) $ \appData ->
+        runConduitRes
+            $ appSource appData
+           .| CL.mapMaybe (decode . BL.fromStrict)
+           .| CL.iterM (liftIO . debugM "conduit" . ("Receiving: " ++) . show)
+           .| sinkRollingQueue (_messages s)
 
     forM_ (IM.assocs clients) $ \(i, settings) -> do
         forM_ (IM.lookup i . _outgoing $ s) $ \rq -> do
-            liftIO $ forkIO $ connectClient settings rq
+            forkIO $ connectClient settings rq
   where
     connectClient settings rq = do
         let connect appData = putStrLn "Connected to server"
@@ -108,7 +109,7 @@ runServer port host clients s = do
         = runConduit
         $ sourceRollingQueue rq
        .| CL.map (B.concat . BL.toChunks . encode)
-       .| CL.mapM_ (liftIO . debugM "conduit" . ("Sending: " ++) . show)
+       .| CL.iterM (liftIO . debugM "conduit" . ("Sending: " ++) . show)
        .| appSink appData
 
 data ServerEvent = ElectionTimeout
