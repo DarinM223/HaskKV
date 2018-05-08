@@ -83,7 +83,7 @@ runServer port host clients s = do
     forkIO $ runTCPServer (serverSettings port host) $ \appData ->
         runConduitRes
             $ appSource appData
-           .| CL.mapMaybe (decode . BL.fromStrict)
+           .| CL.mapFoldable (fmap thrd . decodeOrFail . BL.fromStrict)
            .| CL.iterM (liftIO . debugM "conduit" . ("Receiving: " ++) . show)
            .| sinkRollingQueue (_messages s)
 
@@ -91,6 +91,8 @@ runServer port host clients s = do
         forM_ (IM.lookup i . _outgoing $ s) $ \rq -> do
             forkIO $ connectClient settings rq
   where
+    thrd t = let (_, _, a) = t in a
+
     connectClient settings rq = do
         let connect appData = putStrLn "Connected to server"
                            >> connectStream rq appData
