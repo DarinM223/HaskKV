@@ -4,6 +4,9 @@ import Control.Concurrent.STM
 import HaskKV
 import System.Environment (getArgs)
 import System.Log.Logger
+import System.Log.Handler.Simple
+import System.Log.Handler (setFormatter)
+import System.Log.Formatter
 
 main :: IO ()
 main = getArgs >>= handleArgs
@@ -17,6 +20,10 @@ handleArgs :: [String] -> IO ()
 handleArgs (path:sid:_) = do
     updateGlobalLogger sid (setLevel DEBUG)
     updateGlobalLogger "conduit" (setLevel DEBUG)
+    h <- fileHandler (sid ++ ".log") DEBUG >>= \lh -> return $
+        setFormatter lh (simpleLogFormatter "[$time : $loggername : $prio] $msg")
+    updateGlobalLogger sid (addHandler h)
+    updateGlobalLogger "conduit" (addHandler h)
 
     let sid'       = read sid :: Int
         initConfig = Config

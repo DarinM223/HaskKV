@@ -110,8 +110,8 @@ runServer port host clients s = do
     connectStream rq appData
         = runConduit
         $ sourceRollingQueue rq
-       .| CL.map (B.concat . BL.toChunks . encode)
        .| CL.iterM (liftIO . debugM "conduit" . ("Sending: " ++) . show)
+       .| CL.map (B.concat . BL.toChunks . encode)
        .| appSink appData
 
 data ServerEvent = ElectionTimeout
