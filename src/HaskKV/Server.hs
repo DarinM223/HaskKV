@@ -166,8 +166,10 @@ instance (MonadIO m) => ServerM msg ServerEvent (ServerT msg m) where
 
     reset HeartbeatTimeout = ask >>= \s ->
         liftIO $ Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
-    reset ElectionTimeout = ask >>= \s ->
-        liftIO $ Timer.reset (_electionTimer s) (_electionTimeout s)
+    reset ElectionTimeout = do
+        s <- ask
+        timeout <- liftIO $ Timer.randTimeout $ _electionTimeout s
+        liftIO $ Timer.reset (_electionTimer s) timeout
 
     serverIds = IM.keys . _outgoing <$> ask
 

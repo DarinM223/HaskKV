@@ -5,8 +5,15 @@ module HaskKV.Timer where
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
+import System.Random
 
 newtype Timeout = Timeout { unTimeout :: Int } deriving (Show, Eq)
+
+timeoutRange :: Timeout -> (Int, Int)
+timeoutRange (Timeout timeout) = (timeout, 2 * timeout - 1)
+
+randTimeout :: Timeout -> IO Timeout
+randTimeout = fmap Timeout . getStdRandom . randomR . timeoutRange
 
 data Timer = Timer
     { _thread :: TMVar ThreadId

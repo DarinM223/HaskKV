@@ -16,7 +16,7 @@ transitionToFollower :: (MonadState RaftState m, HasField "_term" msg Int)
                      -> m ()
 transitionToFollower msg = do
     stateType .= Follower
-    currTerm .= getField @"_term" msg
+    setCurrTerm $ getField @"_term" msg
 
 transitionToLeader :: ( LogM e m
                       , MonadState RaftState m
@@ -67,7 +67,7 @@ startElection :: ( MonadState RaftState m
 startElection = do
     sid <- use serverID
     stateType .= Candidate 1
-    currTerm %= (+ 1)
+    updateCurrTerm (+ 1)
     votedFor .= Just sid
 
     lastEntry <- lastIndex >>= loadEntry
@@ -91,3 +91,13 @@ debug text = do
             Leader _    -> "Leader"
     let serverName = "Server " ++ show sid ++ " [" ++ stateText ++ "]:"
     liftIO $ debugM (show sid) (serverName ++ text)
+
+setCurrTerm :: (MonadState RaftState m) => Int -> m ()
+setCurrTerm term = do
+    currTerm .= term
+    votedFor .= Nothing
+
+updateCurrTerm :: (MonadState RaftState m) => (Int -> Int) -> m ()
+updateCurrTerm f = do
+    currTerm %= f
+    votedFor .= Nothing
