@@ -31,27 +31,27 @@ transitionToLeader msg = do
     lastEntry <- lastIndex >>= loadEntry
     serverID' <- use serverID
 
-    mapM_ (broadcastAppend serverID' $ getField @"_term" msg) lastEntry
-    mapM_ setLeader lastEntry
-  where
-    broadcastAppend sid term entry = broadcast $ AppendEntries
-        { _term        = term
-        , _leaderId    = sid
-        , _prevLogIdx  = entryIndex entry
-        , _prevLogTerm = entryTerm entry
+    let lastEntryIndex = maybe 0 entryIndex lastEntry
+        lastEntryTerm  = maybe 0 entryTerm lastEntry
+
+    broadcast $ AppendEntries
+        { _term        = getField @"_term" msg
+        , _leaderId    = serverID'
+        , _prevLogIdx  = lastEntryIndex
+        , _prevLogTerm = lastEntryTerm
         , _entries     = []
         , _commitIdx   = 0
         }
-    setLeader entry = do
-        ids <- serverIds
-        let initNextIndex = entryIndex entry + 1
-            nextIndexes   = IM.fromList . fmap (flip (,) initNextIndex) $ ids
-            matchIndexes  = IM.fromList . fmap (flip (,) 0) $ ids
-            leaderState   = LeaderState
-                { _nextIndex  = nextIndexes
-                , _matchIndex = matchIndexes
-                }
-        stateType .= Leader leaderState
+
+    ids <- serverIds
+    let initNextIndex = lastEntryIndex + 1
+        nextIndexes   = IM.fromList . fmap (flip (,) initNextIndex) $ ids
+        matchIndexes  = IM.fromList . fmap (flip (,) 0) $ ids
+        leaderState   = LeaderState
+            { _nextIndex  = nextIndexes
+            , _matchIndex = matchIndexes
+            }
+    stateType .= Leader leaderState
 
 quorumSize :: (ServerM msg e m) => m Int
 quorumSize = do

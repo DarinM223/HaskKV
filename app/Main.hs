@@ -29,7 +29,7 @@ handleArgs (path:sid:_) = do
         initConfig = Config
             { _backpressure     = Capacity 100
             , _electionTimeout  = Timeout (2000000 :: Int)
-            , _heartbeatTimeout = Timeout (2000000 :: Int)
+            , _heartbeatTimeout = Timeout (1000000 :: Int)
             , _serverData       = []
             }
     config <- readConfig initConfig path
