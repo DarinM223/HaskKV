@@ -24,7 +24,7 @@ run = do
     when (commitIndex' > lastApplied') $ do
         lastApplied %= (+ 1)
         entry <- loadEntry (lastApplied' + 1)
-        mapM_ apply entry
+        mapM_ applyEntry entry
 
     stateType' <- use stateType
     case stateType' of

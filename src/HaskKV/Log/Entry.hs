@@ -12,8 +12,8 @@ data LogEntry k v = LogEntry
     , _data  :: LogEntryData k v
     } deriving (Show, Eq, Generic)
 
-data LogEntryData k v = Insert TID k
-                      | Change TID k v
+data LogEntryData k v = Change TID k v
+                      | Delete TID k
                       | Transaction Transaction
                       | Checkpoint Checkpoint
                       deriving (Show, Eq, Generic)

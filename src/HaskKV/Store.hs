@@ -1,3 +1,4 @@
+{-# LANGUAGE IncoherentInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module HaskKV.Store where
@@ -11,6 +12,7 @@ import Data.Maybe (fromJust, fromMaybe)
 import Data.Time
 import GHC.Generics
 import HaskKV.Log
+import HaskKV.Log.Entry
 import HaskKV.Log.InMem
 import HaskKV.Utils
 
@@ -59,10 +61,10 @@ class (Monad s, Show k, Ord k, Storable v) => StorageM k v s | s -> k v where
 
 class (StorageM k v m, LogM e m) => ApplyEntryM k v e m | m -> k v e where
     -- | Applies a log entry.
-    apply :: e -> m ()
+    applyEntry :: e -> m ()
 
-    default apply :: (MonadTrans t, ApplyEntryM k v e m', m ~ t m') => e -> m ()
-    apply = lift . apply
+    default applyEntry :: (MonadTrans t, ApplyEntryM k v e m', m ~ t m') => e -> m ()
+    applyEntry = lift . applyEntry
 
 data StoreValue v = StoreValue
     { _expireTime :: Time
@@ -136,7 +138,21 @@ instance
     , Entry e
     ) => ApplyEntryM k v e (StoreT k v e m) where
 
-    apply _ = liftIO $ putStrLn $ "Apply entry code here"
+    applyEntry _ = liftIO $ putStrLn "Default ApplyEntryM instance"
+
+instance
+    {-# OVERLAPPING #-}
+    ( MonadIO m
+    , Binary k
+    , Ord k
+    , Show k
+    , Binary v
+    , Storable v
+    ) => ApplyEntryM k v (LogEntry k v) (StoreT k v (LogEntry k v) m) where
+
+    applyEntry LogEntry{ _data = (Change _ k v) } = setValue k v
+    applyEntry LogEntry{ _data = (Delete _ k) }   = deleteValue k
+    applyEntry _                                  = return ()
 
 instance (StorageM k v m) => StorageM k v (ReaderT r m)
 instance (StorageM k v m) => StorageM k v (StateT s m)
