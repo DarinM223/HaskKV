@@ -1,6 +1,13 @@
 module HaskKV.Log.Utils where
 
+import Control.Concurrent.STM
+import Control.Monad.IO.Class
+import Data.Maybe (fromJust)
+import GHC.Records
 import HaskKV.Log
+import HaskKV.Log.Entry
+
+import qualified HaskKV.Timer as Timer
 
 type Index      = Int
 type StartIndex = Int
@@ -50,3 +57,23 @@ diffEntriesWithLog last entries = do
                     deleteRange (entryIndex e) lastIndex
                     return $ Just i
                 _ -> findStart lastIndex es
+
+applyTimeout :: Timer.Timeout
+applyTimeout = Timer.Timeout 1000000
+
+-- | Stores entry in the log and then blocks until log entry is committed.
+apply :: (MonadIO m, LogM e m, HasField "_completed" e Completed) => e -> m ()
+apply entry = do
+    storeEntries [entry]
+
+    timer <- liftIO $ Timer.newIO
+    Timer.reset timer applyTimeout
+    -- Wait until either something is put in the TMVar
+    -- or the timeout is finished.
+    liftIO . atomically $ (Timer.await timer) `orElse` awaitCompleted
+  where
+    awaitCompleted = takeTMVar
+                   . fromJust
+                   . unCompleted
+                   . getField @"_completed"
+                   $ entry

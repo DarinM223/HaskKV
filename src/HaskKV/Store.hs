@@ -150,9 +150,13 @@ instance
     , Storable v
     ) => ApplyEntryM k v (LogEntry k v) (StoreT k v (LogEntry k v) m) where
 
-    applyEntry LogEntry{ _data = (Change _ k v) } = setValue k v
-    applyEntry LogEntry{ _data = (Delete _ k) }   = deleteValue k
-    applyEntry _                                  = return ()
+    applyEntry LogEntry{ _data = entry, _completed = Completed lock } = do
+        mapM_ (liftIO . atomically . flip putTMVar ()) lock
+        applyStore entry
+      where
+        applyStore (Change _ k v) = setValue k v
+        applyStore (Delete _ k)   = deleteValue k
+        applyStore _              = return ()
 
 instance (StorageM k v m) => StorageM k v (ReaderT r m)
 instance (StorageM k v m) => StorageM k v (StateT s m)
