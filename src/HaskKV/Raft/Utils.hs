@@ -45,8 +45,8 @@ transitionToLeader msg = do
 
     ids <- serverIds
     let initNextIndex = lastEntryIndex + 1
-        nextIndexes   = IM.fromList . fmap (flip (,) initNextIndex) $ ids
-        matchIndexes  = IM.fromList . fmap (flip (,) 0) $ ids
+        nextIndexes   = IM.fromList . fmap (, initNextIndex) $ ids
+        matchIndexes  = IM.fromList . fmap (, 0) $ ids
         leaderState   = LeaderState
             { _nextIndex  = nextIndexes
             , _matchIndex = matchIndexes

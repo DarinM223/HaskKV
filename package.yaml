@@ -60,12 +60,14 @@ default-extensions:
 - GeneralizedNewtypeDeriving
 - InstanceSigs
 - KindSignatures
+- LambdaCase
 - MultiParamTypeClasses
 - OverloadedStrings
 - PatternSynonyms
 - RankNTypes
 - ScopedTypeVariables
 - StandaloneDeriving
+- TupleSections
 - TypeApplications
 - TypeFamilies
 - TypeFamilyDependencies

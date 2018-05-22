@@ -15,17 +15,15 @@ runFollower :: ( MonadIO m
                , Entry e
                )
             => m ()
-runFollower = do
-    msg <- recv
-    case msg of
-        Left ElectionTimeout -> do
-            debug "Starting election"
-            reset ElectionTimeout
-            startElection
-        Left HeartbeatTimeout    -> reset HeartbeatTimeout
-        Right rv@RequestVote{}   -> get >>= handleRequestVote rv
-        Right ae@AppendEntries{} -> get >>= handleAppendEntries ae
-        Right (Response _ resp)  -> get >>= handleFollowerResponse resp
+runFollower = recv >>= \case
+    Left ElectionTimeout -> do
+        debug "Starting election"
+        reset ElectionTimeout
+        startElection
+    Left HeartbeatTimeout    -> reset HeartbeatTimeout
+    Right rv@RequestVote{}   -> get >>= handleRequestVote rv
+    Right ae@AppendEntries{} -> get >>= handleAppendEntries ae
+    Right (Response _ resp)  -> get >>= handleFollowerResponse resp
 
 handleFollowerResponse msg@(VoteResponse term _) s
     | term > _currTerm s = transitionToFollower msg

@@ -21,28 +21,26 @@ runLeader :: ( MonadIO m
              , Entry e
              )
           => m ()
-runLeader = do
-    msg <- recv
-    case msg of
-        Left ElectionTimeout -> reset ElectionTimeout
-        Left HeartbeatTimeout -> do
-            reset HeartbeatTimeout
-            commitIndex' <- use commitIndex
-            lastEntry <- lastIndex >>= loadEntry
-            serverID' <- use serverID
+runLeader = recv >>= \case
+    Left ElectionTimeout -> reset ElectionTimeout
+    Left HeartbeatTimeout -> do
+        reset HeartbeatTimeout
+        commitIndex' <- use commitIndex
+        lastEntry <- lastIndex >>= loadEntry
+        serverID' <- use serverID
 
-            -- Update the highest replicated index for our server.
-            stateType._Leader.matchIndex %= ( IM.insert serverID'
-                                            . maybe 0 entryIndex
-                                            $ lastEntry
-                                            )
-            ids <- serverIds
-            let otherServerIds = filter (/= serverID') ids
-            debug "Sending AppendEntries"
-            mapM_ (sendAppendEntries lastEntry commitIndex') otherServerIds
-        Right rv@RequestVote{}       -> get >>= handleRequestVote rv
-        Right ae@AppendEntries{}     -> get >>= handleAppendEntries ae
-        Right (Response sender resp) -> get >>= handleLeaderResponse sender resp
+        -- Update the highest replicated index for our server.
+        stateType._Leader.matchIndex %= ( IM.insert serverID'
+                                        . maybe 0 entryIndex
+                                        $ lastEntry
+                                        )
+        ids <- serverIds
+        let otherServerIds = filter (/= serverID') ids
+        debug "Sending AppendEntries"
+        mapM_ (sendAppendEntries lastEntry commitIndex') otherServerIds
+    Right rv@RequestVote{}       -> get >>= handleRequestVote rv
+    Right ae@AppendEntries{}     -> get >>= handleAppendEntries ae
+    Right (Response sender resp) -> get >>= handleLeaderResponse sender resp
 
 handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
     | term < _currTerm s = return ()
@@ -93,8 +91,8 @@ sendAppendEntries entry commitIndex' id = do
         nextIndex = IM.lookup id =<< nextIndexes
 
     entries <- case nextIndex of
-            Just ni -> fromMaybe [] <$> entryRange ni lastIndex
-            Nothing -> return []
+        Just ni -> fromMaybe [] <$> entryRange ni lastIndex
+        Nothing -> return []
 
     serverID' <- use serverID
     if null entries

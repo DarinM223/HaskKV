@@ -26,8 +26,7 @@ run = do
         entry <- loadEntry (lastApplied' + 1)
         mapM_ applyEntry entry
 
-    stateType' <- use stateType
-    case stateType' of
+    use stateType >>= \case
         Follower    -> runFollower
         Candidate _ -> runCandidate
         Leader _    -> runLeader
