@@ -22,21 +22,19 @@ runRaftT :: (MonadIO m)
          -> Store k v e
          -> ServerState (msg e)
          -> s
-         -> m a
+         -> m (a, s)
 runRaftT m store state raft = do
     storeVar <- liftIO $ newTVarIO store
     runRaftTVar m storeVar state raft
 
-runRaftTVar :: (MonadIO m)
-            => RaftT s msg k v e m a
+runRaftTVar :: RaftT s msg k v e m a
             -> TVar (Store k v e)
             -> ServerState (msg e)
             -> s
-            -> m a
+            -> m (a, s)
 runRaftTVar m store state raft
     = flip runStoreTVar store
     . flip runServerT state
-    . fmap fst
     . flip runStateT raft
     . unRaftT
     $ m
@@ -47,9 +45,8 @@ data Params s msg k v e = Params
     , _raftState   :: s
     }
 
-runRaftTParams :: (MonadIO m)
-               => RaftT s msg k v e m a
+runRaftTParams :: RaftT s msg k v e m a
                -> Params s msg k v e
-               -> m a
+               -> m (a, s)
 runRaftTParams m p =
     runRaftTVar m (_store p) (_serverState p) (_raftState p)

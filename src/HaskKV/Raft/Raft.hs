@@ -31,5 +31,3 @@ run = do
         Follower    -> runFollower
         Candidate _ -> runCandidate
         Leader _    -> runLeader
-
-    run

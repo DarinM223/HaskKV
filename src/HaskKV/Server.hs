@@ -61,6 +61,10 @@ createServerState backpressure electionTimeout heartbeatTimeout = do
     messages <- RQ.newIO (unCapacity backpressure)
     electionTimer <- Timer.newIO
     heartbeatTimer <- Timer.newIO
+
+    Timer.reset electionTimer electionTimeout
+    Timer.reset heartbeatTimer heartbeatTimeout
+
     return ServerState
         { _messages         = messages
         , _outgoing         = IM.empty
@@ -124,14 +128,8 @@ newtype ServerT msg m a = ServerT { unServerT :: ReaderT (ServerState msg) m a }
         , MonadReader (ServerState msg)
         )
 
-runServerT :: (MonadIO m)
-           => ServerT msg m a
-           -> ServerState msg
-           -> m a
-runServerT m s = do
-    liftIO $ Timer.reset (_electionTimer s) (_electionTimeout s)
-    liftIO $ Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
-    runReaderT (unServerT m) s
+runServerT :: ServerT msg m a -> ServerState msg -> m a
+runServerT m s = runReaderT (unServerT m) s
 
 instance (MonadIO m) => ServerM msg ServerEvent (ServerT msg m) where
     send i msg = do

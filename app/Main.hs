@@ -43,7 +43,18 @@ handleArgs (path:sid:_) = do
         port     = configServerPort sid' config
         settings = configToSettings sid' config
     mapM_ (\p -> runServer p "*" settings serverState) port
-    runRaftTParams run params
+
+    isLeader <- newTVarIO False
+    raftLoop params isLeader
+  where
+    raftLoop params isLeader = do
+        (_, s') <- runRaftTParams run params
+        case (_stateType $ _raftState params, _stateType s') of
+            (Leader _, Leader _) -> return ()
+            (Leader _, _)        -> atomically $ writeTVar isLeader False
+            (_, Leader _)        -> atomically $ writeTVar isLeader True
+            (_, _)               -> return ()
+        raftLoop params { _raftState = s' } isLeader
 handleArgs _ = do
     putStrLn "Invalid arguments passed"
     putStrLn "Arguments are:"

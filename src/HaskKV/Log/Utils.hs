@@ -59,7 +59,7 @@ diffEntriesWithLog last entries = do
                 _ -> findStart lastIndex es
 
 applyTimeout :: Timer.Timeout
-applyTimeout = Timer.Timeout 1000000
+applyTimeout = Timer.Timeout 5000000
 
 -- | Stores entry in the log and then blocks until log entry is committed.
 apply :: (MonadIO m, LogM e m, HasField "_completed" e Completed) => e -> m ()
