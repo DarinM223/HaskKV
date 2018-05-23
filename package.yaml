@@ -21,6 +21,7 @@ description:         Please see the README on Github at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- aeson
 - async
 - binary
 - binary-orphans
@@ -36,9 +37,12 @@ dependencies:
 - network-simple
 - random
 - rolling-queue
+- servant
+- servant-server
 - stm
 - streaming-commons
 - time
+- warp
 
 default-extensions:
 - BangPatterns

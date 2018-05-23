@@ -6,6 +6,7 @@ module HaskKV.Store where
 import Control.Concurrent.STM
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Data.Aeson
 import Data.Binary
 import Data.Binary.Orphans ()
 import Data.Maybe (fromJust, fromMaybe)
@@ -73,6 +74,8 @@ data StoreValue v = StoreValue
     } deriving (Show, Eq, Generic)
 
 instance (Binary v) => Binary (StoreValue v)
+instance (ToJSON v) => ToJSON (StoreValue v)
+instance (FromJSON v) => FromJSON (StoreValue v)
 
 instance Storable (StoreValue v) where
     expireTime = _expireTime

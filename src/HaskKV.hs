@@ -1,5 +1,6 @@
 module HaskKV (module M) where
 
+import HaskKV.API as M
 import HaskKV.Config as M
 import HaskKV.Log as M
 import HaskKV.Log.Entry as M
