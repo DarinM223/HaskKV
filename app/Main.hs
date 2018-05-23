@@ -40,9 +40,9 @@ handleArgs (path:sid:_) = do
             , _serverState = serverState
             , _raftState   = createRaftState sid'
             } :: MyParams
-        port     = configServerPort sid' config
+        raftPort = configRaftPort sid' config
         settings = configToSettings sid' config
-    mapM_ (\p -> runServer p "*" settings serverState) port
+    mapM_ (\p -> runServer p "*" settings serverState) raftPort
 
     isLeader <- newTVarIO False
     raftLoop params isLeader

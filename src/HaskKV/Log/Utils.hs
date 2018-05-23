@@ -39,21 +39,21 @@ diffEntriesWithLog :: (LogM e m, Entry e)
                    -> [e]       -- Entries to append.
                    -> m [e]
 diffEntriesWithLog last entries =
-    findDiffEntriesStart last (zip [0..] entries) >>= \case
-        Just start -> return $ drop start entries
-        Nothing    -> return []
+    diffEntriesStart last (zip [0..] entries) >>= pure . \case
+        Just start -> drop start entries
+        Nothing    -> []
   where
     -- Returns the first index in the entries that doesn't exist in the log
     -- or is different from the existing entry in the log.
-    findDiffEntriesStart _ [] = return Nothing
-    findDiffEntriesStart lastIndex ((i, e):es)
+    diffEntriesStart _ [] = return Nothing
+    diffEntriesStart lastIndex ((i, e):es)
         | entryIndex e > lastIndex = return $ Just i
         | otherwise =
             loadEntry (entryIndex e) >>= \case
                 Just storeEntry | entryTerm e /= entryTerm storeEntry -> do
                     deleteRange (entryIndex e) lastIndex
                     return $ Just i
-                _ -> findDiffEntriesStart lastIndex es
+                _ -> diffEntriesStart lastIndex es
 
 applyTimeout :: Timer.Timeout
 applyTimeout = Timer.Timeout 5000000

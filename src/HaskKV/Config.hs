@@ -13,9 +13,10 @@ import qualified Data.IntMap as IM
 import qualified Data.STM.RollingQueue as RQ
 
 data ServerData = ServerData
-    { _id   :: Int
-    , _host :: String
-    , _port :: Int
+    { _id       :: Int
+    , _host     :: String
+    , _raftPort :: Int
+    , _apiPort  :: Int
     } deriving (Show, Eq)
 
 data Config = Config
@@ -29,33 +30,38 @@ parseConfig :: Config -> [String] -> Config
 parseConfig c = setData c
               . catMaybes
               . fmap attrsToServerData
-              . splitIntoThrees
+              . splitIntoFours
   where
-    splitIntoThrees (a:b:c:xs) = [a, b, c]:splitIntoThrees xs
-    splitIntoThrees _          = []
+    splitIntoFours = \case
+        (a:b:c:d:xs) -> [a, b, c, d]:splitIntoFours xs
+        _            -> []
 
     setData c d = c { _serverData = d }
 
-    attrsToServerData [id, host, port] = ServerData
+    attrsToServerData [id, host, raftPort, apiPort] = ServerData
                                      <$> readMaybe id
                                      <*> pure host
-                                     <*> readMaybe port
+                                     <*> readMaybe raftPort
+                                     <*> readMaybe apiPort
     attrsToServerData _ = error "Invalid attributes"
 
 readConfig :: Config -> FilePath -> IO Config
 readConfig c = fmap (parseConfig c . lines) . readFile
 
-configServerPort :: Int -> Config -> Maybe Int
-configServerPort sid = fmap _port . find ((== sid) . _id) . _serverData
+configRaftPort :: Int -> Config -> Maybe Int
+configRaftPort sid = fmap _raftPort . find ((== sid) . _id) . _serverData
+
+configAPIPort :: Int -> Config -> Maybe Int
+configAPIPort sid = fmap _apiPort . find ((== sid) . _id) . _serverData
 
 configToSettings :: Int -> Config -> IM.IntMap ClientSettings
 configToSettings sid = foldl' insert IM.empty
                      . filter ((/= sid) . _id)
                      . _serverData
   where
-    insert settings ServerData{ _id = sid
-                              , _port = port
-                              , _host = host
+    insert settings ServerData{ _id       = sid
+                              , _raftPort = port
+                              , _host     = host
                               } =
         IM.insert sid (clientSettings port $ C.pack host) settings
 
