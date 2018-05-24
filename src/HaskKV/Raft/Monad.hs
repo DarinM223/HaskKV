@@ -2,7 +2,7 @@ module HaskKV.Raft.Monad where
 
 import Control.Concurrent.STM
 import Control.Monad.State.Strict
-import HaskKV.Log (LogM)
+import HaskKV.Log (LogM, TempLogM)
 import HaskKV.Server (runServerT, ServerEvent, ServerState, ServerM, ServerT)
 import HaskKV.Store (runStoreTVar, ApplyEntryM, StorageM, Store, StoreT)
 
@@ -14,7 +14,8 @@ newtype RaftT s msg k v e m a = RaftT
     } deriving
         ( Functor, Applicative, Monad, MonadIO
         , MonadState s
-        , LogM e, StorageM k v, ApplyEntryM k v e, ServerM (msg e) ServerEvent
+        , LogM e, TempLogM e, StorageM k v, ApplyEntryM k v e
+        , ServerM (msg e) ServerEvent
         )
 
 runRaftT :: (MonadIO m)

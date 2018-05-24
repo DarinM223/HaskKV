@@ -11,7 +11,7 @@ import Data.Binary
 import Data.Conduit
 import Data.Conduit.Network
 import Data.Streaming.Network.Internal
-import HaskKV.Log (LogM)
+import HaskKV.Log (LogM, TempLogM)
 import HaskKV.Store (ApplyEntryM, StorageM)
 import HaskKV.Utils
 import System.Log.Logger
@@ -174,5 +174,6 @@ instance (MonadIO m) => ServerM msg ServerEvent (ServerT msg m) where
 instance (StorageM k v m) => StorageM k v (ServerT msg m)
 instance (ApplyEntryM k v e m) => ApplyEntryM k v e (ServerT msg m)
 instance (LogM e m) => LogM e (ServerT msg m)
+instance (TempLogM e m) => TempLogM e (ServerT msg m)
 instance (ServerM msg e m) => ServerM msg e (ReaderT r m)
 instance (ServerM msg e m) => ServerM msg e (StateT s m)

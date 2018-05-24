@@ -17,6 +17,7 @@ import qualified Data.IntMap as IM
 runLeader :: ( MonadIO m
              , MonadState RaftState m
              , LogM e m
+             , TempLogM e m
              , ServerM (RaftMessage e) ServerEvent m
              , Entry e
              )
@@ -26,10 +27,12 @@ runLeader = recv >>= \case
     Left HeartbeatTimeout -> do
         reset HeartbeatTimeout
         commitIndex' <- use commitIndex
-        lastEntry <- lastIndex >>= loadEntry
         serverID' <- use serverID
 
+        storeTemporaryEntries
+
         -- Update the highest replicated index for our server.
+        lastEntry <- lastIndex >>= loadEntry
         stateType._Leader.matchIndex %= ( IM.insert serverID'
                                         . maybe 0 entryIndex
                                         $ lastEntry
@@ -72,6 +75,26 @@ quorumIndex = do
     quorumSize' <- quorumSize
     let sorted = sortBy (flip compare) matchIndexes
     return $ sorted !! (quorumSize' - 1)
+
+storeTemporaryEntries :: ( MonadState RaftState m
+                         , LogM e m
+                         , TempLogM e m
+                         , Entry e
+                         )
+                      => m ()
+storeTemporaryEntries = do
+    term <- use currTerm
+    lastEntry <- lastIndex >>= loadEntry
+    let lastEntryIndex = maybe 0 entryIndex lastEntry
+
+    entries <- setIndexAndTerms (lastEntryIndex + 1) term <$> temporaryEntries
+    storeEntries entries
+  where
+    setIndexAndTerms _ _ [] = []
+    setIndexAndTerms idx term (e:es) = e':rest
+      where
+        e' = setEntryTerm term . setEntryIndex idx $ e
+        rest = setIndexAndTerms (idx + 1) term es
 
 sendAppendEntries :: ( MonadState RaftState m
                      , LogM e m

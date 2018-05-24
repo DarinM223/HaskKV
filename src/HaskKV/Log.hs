@@ -7,8 +7,10 @@ import Control.Monad.State.Strict
 import Data.Binary
 
 class (Binary l) => Entry l where
-    entryIndex :: l -> Int
-    entryTerm  :: l -> Int
+    entryIndex    :: l -> Int
+    entryTerm     :: l -> Int
+    setEntryIndex :: Int -> l -> l
+    setEntryTerm  :: Int -> l -> l
 
 class (Monad m) => LogM e m | m -> e where
     -- | Returns the first index written.
@@ -38,5 +40,23 @@ class (Monad m) => LogM e m | m -> e where
     storeEntries = lift . storeEntries
     deleteRange a b = lift $ deleteRange a b
 
+-- | Stores log entries that haven't been
+-- stored in the actual log yet.
+class (Monad m) => TempLogM e m | m -> e where
+    -- | Add entry to the temporary entries.
+    addTemporaryEntry :: e -> m ()
+
+    -- | Removes and returns the temporary entries that haven't
+    -- been stored in the log yet.
+    temporaryEntries :: m [e]
+
+    default addTemporaryEntry :: (MonadTrans t, TempLogM e m', m ~ t m') => e -> m ()
+    addTemporaryEntry = lift . addTemporaryEntry
+
+    default temporaryEntries :: (MonadTrans t, TempLogM e m', m ~ t m') => m [e]
+    temporaryEntries = lift temporaryEntries
+
 instance (LogM e m) => LogM e (ReaderT r m)
 instance (LogM e m) => LogM e (StateT s m)
+instance (TempLogM e m) => TempLogM e (ReaderT r m)
+instance (TempLogM e m) => TempLogM e (StateT s m)

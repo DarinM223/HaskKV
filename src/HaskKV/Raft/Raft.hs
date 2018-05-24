@@ -15,6 +15,7 @@ run :: ( MonadIO m
        , MonadState RaftState m
        , ServerM (RaftMessage e) ServerEvent m
        , ApplyEntryM k v e m
+       , TempLogM e m
        , Entry e
        )
     => m ()

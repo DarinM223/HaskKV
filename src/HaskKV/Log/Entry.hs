@@ -45,6 +45,8 @@ data Checkpoint = Begin [TID] | End deriving (Show, Eq, Generic)
 instance (Binary k, Binary v) => Entry (LogEntry k v) where
     entryIndex = _index
     entryTerm = _term
+    setEntryIndex index e = e { _index = index }
+    setEntryTerm term e = e { _term = term }
 
 instance (Binary k, Binary v) => Binary (LogEntryData k v)
 instance Binary Transaction

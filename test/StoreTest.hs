@@ -8,6 +8,8 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import HaskKV.Store
+import HaskKV.Log
+import HaskKV.Log.Entry
 
 tests :: TestTree
 tests = testGroup "Store tests" [unitTests]
@@ -46,4 +48,29 @@ unitTests = testGroup "Unit tests"
         getValue 2 >>= liftIO . (@=? Nothing)
         getValue 3 >>= liftIO . (@=? Nothing)
         getValue 4 >>= liftIO . (@=? (Just expire6Sec))
+    , testCase "addTemporaryEntry adds entries to _tempEntries" $ flip runStoreT emptyStore $ do
+        let createEntry = \n -> do
+                v <- liftIO $ createStoreValue 10 0 n
+                return LogEntry
+                    { _term = 0
+                    , _index = 0
+                    , _data = Change (TID 0) 1 v
+                    , _completed = Completed Nothing
+                    }
+            unChange (Change _ _ v) = v
+            unChange _              = undefined
+
+        -- Tests order of entries.
+        mapM_ (addTemporaryEntry <=< createEntry) [1..3]
+        entries <- temporaryEntries
+        liftIO $ fmap (_value . unChange . _data) entries @?= [1, 2, 3]
+
+        -- Tests that entries are cleared after getting temporary entries.
+        entries <- temporaryEntries
+        liftIO $ length entries @?= 0
+
+        -- Tests entries bounded to maxTempEntries
+        mapM_ (addTemporaryEntry <=< createEntry) [1..maxTempEntries + 500]
+        entries <- temporaryEntries
+        liftIO $ length entries @?= maxTempEntries
     ]

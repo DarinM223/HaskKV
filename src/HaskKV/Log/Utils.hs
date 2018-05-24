@@ -59,9 +59,11 @@ applyTimeout :: Timer.Timeout
 applyTimeout = Timer.Timeout 5000000
 
 -- | Stores entry in the log and then blocks until log entry is committed.
-apply :: (MonadIO m, LogM e m, HasField "_completed" e Completed) => e -> m ()
+apply :: (MonadIO m, TempLogM e m, HasField "_completed" e Completed)
+      => e
+      -> m ()
 apply entry = do
-    storeEntries [entry]
+    addTemporaryEntry entry
 
     timer <- liftIO $ Timer.newIO
     Timer.reset timer applyTimeout

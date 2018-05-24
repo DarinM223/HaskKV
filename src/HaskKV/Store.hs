@@ -88,10 +88,14 @@ instance (Eq k) => Ord (HeapVal k) where
 
 -- | An in-memory storage implementation.
 data Store k v e = Store
-    { _map  :: M.Map k v
-    , _heap :: H.Heap (HeapVal k)
-    , _log  :: Log e
+    { _map         :: M.Map k v
+    , _heap        :: H.Heap (HeapVal k)
+    , _log         :: Log e
+    , _tempEntries :: [e]
     } deriving (Show)
+
+maxTempEntries :: Int
+maxTempEntries = 1000
 
 newtype StoreT k v e m a = StoreT
     { unStoreT :: ReaderT (TVar (Store k v e)) m a
@@ -120,10 +124,10 @@ instance
     cleanupExpired t = liftIO . modifyTVarIO (cleanupStore t) =<< ask
 
 instance (MonadIO m, Entry e) => LogM e (StoreT k v e m) where
-    firstIndex = return . _lowIdx . _log =<< liftIO . readTVarIO =<< ask
-    lastIndex = return . _highIdx . _log =<< liftIO . readTVarIO =<< ask
+    firstIndex = fmap (_lowIdx . _log) . liftIO . readTVarIO =<< ask
+    lastIndex = fmap (_highIdx . _log) . liftIO . readTVarIO =<< ask
     loadEntry k =
-        return . IM.lookup k . _entries . _log =<< liftIO . readTVarIO =<< ask
+        fmap (IM.lookup k . _entries . _log) . liftIO . readTVarIO =<< ask
     storeEntries es
         = liftIO
         . modifyTVarIO (\s -> s { _log = storeEntriesLog es (_log s) })
@@ -132,6 +136,20 @@ instance (MonadIO m, Entry e) => LogM e (StoreT k v e m) where
         = liftIO
         . modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
       =<< ask
+
+instance (MonadIO m) => TempLogM e (StoreT k v e m) where
+    addTemporaryEntry e = liftIO . modifyTVarIO (addEntry e) =<< ask
+      where
+        addEntry e s
+            | length (_tempEntries s) + 1 > maxTempEntries = s
+            | otherwise = s { _tempEntries = e:_tempEntries s }
+    temporaryEntries = do
+        var <- ask
+        liftIO $ atomically $ do
+            s <- readTVar var
+            let entries = reverse $ _tempEntries s
+            modifyTVar' var (\s -> s { _tempEntries = [] })
+            return entries
 
 instance
     ( MonadIO m
@@ -187,7 +205,11 @@ createStoreValue seconds version val = do
     diff = fromRational . toRational . secondsToDiffTime $ seconds
 
 emptyStore :: Store k v e
-emptyStore = Store { _map = M.empty, _heap = H.empty, _log = emptyLog }
+emptyStore = Store { _map = M.empty
+                   , _heap = H.empty
+                   , _log = emptyLog
+                   , _tempEntries = []
+                   }
 
 getStore :: (Ord k) => k -> Store k v e -> Maybe v
 getStore k s = _map s M.!? k
