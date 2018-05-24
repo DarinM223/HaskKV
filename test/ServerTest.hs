@@ -33,6 +33,7 @@ unitTests = testGroup "Unit tests"
     , testCase "Broadcasts message" testBroadcastMessage
     , testCase "Resets election timer" testResetElection
     , testCase "Resets heartbeat timer" testResetHearbeat
+    , testCase "Inject takes priority" testInject
     ]
   where
     testReceiveMessage :: IO ()
@@ -94,6 +95,20 @@ unitTests = testGroup "Unit tests"
             liftIO $ msg1 @?= Left S.ElectionTimeout
             msg2 <- S.recv
             liftIO $ msg2 @?= Left S.HeartbeatTimeout
+        return ()
+
+    testInject :: IO ()
+    testInject = do
+        state <- S.createServerState
+            backpressure
+            (T.Timeout 5000)
+            (T.Timeout 10000) :: IO (S.ServerState ByteString)
+        flip S.runServerT state $ do
+            S.inject S.HeartbeatTimeout
+            msg1 <- S.recv
+            liftIO $ msg1 @?= Left S.HeartbeatTimeout
+            msg2 <- S.recv
+            liftIO $ msg2 @?= Left S.ElectionTimeout
         return ()
 
 sourceMessages l s

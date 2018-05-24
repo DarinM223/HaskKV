@@ -2,7 +2,6 @@ module Main where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
-import GHC.Records
 import HaskKV
 import Servant.Server (serve)
 import System.Environment (getArgs)
@@ -51,17 +50,24 @@ handleArgs (path:sid:_) = do
 
     -- Run Raft server and handler.
     mapM_ (\p -> runServer p "*" settings serverState) raftPort
-    raftState <- newTVarIO $ getField @"_raftState" params
-    forkIO $ raftLoop params raftState
+    isLeader <- newTVarIO False
+    forkIO $ raftLoop params isLeader
 
     -- Run API server.
-    let context = RaftContext { _store = store, _raftState = raftState }
+    let context = RaftContext { _store       = store
+                              , _isLeader    = isLeader
+                              , _serverState = serverState
+                              }
     mapM_ (\p -> Warp.run p (serve api (server context))) apiPort
   where
-    raftLoop params raftState = do
+    raftLoop params isLeader = do
         (_, s') <- runRaftTParams run params
-        atomically $ writeTVar raftState s'
-        raftLoop (params { _raftState = s' } :: MyParams) raftState
+        case (_stateType $ _raftState params, _stateType s') of
+            (Leader _, Leader _) -> return ()
+            (Leader _, _)        -> atomically $ writeTVar isLeader False
+            (_, Leader _)        -> atomically $ writeTVar isLeader True
+            (_, _)               -> return ()
+        raftLoop params { _raftState = s' } isLeader
 handleArgs _ = do
     putStrLn "Invalid arguments passed"
     putStrLn "Arguments are:"

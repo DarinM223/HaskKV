@@ -28,18 +28,21 @@ class (Monad m) => ServerM msg e m | m -> msg e where
     broadcast :: msg -> m ()
     recv      :: m (Either e msg)
     reset     :: e -> m ()
+    inject    :: e -> m ()
     serverIds :: m [Int]
 
     default send :: (MonadTrans t, ServerM msg e m', m ~ t m') => Int -> msg -> m ()
     default broadcast :: (MonadTrans t, ServerM msg e m', m ~ t m') => msg -> m ()
     default recv :: (MonadTrans t, ServerM msg e m', m ~ t m') => m (Either e msg)
     default reset :: (MonadTrans t, ServerM msg e m', m ~ t m') => e -> m ()
+    default inject :: (MonadTrans t, ServerM msg e m', m ~ t m') => e -> m ()
     default serverIds :: (MonadTrans t, ServerM msg e m', m ~ t m') => m [Int]
 
     send i m = lift $ send i m
     broadcast = lift . broadcast
     recv = lift recv
     reset = lift . reset
+    inject = lift . inject
     serverIds = lift serverIds
 
 newtype Capacity = Capacity { unCapacity :: Int } deriving (Show, Eq)
@@ -161,6 +164,11 @@ instance (MonadIO m) => ServerM msg ServerEvent (ServerT msg m) where
             = fmap (const (Left HeartbeatTimeout))
             . Timer.await
             . _heartbeatTimer
+
+    inject HeartbeatTimeout = ask >>= \s ->
+        liftIO $ Timer.reset (_heartbeatTimer s) (Timer.Timeout 0)
+    inject ElectionTimeout = ask >>= \s ->
+        liftIO $ Timer.reset (_electionTimer s) (Timer.Timeout 0)
 
     reset HeartbeatTimeout = ask >>= \s ->
         liftIO $ Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
