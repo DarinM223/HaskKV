@@ -25,11 +25,14 @@ type Time = UTCTime
 type CAS  = Int
 
 class Storable v where
-    expireTime :: v -> Time
+    expireTime :: v -> Maybe Time
     version    :: v -> CAS
     setVersion :: CAS -> v -> v
 
-class (Monad s, Show k, Ord k, Storable v) => StorageM k v s | s -> k v where
+type KeyClass k = (Show k, Ord k, Binary k)
+type ValueClass v = (Show v, Storable v, Binary v)
+
+class (Monad s, KeyClass k, ValueClass v) => StorageM k v s | s -> k v where
     -- | Gets a value from the store given a key.
     getValue :: k -> s (Maybe v)
 
@@ -68,7 +71,7 @@ class (StorageM k v m, LogM e m) => ApplyEntryM k v e m | m -> k v e where
     applyEntry = lift . applyEntry
 
 data StoreValue v = StoreValue
-    { _expireTime :: Time
+    { _expireTime :: Maybe Time
     , _version    :: CAS
     , _value      :: v
     } deriving (Show, Eq, Generic)
@@ -112,9 +115,8 @@ runStoreTVar (StoreT (ReaderT f)) = f
 
 instance
     ( MonadIO m
-    , Ord k
-    , Show k
-    , Storable v
+    , KeyClass k
+    , ValueClass v
     ) => StorageM k v (StoreT k v e m) where
 
     getValue k = return . getStore k =<< liftIO . readTVarIO =<< ask
@@ -153,22 +155,8 @@ instance (MonadIO m) => TempLogM e (StoreT k v e m) where
 
 instance
     ( MonadIO m
-    , Ord k
-    , Show k
-    , Storable v
-    , Entry e
-    ) => ApplyEntryM k v e (StoreT k v e m) where
-
-    applyEntry _ = liftIO $ putStrLn "Default ApplyEntryM instance"
-
-instance
-    {-# OVERLAPPING #-}
-    ( MonadIO m
-    , Binary k
-    , Ord k
-    , Show k
-    , Binary v
-    , Storable v
+    , KeyClass k
+    , ValueClass v
     ) => ApplyEntryM k v (LogEntry k v) (StoreT k v (LogEntry k v) m) where
 
     applyEntry LogEntry{ _data = entry, _completed = Completed lock } = do
@@ -200,7 +188,7 @@ createStoreValue seconds version val = do
     currTime <- getCurrentTime
     let newTime = addUTCTime diff currTime
     return $ StoreValue
-        { _version = version, _expireTime = newTime, _value = val }
+        { _version = version, _expireTime = Just newTime, _value = val }
   where
     diff = fromRational . toRational . secondsToDiffTime $ seconds
 
@@ -217,13 +205,15 @@ getStore k s = _map s M.!? k
 setStore :: (Ord k, Storable v) => k -> v -> Store k v e -> Store k v e
 setStore k v s = s
     { _map  = M.insert k v' $ _map s
-    , _heap = H.insert (HeapVal (time, k)) $ _heap s
+    , _heap = heap'
     }
   where
     maybeV = _map s M.!? k
     maybeCas' = (+ 1) . version <$> maybeV
     v' = fromMaybe v (setVersion <$> maybeCas' <*> pure v)
-    time = expireTime v'
+    heap' = case expireTime v' of
+        Just time -> H.insert (HeapVal (time, k)) $ _heap s
+        _         -> _heap s
 
 replaceStore :: (Ord k, Storable v)
              => k
@@ -253,7 +243,7 @@ cleanupStore curr s = case minHeapMaybe (_heap s) of
         in
             -- Only delete key from store if it hasn't been
             -- replaced/removed after it was set.
-            if maybe False ((== 0) . diff t . expireTime) v
+            if maybe False ((== 0) . diff t) (v >>= expireTime)
                 then
                       cleanupStore curr
                     . deleteStore k

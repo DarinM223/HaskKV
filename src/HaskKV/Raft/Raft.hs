@@ -9,6 +9,7 @@ import HaskKV.Raft.Candidate (runCandidate)
 import HaskKV.Raft.Follower (runFollower)
 import HaskKV.Raft.Leader (runLeader)
 import HaskKV.Raft.Message
+import HaskKV.Raft.Utils
 import HaskKV.Raft.State
 
 run :: ( MonadIO m
@@ -25,6 +26,7 @@ run = do
     when (commitIndex' > lastApplied') $ do
         lastApplied %= (+ 1)
         entry <- loadEntry (lastApplied' + 1)
+        debug $ "Applying entry: " ++ show entry
         mapM_ applyEntry entry
 
     use stateType >>= \case

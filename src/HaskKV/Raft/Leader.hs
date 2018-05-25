@@ -76,7 +76,8 @@ quorumIndex = do
     let sorted = sortBy (flip compare) matchIndexes
     return $ sorted !! (quorumSize' - 1)
 
-storeTemporaryEntries :: ( MonadState RaftState m
+storeTemporaryEntries :: ( MonadIO m
+                         , MonadState RaftState m
                          , LogM e m
                          , TempLogM e m
                          , Entry e
@@ -88,6 +89,7 @@ storeTemporaryEntries = do
     let lastEntryIndex = maybe 0 entryIndex lastEntry
 
     entries <- setIndexAndTerms (lastEntryIndex + 1) term <$> temporaryEntries
+    debug $ "Storing temporary entries: " ++ show entries
     storeEntries entries
   where
     setIndexAndTerms _ _ [] = []

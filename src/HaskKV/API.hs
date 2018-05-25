@@ -29,7 +29,7 @@ data RaftContext k v msg = RaftContext
 api :: Proxy (StoreAPI k v)
 api = Proxy
 
-get :: (Show k, Ord k, Storable v) => RaftContext k v msg -> k -> Handler (Maybe v)
+get :: (KeyClass k, ValueClass v) => RaftContext k v msg -> k -> Handler (Maybe v)
 get context key =
     checkLeader context $ runStoreTVar (getValue key) (_store context)
 
@@ -45,7 +45,7 @@ delete context key =
   where
     entryData = Delete (TID 0) key
 
-server :: (Show k, Ord k, Storable v)
+server :: (KeyClass k, ValueClass v)
        => RaftContext k v msg
        -> Server (StoreAPI k v)
 server context = get context :<|> set context :<|> delete context

@@ -70,25 +70,27 @@ handleAppendEntries ae s
         leader .= Just (_leaderId ae)
         prevLogEntry <- loadEntry $ _prevLogIdx ae
         lastLogEntry <- lastIndex >>= loadEntry
+        let prevLogTerm  = maybe 0 entryTerm prevLogEntry
+            lastLogIndex = maybe 0 entryIndex lastLogEntry
         reset ElectionTimeout
-        case (prevLogEntry, lastLogEntry) of
-            (Just entry, Just lastEntry) | entryTerm entry == _prevLogTerm ae -> do
-                newEntries <- diffEntriesWithLog (entryIndex lastEntry)
+        if prevLogTerm == _prevLogTerm ae
+            then do
+                newEntries <- diffEntriesWithLog lastLogIndex
                             . getField @"_entries"
                             $ ae
                 storeEntries newEntries
 
                 let lastEntryIndex = if (null newEntries)
-                        then entryIndex lastEntry
+                        then lastLogIndex
                         else entryIndex $ last newEntries
-                when (lastEntryIndex /= entryIndex lastEntry) $
+                when (lastEntryIndex /= lastLogIndex) $
                     debug $ "Storing entries to index " ++ show lastEntryIndex
                 commitIndex' <- use commitIndex
                 when (_commitIdx ae > commitIndex') $
                     commitIndex .= (min lastEntryIndex $ _commitIdx ae)
 
                 send (_leaderId ae) $ successResponse lastEntryIndex s
-            _ -> send (_leaderId ae) $ failResponse s
+            else send (_leaderId ae) $ failResponse s
   where
     successResponse lastIndex s = Response (_serverID s)
                                 $ AppendResponse (_currTerm s) True lastIndex

@@ -6,7 +6,7 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Binary
 
-class (Binary l) => Entry l where
+class (Binary l, Show l) => Entry l where
     entryIndex    :: l -> Int
     entryTerm     :: l -> Int
     setEntryIndex :: Int -> l -> l

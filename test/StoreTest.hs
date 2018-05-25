@@ -16,14 +16,14 @@ tests = testGroup "Store tests" [unitTests]
 
 unitTests :: TestTree
 unitTests = testGroup "Unit tests"
-    [ testCase "Gets and sets value" $ flip runStoreT emptyStore $ do
+    [ testCase "Gets and sets value" $ flip runStoreT emptyStore' $ do
         v <- getValue 2
         liftIO $ v @?= Nothing
         v' <- liftIO $ createStoreValue 2 1 "value"
         setValue 2 v'
         v'' <- getValue 2
         liftIO $ v'' @?= Just v'
-    , testCase "replaceStore only replaces if CAS values match" $ flip runStoreT emptyStore $ do
+    , testCase "replaceStore only replaces if CAS values match" $ flip runStoreT emptyStore' $ do
         v <- liftIO $ createStoreValue 2 1 "value"
         diffCAS <- liftIO $ createStoreValue 2 2 "don't set me"
         sameCAS <- liftIO $ createStoreValue 2 1 "changed"
@@ -35,7 +35,7 @@ unitTests = testGroup "Unit tests"
         liftIO $ result' @?= Just 2
         let expectedCAS = sameCAS { _version = 2 }
         getValue 2 >>= liftIO . (@=? (Just expectedCAS))
-    , testCase "cleanupExpired removes expired values" $ flip runStoreT emptyStore $ do
+    , testCase "cleanupExpired removes expired values" $ flip runStoreT emptyStore' $ do
         expire1Sec <- liftIO $ createStoreValue 1 1 "value1"
         expire2Sec <- liftIO $ createStoreValue 2 1 "value2"
         expire2Sec' <- liftIO $ createStoreValue 2 1 "value3"
@@ -74,3 +74,5 @@ unitTests = testGroup "Unit tests"
         entries <- temporaryEntries
         liftIO $ length entries @?= maxTempEntries
     ]
+  where
+    emptyStore' = emptyStore :: Store Int (StoreValue String) (LogEntry Int (StoreValue String))
