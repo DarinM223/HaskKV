@@ -28,15 +28,15 @@ transitionToLeader :: ( LogM e m
                    -> m ()
 transitionToLeader msg = do
     reset HeartbeatTimeout
-    lastEntry <- lastIndex >>= loadEntry
-    serverID' <- use serverID
 
+    lastEntry <- lastIndex >>= loadEntry
     let lastEntryIndex = maybe 0 entryIndex lastEntry
         lastEntryTerm  = maybe 0 entryTerm lastEntry
 
+    sid <- use serverID
     broadcast $ AppendEntries
         { _term        = getField @"_term" msg
-        , _leaderId    = serverID'
+        , _leaderId    = sid
         , _prevLogIdx  = lastEntryIndex
         , _prevLogTerm = lastEntryTerm
         , _entries     = []
@@ -71,12 +71,13 @@ startElection = do
     votedFor .= Just sid
 
     lastEntry <- lastIndex >>= loadEntry
-    currTerm' <- use currTerm
     let lastEntryIndex = maybe 0 entryIndex lastEntry
         lastEntryTerm  = maybe 0 entryTerm lastEntry
+
+    term <- use currTerm
     broadcast RequestVote
         { _candidateID = sid
-        , _term        = currTerm'
+        , _term        = term
         , _lastLogIdx  = lastEntryIndex
         , _lastLogTerm = lastEntryTerm
         }
@@ -84,11 +85,10 @@ startElection = do
 debug :: (MonadIO m, MonadState RaftState m) => String -> m ()
 debug text = do
     sid <- use serverID
-    stateType' <- use stateType
-    let stateText = case stateType' of
-            Follower    -> "Follower"
-            Candidate _ -> "Candidate"
-            Leader _    -> "Leader"
+    stateText <- use stateType >>= pure . \case
+        Follower    -> "Follower"
+        Candidate _ -> "Candidate"
+        Leader _    -> "Leader"
     let serverName = "Server " ++ show sid ++ " [" ++ stateText ++ "]:"
     liftIO $ debugM (show sid) (serverName ++ text)
 

@@ -60,6 +60,8 @@ handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
         -- a majority of matchIndex[i] >= N, and
         -- log[N].term = currentTerm, set commitIndex = N.
         n <- quorumIndex
+        debug $ "N: " ++ show n
+        debug $ "Commit Index: " ++ show (_commitIndex s)
         when (n > _commitIndex s) $ do
             debug $ "Updating commit index to " ++ show n
             commitIndex .= n
@@ -72,8 +74,8 @@ quorumIndex :: ( MonadState RaftState m
             => m Int
 quorumIndex = do
     matchIndexes <- maybe [] IM.elems <$> preuse (stateType._Leader.matchIndex)
-    quorumSize' <- quorumSize
     let sorted = sortBy (flip compare) matchIndexes
+    quorumSize' <- quorumSize
     return $ sorted !! (quorumSize' - 1)
 
 storeTemporaryEntries :: ( MonadIO m
@@ -85,10 +87,9 @@ storeTemporaryEntries :: ( MonadIO m
                       => m ()
 storeTemporaryEntries = do
     term <- use currTerm
-    lastEntry <- lastIndex >>= loadEntry
-    let lastEntryIndex = maybe 0 entryIndex lastEntry
+    lastIndex' <- lastIndex
 
-    entries <- setIndexAndTerms (lastEntryIndex + 1) term <$> temporaryEntries
+    entries <- setIndexAndTerms (lastIndex' + 1) term <$> temporaryEntries
     debug $ "Storing temporary entries: " ++ show entries
     storeEntries entries
   where
@@ -107,27 +108,25 @@ sendAppendEntries :: ( MonadState RaftState m
                   -> Int
                   -> Int
                   -> m ()
-sendAppendEntries entry commitIndex' id = do
-    currTerm' <- use currTerm
-    nextIndexes <- preuse (stateType._Leader.nextIndex)
-
+sendAppendEntries entry commitIndex id = do
     let lastIndex = maybe 0 entryIndex entry
         lastTerm  = maybe 0 entryTerm entry
-        nextIndex = IM.lookup id =<< nextIndexes
 
-    entries <- case nextIndex of
-        Just ni -> fromMaybe [] <$> entryRange ni lastIndex
-        Nothing -> return []
+    nextIndexes <- preuse (stateType._Leader.nextIndex)
+    entries <- case nextIndexes >>= IM.lookup id of
+        Just nextIndex -> fromMaybe [] <$> entryRange nextIndex lastIndex
+        Nothing        -> return []
 
-    serverID' <- use serverID
+    term <- use currTerm
+    sid <- use serverID
     if null entries
         then send id AppendEntries
-            { _term        = currTerm'
-            , _leaderId    = serverID'
+            { _term        = term
+            , _leaderId    = sid
             , _prevLogIdx  = lastIndex
             , _prevLogTerm = lastTerm
             , _entries     = []
-            , _commitIdx   = commitIndex'
+            , _commitIdx   = commitIndex
             }
         else do
             let firstSendingIdx = entryIndex $ head entries
@@ -135,10 +134,10 @@ sendAppendEntries entry commitIndex' id = do
             let prevLogIdx  = maybe 0 entryIndex prevEntry
                 prevLogTerm = maybe 0 entryTerm prevEntry
             send id AppendEntries
-                { _term        = currTerm'
-                , _leaderId    = serverID'
+                { _term        = term
+                , _leaderId    = sid
                 , _prevLogIdx  = prevLogIdx
                 , _prevLogTerm = prevLogTerm
                 , _entries     = entries
-                , _commitIdx   = commitIndex'
+                , _commitIdx   = commitIndex
                 }

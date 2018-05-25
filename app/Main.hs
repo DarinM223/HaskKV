@@ -37,7 +37,7 @@ handleArgs (path:sid:_) = do
             , _serverData       = []
             }
     config <- readConfig initConfig path
-    serverState <- configToServerState sid' config
+    serverState <- configToServerState config
     store <- newTVarIO emptyStore
     let params = Params
             { _store       = store
@@ -46,7 +46,7 @@ handleArgs (path:sid:_) = do
             } :: MyParams
         raftPort = configRaftPort sid' config
         apiPort  = configAPIPort sid' config
-        settings = configToSettings sid' config
+        settings = configToSettings config
 
     -- Run Raft server and handler.
     mapM_ (\p -> runServer p "*" settings serverState) raftPort

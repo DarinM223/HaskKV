@@ -54,10 +54,8 @@ configRaftPort sid = fmap _raftPort . find ((== sid) . _id) . _serverData
 configAPIPort :: Int -> Config -> Maybe Int
 configAPIPort sid = fmap _apiPort . find ((== sid) . _id) . _serverData
 
-configToSettings :: Int -> Config -> IM.IntMap ClientSettings
-configToSettings sid = foldl' insert IM.empty
-                     . filter ((/= sid) . _id)
-                     . _serverData
+configToSettings :: Config -> IM.IntMap ClientSettings
+configToSettings = foldl' insert IM.empty . _serverData
   where
     insert settings ServerData{ _id       = sid
                               , _raftPort = port
@@ -65,14 +63,13 @@ configToSettings sid = foldl' insert IM.empty
                               } =
         IM.insert sid (clientSettings port $ C.pack host) settings
 
-configToServerState :: Int -> Config -> IO (ServerState msg)
-configToServerState sid config@Config{ _backpressure     = backpressure
-                                     , _electionTimeout  = eTimeout
-                                     , _heartbeatTimeout = hTimeout
-                                     } = do
+configToServerState :: Config -> IO (ServerState msg)
+configToServerState config@Config{ _backpressure     = backpressure
+                                 , _electionTimeout  = eTimeout
+                                 , _heartbeatTimeout = hTimeout
+                                 } = do
     initServerState <- createServerState backpressure eTimeout hTimeout
     outgoing' <- foldM (insert backpressure) (_outgoing initServerState)
-               . filter ((/= sid) . _id)
                . _serverData
                $ config
     return initServerState { _outgoing = outgoing' }
