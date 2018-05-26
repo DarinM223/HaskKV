@@ -54,6 +54,7 @@ default-extensions:
 - DeriveGeneric
 - DeriveLift
 - DeriveTraversable
+- DerivingStrategies
 - DuplicateRecordFields
 - EmptyCase
 - ExistentialQuantification

@@ -40,6 +40,9 @@ class (Monad m) => LogM e m | m -> e where
     storeEntries = lift . storeEntries
     deleteRange a b = lift $ deleteRange a b
 
+instance (LogM e m) => LogM e (ReaderT r m)
+instance (LogM e m) => LogM e (StateT s m)
+
 -- | Stores log entries that haven't been
 -- stored in the actual log yet.
 class (Monad m) => TempLogM e m | m -> e where
@@ -56,7 +59,5 @@ class (Monad m) => TempLogM e m | m -> e where
     default temporaryEntries :: (MonadTrans t, TempLogM e m', m ~ t m') => m [e]
     temporaryEntries = lift temporaryEntries
 
-instance (LogM e m) => LogM e (ReaderT r m)
-instance (LogM e m) => LogM e (StateT s m)
 instance (TempLogM e m) => TempLogM e (ReaderT r m)
 instance (TempLogM e m) => TempLogM e (StateT s m)

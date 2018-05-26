@@ -129,6 +129,7 @@ newtype ServerT msg m a = ServerT { unServerT :: ReaderT (ServerState msg) m a }
     deriving
         ( Functor, Applicative, Monad, MonadIO, MonadTrans
         , MonadReader (ServerState msg)
+        , StorageM k v, ApplyEntryM k v e, LogM e, TempLogM e
         )
 
 runServerT :: ServerT msg m a -> ServerState msg -> m a
@@ -179,9 +180,5 @@ instance (MonadIO m) => ServerM msg ServerEvent (ServerT msg m) where
 
     serverIds = IM.keys . _outgoing <$> ask
 
-instance (StorageM k v m) => StorageM k v (ServerT msg m)
-instance (ApplyEntryM k v e m) => ApplyEntryM k v e (ServerT msg m)
-instance (LogM e m) => LogM e (ServerT msg m)
-instance (TempLogM e m) => TempLogM e (ServerT msg m)
 instance (ServerM msg e m) => ServerM msg e (ReaderT r m)
 instance (ServerM msg e m) => ServerM msg e (StateT s m)

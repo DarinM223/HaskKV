@@ -125,6 +125,9 @@ instance
     deleteValue k = liftIO . modifyTVarIO (deleteStore k) =<< ask
     cleanupExpired t = liftIO . modifyTVarIO (cleanupStore t) =<< ask
 
+instance (StorageM k v m) => StorageM k v (ReaderT r m)
+instance (StorageM k v m) => StorageM k v (StateT s m)
+
 instance (MonadIO m, Entry e) => LogM e (StoreT k v e m) where
     firstIndex = fmap (_lowIdx . _log) . liftIO . readTVarIO =<< ask
     lastIndex = fmap (_highIdx . _log) . liftIO . readTVarIO =<< ask
@@ -167,8 +170,6 @@ instance
         applyStore (Delete _ k)   = deleteValue k
         applyStore _              = return ()
 
-instance (StorageM k v m) => StorageM k v (ReaderT r m)
-instance (StorageM k v m) => StorageM k v (StateT s m)
 instance (ApplyEntryM k v e m) => ApplyEntryM k v e (ReaderT r m)
 instance (ApplyEntryM k v e m) => ApplyEntryM k v e (StateT s m)
 
