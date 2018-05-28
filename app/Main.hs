@@ -15,10 +15,11 @@ import qualified Network.Wai.Handler.Warp as Warp
 main :: IO ()
 main = getArgs >>= handleArgs
 
-type MyKey    = Int
-type MyValue  = StoreValue Int
-type MyEntry  = LogEntry MyKey MyValue
-type MyParams = Params RaftState RaftMessage MyKey MyValue MyEntry
+type MyKey     = Int
+type MyValue   = StoreValue Int
+type MyEntry   = LogEntry MyKey MyValue
+type MyMessage = RaftMessage MyEntry
+type MyConfig  = AppConfig MyMessage MyKey MyValue MyEntry
 
 handleArgs :: [String] -> IO ()
 handleArgs (path:sid:_) = do
@@ -37,37 +38,34 @@ handleArgs (path:sid:_) = do
             , _serverData       = []
             }
     config <- readConfig initConfig path
+    isLeader <- newTVarIO False
     serverState <- configToServerState config
     store <- newTVarIO emptyStore
-    let params = Params
+    let raftState = createRaftState sid'
+        appConfig = AppConfig
             { _store       = store
             , _serverState = serverState
-            , _raftState   = createRaftState sid'
-            } :: MyParams
+            , _isLeader    = isLeader
+            } :: MyConfig
         raftPort = configRaftPort sid' config
         apiPort  = configAPIPort sid' config
         settings = configToSettings config
 
     -- Run Raft server and handler.
     mapM_ (\p -> runServer p "*" settings serverState) raftPort
-    isLeader <- newTVarIO False
-    forkIO $ raftLoop params isLeader
+    forkIO $ raftLoop appConfig raftState isLeader
 
     -- Run API server.
-    let context = RaftContext { _store       = store
-                              , _isLeader    = isLeader
-                              , _serverState = serverState
-                              }
-    mapM_ (\p -> Warp.run p (serve api (server context))) apiPort
+    mapM_ (\p -> Warp.run p (serve api (server appConfig))) apiPort
   where
-    raftLoop params isLeader = do
-        (_, s') <- runRaftTParams run params
-        case (_stateType $ _raftState params, _stateType s') of
+    raftLoop appConfig raftState isLeader = do
+        (_, s') <- runAppT run appConfig raftState
+        case (_stateType raftState, _stateType s') of
             (Leader _, Leader _) -> return ()
             (Leader _, _)        -> atomically $ writeTVar isLeader False
             (_, Leader _)        -> atomically $ writeTVar isLeader True
             (_, _)               -> return ()
-        raftLoop params { _raftState = s' } isLeader
+        raftLoop appConfig s' isLeader
 handleArgs _ = do
     putStrLn "Invalid arguments passed"
     putStrLn "Arguments are:"

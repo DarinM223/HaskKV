@@ -6,13 +6,10 @@ import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad.Reader
-import Control.Monad.State.Strict
 import Data.Binary
 import Data.Conduit
 import Data.Conduit.Network
 import Data.Streaming.Network.Internal
-import HaskKV.Log (LogM, TempLogM)
-import HaskKV.Store (ApplyEntryM, StorageM)
 import HaskKV.Utils
 import System.Log.Logger
 
@@ -30,20 +27,6 @@ class (Monad m) => ServerM msg e m | m -> msg e where
     reset     :: e -> m ()
     inject    :: e -> m ()
     serverIds :: m [Int]
-
-    default send :: (MonadTrans t, ServerM msg e m', m ~ t m') => Int -> msg -> m ()
-    default broadcast :: (MonadTrans t, ServerM msg e m', m ~ t m') => msg -> m ()
-    default recv :: (MonadTrans t, ServerM msg e m', m ~ t m') => m (Either e msg)
-    default reset :: (MonadTrans t, ServerM msg e m', m ~ t m') => e -> m ()
-    default inject :: (MonadTrans t, ServerM msg e m', m ~ t m') => e -> m ()
-    default serverIds :: (MonadTrans t, ServerM msg e m', m ~ t m') => m [Int]
-
-    send i m = lift $ send i m
-    broadcast = lift . broadcast
-    recv = lift recv
-    reset = lift . reset
-    inject = lift . inject
-    serverIds = lift serverIds
 
 newtype Capacity = Capacity { unCapacity :: Int } deriving (Show, Eq)
 
@@ -125,60 +108,43 @@ data ServerEvent = ElectionTimeout
                  | HeartbeatTimeout
                  deriving (Show, Eq)
 
-newtype ServerT msg m a = ServerT { unServerT :: ReaderT (ServerState msg) m a }
-    deriving
-        ( Functor, Applicative, Monad, MonadIO, MonadTrans
-        , MonadReader (ServerState msg)
-        , StorageM k v, ApplyEntryM k v e, LogM e, TempLogM e
-        )
+-- ServerM instance implementations
 
-runServerT :: ServerT msg m a -> ServerState msg -> m a
-runServerT m s = runReaderT (unServerT m) s
+sendImpl i msg s = do
+    let rq = IM.lookup i . _outgoing $ s
+    mapM_ (liftIO . atomically . flip RQ.write msg) rq
 
-instance (MonadIO m) => ServerM msg ServerEvent (ServerT msg m) where
-    send i msg = do
-        s <- ask
-        let rq = IM.lookup i . _outgoing $ s
-        mapM_ (liftIO . atomically . flip RQ.write msg) rq
+broadcastImpl msg
+    = liftIO
+    . atomically
+    . mapM_ (`RQ.write` msg)
+    . IM.elems
+    . _outgoing
 
-    broadcast msg
-        = liftIO
-        . atomically
-        . mapM_ (flip RQ.write msg)
-        . IM.elems
-        . _outgoing
-      =<< ask
+recvImpl s =
+    liftIO . atomically $
+        awaitElectionTimeout s
+        `orElse` awaitHeartbeatTimeout s
+        `orElse` (Right . fst <$> RQ.read (_messages s))
+  where
+    awaitElectionTimeout
+        = fmap (const (Left ElectionTimeout))
+        . Timer.await
+        . _electionTimer
+    awaitHeartbeatTimeout
+        = fmap (const (Left HeartbeatTimeout))
+        . Timer.await
+        . _heartbeatTimer
 
-    recv = do
-        s <- ask
-        msg <- liftIO . atomically $
-            awaitElectionTimeout s
-            `orElse` awaitHeartbeatTimeout s
-            `orElse` (Right . fst <$> RQ.read (_messages s))
-        return msg
-      where
-        awaitElectionTimeout
-            = fmap (const (Left ElectionTimeout))
-            . Timer.await
-            . _electionTimer
-        awaitHeartbeatTimeout
-            = fmap (const (Left HeartbeatTimeout))
-            . Timer.await
-            . _heartbeatTimer
+injectImpl HeartbeatTimeout s =
+    liftIO $ Timer.reset (_heartbeatTimer s) (Timer.Timeout 0)
+injectImpl ElectionTimeout s =
+    liftIO $ Timer.reset (_electionTimer s) (Timer.Timeout 0)
 
-    inject HeartbeatTimeout = ask >>= \s ->
-        liftIO $ Timer.reset (_heartbeatTimer s) (Timer.Timeout 0)
-    inject ElectionTimeout = ask >>= \s ->
-        liftIO $ Timer.reset (_electionTimer s) (Timer.Timeout 0)
+resetImpl HeartbeatTimeout s =
+    liftIO $ Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
+resetImpl ElectionTimeout s = do
+    timeout <- liftIO $ Timer.randTimeout $ _electionTimeout s
+    liftIO $ Timer.reset (_electionTimer s) timeout
 
-    reset HeartbeatTimeout = ask >>= \s ->
-        liftIO $ Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
-    reset ElectionTimeout = do
-        s <- ask
-        timeout <- liftIO $ Timer.randTimeout $ _electionTimeout s
-        liftIO $ Timer.reset (_electionTimer s) timeout
-
-    serverIds = IM.keys . _outgoing <$> ask
-
-instance (ServerM msg e m) => ServerM msg e (ReaderT r m)
-instance (ServerM msg e m) => ServerM msg e (StateT s m)
+serverIdsImpl = IM.keys . _outgoing
