@@ -5,15 +5,29 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict
 import HaskKV.Log
 import HaskKV.Log.Entry
+import HaskKV.Log.Temp
 import HaskKV.Raft.State
 import HaskKV.Server
 import HaskKV.Store
 
 data AppConfig msg k v e = AppConfig
     { _store       :: TVar (Store k v e)
+    , _tempLog     :: TempLog e
     , _serverState :: ServerState msg
     , _isLeader    :: TVar Bool
     }
+
+createAppConfig :: ServerState msg -> IO (AppConfig msg k v e)
+createAppConfig serverState = do
+    isLeader <- newTVarIO False
+    store <- newTVarIO emptyStore
+    tempLog <- createTempLog
+    return AppConfig
+        { _store       = store
+        , _tempLog     = tempLog
+        , _serverState = serverState
+        , _isLeader    = isLeader
+        }
 
 newtype AppT msg k v e a = AppT
     { unAppT :: StateT RaftState (ReaderT (AppConfig msg k v e) IO) a }
@@ -22,11 +36,16 @@ newtype AppT msg k v e a = AppT
              , MonadReader (AppConfig msg k v e)
              )
 
+runAppT :: AppT msg k v e a
+        -> AppConfig msg k v e
+        -> RaftState
+        -> IO (a, RaftState)
 runAppT m config raftState = flip runReaderT config
                            . flip runStateT raftState
                            . unAppT
                            $ m
 
+runAppTConfig :: AppT msg k v e a -> AppConfig msg k v e -> IO a
 runAppTConfig m config = flip runReaderT config
                        . fmap fst
                        . flip runStateT emptyState
@@ -58,8 +77,8 @@ instance (Entry e) => LogM e (AppT msg k v e) where
     deleteRange a b = asks _store >>= deleteRangeImpl a b
 
 instance TempLogM e (AppT msg k v e) where
-    addTemporaryEntry e = asks _store >>= addTemporaryEntryImpl e
-    temporaryEntries = asks _store >>= temporaryEntriesImpl
+    addTemporaryEntry e = asks _tempLog >>= addTemporaryEntryImpl e
+    temporaryEntries = asks _tempLog >>= temporaryEntriesImpl
 
 instance (KeyClass k, ValueClass v) =>
     ApplyEntryM k v (LogEntry k v) (AppT msg k v (LogEntry k v)) where

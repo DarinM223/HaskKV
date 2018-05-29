@@ -110,10 +110,12 @@ data ServerEvent = ElectionTimeout
 
 -- ServerM instance implementations
 
+sendImpl :: (MonadIO m) => Int -> msg -> ServerState msg -> m ()
 sendImpl i msg s = do
     let rq = IM.lookup i . _outgoing $ s
     mapM_ (liftIO . atomically . flip RQ.write msg) rq
 
+broadcastImpl :: (MonadIO m) => msg -> ServerState msg -> m ()
 broadcastImpl msg
     = liftIO
     . atomically
@@ -121,6 +123,7 @@ broadcastImpl msg
     . IM.elems
     . _outgoing
 
+recvImpl :: (MonadIO m) => ServerState msg -> m (Either ServerEvent msg)
 recvImpl s =
     liftIO . atomically $
         awaitElectionTimeout s
@@ -136,15 +139,18 @@ recvImpl s =
         . Timer.await
         . _heartbeatTimer
 
+injectImpl :: (MonadIO m) => ServerEvent -> ServerState msg -> m ()
 injectImpl HeartbeatTimeout s =
     liftIO $ Timer.reset (_heartbeatTimer s) (Timer.Timeout 0)
 injectImpl ElectionTimeout s =
     liftIO $ Timer.reset (_electionTimer s) (Timer.Timeout 0)
 
+resetImpl :: (MonadIO m) => ServerEvent -> ServerState msg -> m ()
 resetImpl HeartbeatTimeout s =
     liftIO $ Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
 resetImpl ElectionTimeout s = do
     timeout <- liftIO $ Timer.randTimeout $ _electionTimeout s
     liftIO $ Timer.reset (_electionTimer s) timeout
 
+serverIdsImpl :: ServerState msg -> [Int]
 serverIdsImpl = IM.keys . _outgoing

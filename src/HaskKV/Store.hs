@@ -81,13 +81,30 @@ data Store k v e = Store
     , _tempEntries :: [e]
     } deriving (Show)
 
-maxTempEntries :: Int
-maxTempEntries = 1000
-
+getValueImpl :: (Ord k, MonadIO m) => k -> TVar (Store k v e) -> m (Maybe v)
 getValueImpl k = fmap (getStore k) . liftIO . readTVarIO
+
+setValueImpl :: (Ord k, Storable v, MonadIO m)
+             => k
+             -> v
+             -> TVar (Store k v e)
+             -> m ()
 setValueImpl k v = liftIO . modifyTVarIO (setStore k v)
+
+replaceValueImpl :: (Ord k, Storable v, MonadIO m)
+                 => k
+                 -> v
+                 -> TVar (Store k v e)
+                 -> m (Maybe CAS)
 replaceValueImpl k v = liftIO . stateTVarIO (replaceStore k v)
+
+deleteValueImpl :: (Ord k, MonadIO m) => k -> TVar (Store k v e) -> m ()
 deleteValueImpl k = liftIO . modifyTVarIO (deleteStore k)
+
+cleanupExpiredImpl :: (Show k, Ord k, Storable v, MonadIO m)
+                   => Time
+                   -> TVar (Store k v e)
+                   -> m ()
 cleanupExpiredImpl t = liftIO . modifyTVarIO (cleanupStore t)
 
 firstIndexImpl :: (MonadIO m) => TVar (Store k v e) -> m Int
@@ -95,28 +112,22 @@ firstIndexImpl = fmap (_lowIdx . _log) . liftIO . readTVarIO
 
 lastIndexImpl :: (MonadIO m) => TVar (Store k v e) -> m Int
 lastIndexImpl = fmap (_highIdx . _log) . liftIO . readTVarIO
+
+loadEntryImpl :: (MonadIO m) => Int -> TVar (Store k v e) -> m (Maybe e)
 loadEntryImpl k =
     fmap (IM.lookup k . _entries . _log) . liftIO . readTVarIO
+
 storeEntriesImpl :: (MonadIO m, Entry e) => [e] -> TVar (Store k v e) -> m ()
 storeEntriesImpl es
     = liftIO
     . modifyTVarIO (\s -> s { _log = storeEntriesLog es (_log s) })
+
+deleteRangeImpl :: (MonadIO m) => Int -> Int -> TVar (Store k v e) -> m ()
 deleteRangeImpl a b
     = liftIO
     . modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
 
-addTemporaryEntryImpl e = liftIO . modifyTVarIO (addEntry e)
-  where
-    addEntry e s
-        | length (_tempEntries s) + 1 > maxTempEntries = s
-        | otherwise = s { _tempEntries = e:_tempEntries s }
-temporaryEntriesImpl var =
-    liftIO $ atomically $ do
-        s <- readTVar var
-        let entries = reverse $ _tempEntries s
-        modifyTVar' var (\s -> s { _tempEntries = [] })
-        return entries
-
+applyEntryImpl :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
 applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do
     mapM_ (liftIO . atomically . flip putTMVar ()) lock
     applyStore entry

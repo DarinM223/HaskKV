@@ -38,34 +38,30 @@ handleArgs (path:sid:_) = do
             , _serverData       = []
             }
     config <- readConfig initConfig path
-    isLeader <- newTVarIO False
     serverState <- configToServerState config
-    store <- newTVarIO emptyStore
+    appConfig <- createAppConfig serverState :: IO MyConfig
     let raftState = createRaftState sid'
-        appConfig = AppConfig
-            { _store       = store
-            , _serverState = serverState
-            , _isLeader    = isLeader
-            } :: MyConfig
-        raftPort = configRaftPort sid' config
-        apiPort  = configAPIPort sid' config
-        settings = configToSettings config
+        raftPort  = configRaftPort sid' config
+        apiPort   = configAPIPort sid' config
+        settings  = configToSettings config
 
     -- Run Raft server and handler.
     mapM_ (\p -> runServer p "*" settings serverState) raftPort
-    forkIO $ raftLoop appConfig raftState isLeader
+    forkIO $ raftLoop appConfig raftState
 
     -- Run API server.
     mapM_ (\p -> Warp.run p (serve api (server appConfig))) apiPort
   where
-    raftLoop appConfig raftState isLeader = do
+    raftLoop appConfig raftState = do
         (_, s') <- runAppT run appConfig raftState
         case (_stateType raftState, _stateType s') of
             (Leader _, Leader _) -> return ()
-            (Leader _, _)        -> atomically $ writeTVar isLeader False
-            (_, Leader _)        -> atomically $ writeTVar isLeader True
-            (_, _)               -> return ()
-        raftLoop appConfig s' isLeader
+            (Leader _, _) ->
+                atomically $ writeTVar (_isLeader appConfig) False
+            (_, Leader _) ->
+                atomically $ writeTVar (_isLeader appConfig) True
+            (_, _) -> return ()
+        raftLoop appConfig s'
 handleArgs _ = do
     putStrLn "Invalid arguments passed"
     putStrLn "Arguments are:"
