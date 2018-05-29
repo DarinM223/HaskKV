@@ -1,5 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
-
 module HaskKV.Server where
 
 import Control.Concurrent (forkIO, threadDelay)
@@ -77,8 +75,8 @@ runServer port host clients s = do
            .| CL.iterM (liftIO . debugM "conduit" . ("Receiving: " ++) . show)
            .| sinkRollingQueue (_messages s)
 
-    forM_ (IM.assocs clients) $ \(i, settings) -> do
-        forM_ (IM.lookup i . _outgoing $ s) $ \rq -> do
+    forM_ (IM.assocs clients) $ \(i, settings) ->
+        forM_ (IM.lookup i . _outgoing $ s) $ \rq ->
             forkIO $ connectClient settings rq
   where
     thrd t = let (_, _, a) = t in a

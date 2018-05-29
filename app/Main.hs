@@ -2,7 +2,10 @@ module Main where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
+import Control.Exception
+import Data.Binary
 import HaskKV
+import HaskKV.Store
 import Servant.Server (serve)
 import System.Environment (getArgs)
 import System.Log.Logger
@@ -45,6 +48,12 @@ handleArgs (path:sid:_) = do
         apiPort   = configAPIPort sid' config
         settings  = configToSettings config
 
+    -- Add init entries to log and store.
+    initEntries <- readEntries $ sid ++ ".init"
+    flip runAppTConfig appConfig $ do
+        storeEntries initEntries
+        mapM_ applyEntry initEntries
+
     -- Run Raft server and handler.
     mapM_ (\p -> runServer p "*" settings serverState) raftPort
     forkIO $ raftLoop appConfig raftState
@@ -66,3 +75,16 @@ handleArgs _ = do
     putStrLn "Invalid arguments passed"
     putStrLn "Arguments are:"
     putStrLn "[config path] [server id]"
+
+readEntries :: (Binary k, Binary v)
+            => FilePath
+            -> IO [LogEntry k v]
+readEntries = handle (\(_ :: SomeException) -> return [])
+            . fmap (either (const []) id)
+            . decodeFileOrFail
+
+writeEntries :: (Binary k, Binary v)
+             => FilePath
+             -> [LogEntry k v]
+             -> IO ()
+writeEntries = encodeFile

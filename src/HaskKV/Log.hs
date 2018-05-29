@@ -1,5 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
-
 module HaskKV.Log where
 
 import Data.Binary

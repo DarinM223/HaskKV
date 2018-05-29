@@ -1,6 +1,3 @@
-{-# LANGUAGE IncoherentInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
-
 module HaskKV.Store where
 
 import Control.Concurrent.STM

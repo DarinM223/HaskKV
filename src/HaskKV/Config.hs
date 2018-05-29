@@ -39,10 +39,10 @@ parseConfig c = setData c
     setData c d = c { _serverData = d }
 
     attrsToServerData [id, host, raftPort, apiPort] = ServerData
-                                     <$> readMaybe id
-                                     <*> pure host
-                                     <*> readMaybe raftPort
-                                     <*> readMaybe apiPort
+                                                  <$> readMaybe id
+                                                  <*> pure host
+                                                  <*> readMaybe raftPort
+                                                  <*> readMaybe apiPort
     attrsToServerData _ = error "Invalid attributes"
 
 readConfig :: Config -> FilePath -> IO Config
