@@ -81,6 +81,35 @@ data Store k v e = Store
     , _tempEntries :: [e]
     } deriving (Show)
 
+createStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
+createStoreValue seconds version val = do
+    currTime <- getCurrentTime
+    let newTime = addUTCTime diff currTime
+    return StoreValue
+        { _version = version, _expireTime = Just newTime, _value = val }
+  where
+    diff = fromRational . toRational . secondsToDiffTime $ seconds
+
+emptyStore :: Store k v e
+emptyStore = Store { _map = M.empty
+                   , _heap = H.empty
+                   , _log = emptyLog
+                   , _tempEntries = []
+                   }
+
+checkAndSet :: (StorageM k v m) => Int -> k -> (v -> v) -> m Bool
+checkAndSet attempts k f
+    | attempts == 0 = return False
+    | otherwise = do
+        maybeV <- getValue k
+        result <- mapM (replaceValue k) . fmap f $ maybeV
+        case result of
+            Just (Just _) -> return True
+            Just Nothing  -> checkAndSet (attempts - 1) k f
+            _             -> return False
+
+-- StorageM instance implementations
+
 getValueImpl :: (Ord k, MonadIO m) => k -> TVar (Store k v e) -> m (Maybe v)
 getValueImpl k = fmap (getStore k) . liftIO . readTVarIO
 
@@ -107,6 +136,8 @@ cleanupExpiredImpl :: (Show k, Ord k, Storable v, MonadIO m)
                    -> m ()
 cleanupExpiredImpl t = liftIO . modifyTVarIO (cleanupStore t)
 
+-- LogM  instance implementations
+
 firstIndexImpl :: (MonadIO m) => TVar (Store k v e) -> m Int
 firstIndexImpl = fmap (_lowIdx . _log) . liftIO . readTVarIO
 
@@ -127,6 +158,8 @@ deleteRangeImpl a b
     = liftIO
     . modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
 
+-- ApplyEntryM instance implementations
+
 applyEntryImpl :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
 applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do
     mapM_ (liftIO . atomically . flip putTMVar ()) lock
@@ -136,32 +169,7 @@ applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do
     applyStore (Delete _ k)   = deleteValue k
     applyStore _              = return ()
 
-checkAndSet :: (StorageM k v m) => Int -> k -> (v -> v) -> m Bool
-checkAndSet attempts k f
-    | attempts == 0 = return False
-    | otherwise = do
-        maybeV <- getValue k
-        result <- mapM (replaceValue k) . fmap f $ maybeV
-        case result of
-            Just (Just _) -> return True
-            Just Nothing  -> checkAndSet (attempts - 1) k f
-            _             -> return False
-
-createStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
-createStoreValue seconds version val = do
-    currTime <- getCurrentTime
-    let newTime = addUTCTime diff currTime
-    return $ StoreValue
-        { _version = version, _expireTime = Just newTime, _value = val }
-  where
-    diff = fromRational . toRational . secondsToDiffTime $ seconds
-
-emptyStore :: Store k v e
-emptyStore = Store { _map = M.empty
-                   , _heap = H.empty
-                   , _log = emptyLog
-                   , _tempEntries = []
-                   }
+-- Pure store functions
 
 getStore :: (Ord k) => k -> Store k v e -> Maybe v
 getStore k s = _map s M.!? k
