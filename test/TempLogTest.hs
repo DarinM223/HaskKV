@@ -1,0 +1,42 @@
+module TempLogTest (tests) where
+
+import Control.Monad
+import Control.Monad.IO.Class
+import HaskKV.Log.Entry
+import HaskKV.Log.Temp
+import HaskKV.Store
+import Test.Tasty
+import Test.Tasty.HUnit
+
+tests :: TestTree
+tests = testGroup "Temp Log tests" [unitTests]
+
+unitTests :: TestTree
+unitTests = testGroup "Unit tests"
+    [ testCase "addTemporaryEntry adds entries to _tempEntries" $ do
+        tempLog <- createTempLog :: IO (TempLog (LogEntry Int (StoreValue Int)))
+        let createEntry = \n -> do
+                v <- liftIO $ createStoreValue 10 0 n
+                return LogEntry
+                    { _term = 0
+                    , _index = 0
+                    , _data = Change (TID 0) 1 v
+                    , _completed = Completed Nothing
+                    }
+            unChange (Change _ _ v) = v
+            unChange _              = undefined
+
+        -- Tests order of entries.
+        mapM_ (flip addTemporaryEntryImpl tempLog <=< createEntry) [1..3]
+        entries <- temporaryEntriesImpl tempLog
+        liftIO $ fmap (_value . unChange . _data) entries @?= [1, 2, 3]
+
+        -- Tests that entries are cleared after getting temporary entries.
+        entries <- temporaryEntriesImpl tempLog
+        liftIO $ length entries @?= 0
+
+        -- Tests entries bounded to maxTempEntries
+        mapM_ (flip addTemporaryEntryImpl tempLog <=< createEntry) [1..maxTempEntries + 500]
+        entries <- temporaryEntriesImpl tempLog
+        liftIO $ length entries @?= maxTempEntries
+    ]

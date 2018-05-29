@@ -1,6 +1,5 @@
 module HaskKV.API
-    ( RaftContext (..)
-    , api
+    ( api
     , server
     ) where
 
@@ -10,6 +9,7 @@ import Control.Monad.Except
 import Data.Proxy
 import HaskKV.Log.Entry
 import HaskKV.Log.Utils (apply)
+import HaskKV.Monad
 import HaskKV.Server
 import HaskKV.Store
 import Servant.API
@@ -20,44 +20,43 @@ type StoreAPI k v
  :<|> "set" :> Capture "key" k :> ReqBody '[JSON] v :> Post '[JSON] ()
  :<|> "delete" :> Capture "key" k :> Delete '[JSON] ()
 
-data RaftContext k v msg = RaftContext
-    { _store       :: TVar (Store k v (LogEntry k v))
-    , _isLeader    :: TVar Bool
-    , _serverState :: ServerState msg
-    }
-
 api :: Proxy (StoreAPI k v)
 api = Proxy
 
-get :: (KeyClass k, ValueClass v) => RaftContext k v msg -> k -> Handler (Maybe v)
-get context key =
-    checkLeader context $ runStoreTVar (getValue key) (_store context)
+get :: (KeyClass k, ValueClass v)
+    => AppConfig msg k v e
+    -> k
+    -> Handler (Maybe v)
+get config key =
+    checkLeader config $ liftIO $ runAppTConfig (getValue key) config
 
-set :: RaftContext k v msg -> k -> v -> Handler ()
-set context key value =
-    checkLeader context $ applyEntryData context entryData
+set :: AppConfig msg k v (LogEntry k v) -> k -> v -> Handler ()
+set config key value =
+    checkLeader config $ applyEntryData config entryData
   where
     entryData = Change (TID 0) key value
 
-delete :: RaftContext k v msg -> k -> Handler ()
-delete context key =
-    checkLeader context $ applyEntryData context entryData
+delete :: AppConfig msg k v (LogEntry k v) -> k -> Handler ()
+delete config key =
+    checkLeader config $ applyEntryData config entryData
   where
     entryData = Delete (TID 0) key
 
 server :: (KeyClass k, ValueClass v)
-       => RaftContext k v msg
+       => AppConfig msg k v (LogEntry k v)
        -> Server (StoreAPI k v)
-server context = get context :<|> set context :<|> delete context
+server config = get config :<|> set config :<|> delete config
 
-checkLeader :: RaftContext k v msg -> Handler r -> Handler r
-checkLeader context handler =
-    (liftIO . readTVarIO . _isLeader) context >>= \case
+checkLeader :: AppConfig msg k v e -> Handler r -> Handler r
+checkLeader config handler =
+    (liftIO . readTVarIO . _isLeader) config >>= \case
         True  -> handler
         False -> throwError err404
 
-applyEntryData :: RaftContext k v msg -> LogEntryData k v -> Handler ()
-applyEntryData context entryData = do
+applyEntryData :: AppConfig msg k v (LogEntry k v)
+               -> LogEntryData k v
+               -> Handler ()
+applyEntryData config entryData = do
     completed <- Completed . Just <$> liftIO newEmptyTMVarIO
     let entry = LogEntry
             { _term      = 0
@@ -65,6 +64,6 @@ applyEntryData context entryData = do
             , _data      = entryData
             , _completed = completed
             }
-    f <- liftIO $ async $ runStoreTVar (apply entry) (_store context)
-    runServerT (inject HeartbeatTimeout) (_serverState context)
+    f <- liftIO $ async $ runAppTConfig (apply entry) config
+    liftIO $ runAppTConfig (inject HeartbeatTimeout) config
     liftIO $ wait f

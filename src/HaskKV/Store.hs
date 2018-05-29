@@ -5,7 +5,6 @@ module HaskKV.Store where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
-import Control.Monad.State.Strict
 import Data.Aeson
 import Data.Binary
 import Data.Binary.Orphans ()
@@ -51,24 +50,9 @@ class (Monad s, KeyClass k, ValueClass v) => StorageM k v s | s -> k v where
     -- | Deletes all values that passed the expiration time.
     cleanupExpired :: Time -> s ()
 
-    default getValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> s (Maybe v)
-    default setValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> v -> s ()
-    default replaceValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> v -> s (Maybe CAS)
-    default deleteValue :: (MonadTrans t, StorageM k v s', s ~ t s') => k -> s ()
-    default cleanupExpired :: (MonadTrans t, StorageM k v s', s ~ t s') => Time -> s ()
-
-    getValue = lift . getValue
-    setValue k v = lift $ setValue k v
-    replaceValue k v = lift $ replaceValue k v
-    deleteValue = lift . deleteValue
-    cleanupExpired = lift . cleanupExpired
-
 class (StorageM k v m, LogM e m) => ApplyEntryM k v e m | m -> k v e where
     -- | Applies a log entry.
     applyEntry :: e -> m ()
-
-    default applyEntry :: (MonadTrans t, ApplyEntryM k v e m', m ~ t m') => e -> m ()
-    applyEntry = lift . applyEntry
 
 data StoreValue v = StoreValue
     { _expireTime :: Maybe Time
@@ -97,81 +81,21 @@ data Store k v e = Store
     , _tempEntries :: [e]
     } deriving (Show)
 
-maxTempEntries :: Int
-maxTempEntries = 1000
+createStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
+createStoreValue seconds version val = do
+    currTime <- getCurrentTime
+    let newTime = addUTCTime diff currTime
+    return StoreValue
+        { _version = version, _expireTime = Just newTime, _value = val }
+  where
+    diff = fromRational . toRational . secondsToDiffTime $ seconds
 
-newtype StoreT k v e m a = StoreT
-    { unStoreT :: ReaderT (TVar (Store k v e)) m a
-    } deriving
-        ( Functor, Applicative, Monad, MonadIO, MonadTrans
-        , MonadReader (TVar (Store k v e))
-        )
-
-runStoreT :: (MonadIO m) => StoreT k v e m b -> Store k v e -> m b
-runStoreT (StoreT (ReaderT f)) = f <=< liftIO . newTVarIO
-
-runStoreTVar :: StoreT k v e m b -> TVar (Store k v e) -> m b
-runStoreTVar (StoreT (ReaderT f)) = f
-
-instance
-    ( MonadIO m
-    , KeyClass k
-    , ValueClass v
-    ) => StorageM k v (StoreT k v e m) where
-
-    getValue k = return . getStore k =<< liftIO . readTVarIO =<< ask
-    setValue k v = liftIO . modifyTVarIO (setStore k v) =<< ask
-    replaceValue k v = liftIO . stateTVarIO (replaceStore k v) =<< ask
-    deleteValue k = liftIO . modifyTVarIO (deleteStore k) =<< ask
-    cleanupExpired t = liftIO . modifyTVarIO (cleanupStore t) =<< ask
-
-instance (StorageM k v m) => StorageM k v (ReaderT r m)
-instance (StorageM k v m) => StorageM k v (StateT s m)
-
-instance (MonadIO m, Entry e) => LogM e (StoreT k v e m) where
-    firstIndex = fmap (_lowIdx . _log) . liftIO . readTVarIO =<< ask
-    lastIndex = fmap (_highIdx . _log) . liftIO . readTVarIO =<< ask
-    loadEntry k =
-        fmap (IM.lookup k . _entries . _log) . liftIO . readTVarIO =<< ask
-    storeEntries es
-        = liftIO
-        . modifyTVarIO (\s -> s { _log = storeEntriesLog es (_log s) })
-      =<< ask
-    deleteRange a b
-        = liftIO
-        . modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
-      =<< ask
-
-instance (MonadIO m) => TempLogM e (StoreT k v e m) where
-    addTemporaryEntry e = liftIO . modifyTVarIO (addEntry e) =<< ask
-      where
-        addEntry e s
-            | length (_tempEntries s) + 1 > maxTempEntries = s
-            | otherwise = s { _tempEntries = e:_tempEntries s }
-    temporaryEntries = do
-        var <- ask
-        liftIO $ atomically $ do
-            s <- readTVar var
-            let entries = reverse $ _tempEntries s
-            modifyTVar' var (\s -> s { _tempEntries = [] })
-            return entries
-
-instance
-    ( MonadIO m
-    , KeyClass k
-    , ValueClass v
-    ) => ApplyEntryM k v (LogEntry k v) (StoreT k v (LogEntry k v) m) where
-
-    applyEntry LogEntry{ _data = entry, _completed = Completed lock } = do
-        mapM_ (liftIO . atomically . flip putTMVar ()) lock
-        applyStore entry
-      where
-        applyStore (Change _ k v) = setValue k v
-        applyStore (Delete _ k)   = deleteValue k
-        applyStore _              = return ()
-
-instance (ApplyEntryM k v e m) => ApplyEntryM k v e (ReaderT r m)
-instance (ApplyEntryM k v e m) => ApplyEntryM k v e (StateT s m)
+emptyStore :: Store k v e
+emptyStore = Store { _map = M.empty
+                   , _heap = H.empty
+                   , _log = emptyLog
+                   , _tempEntries = []
+                   }
 
 checkAndSet :: (StorageM k v m) => Int -> k -> (v -> v) -> m Bool
 checkAndSet attempts k f
@@ -184,21 +108,68 @@ checkAndSet attempts k f
             Just Nothing  -> checkAndSet (attempts - 1) k f
             _             -> return False
 
-createStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
-createStoreValue seconds version val = do
-    currTime <- getCurrentTime
-    let newTime = addUTCTime diff currTime
-    return $ StoreValue
-        { _version = version, _expireTime = Just newTime, _value = val }
-  where
-    diff = fromRational . toRational . secondsToDiffTime $ seconds
+-- StorageM instance implementations
 
-emptyStore :: Store k v e
-emptyStore = Store { _map = M.empty
-                   , _heap = H.empty
-                   , _log = emptyLog
-                   , _tempEntries = []
-                   }
+getValueImpl :: (Ord k, MonadIO m) => k -> TVar (Store k v e) -> m (Maybe v)
+getValueImpl k = fmap (getStore k) . liftIO . readTVarIO
+
+setValueImpl :: (Ord k, Storable v, MonadIO m)
+             => k
+             -> v
+             -> TVar (Store k v e)
+             -> m ()
+setValueImpl k v = liftIO . modifyTVarIO (setStore k v)
+
+replaceValueImpl :: (Ord k, Storable v, MonadIO m)
+                 => k
+                 -> v
+                 -> TVar (Store k v e)
+                 -> m (Maybe CAS)
+replaceValueImpl k v = liftIO . stateTVarIO (replaceStore k v)
+
+deleteValueImpl :: (Ord k, MonadIO m) => k -> TVar (Store k v e) -> m ()
+deleteValueImpl k = liftIO . modifyTVarIO (deleteStore k)
+
+cleanupExpiredImpl :: (Show k, Ord k, Storable v, MonadIO m)
+                   => Time
+                   -> TVar (Store k v e)
+                   -> m ()
+cleanupExpiredImpl t = liftIO . modifyTVarIO (cleanupStore t)
+
+-- LogM  instance implementations
+
+firstIndexImpl :: (MonadIO m) => TVar (Store k v e) -> m Int
+firstIndexImpl = fmap (_lowIdx . _log) . liftIO . readTVarIO
+
+lastIndexImpl :: (MonadIO m) => TVar (Store k v e) -> m Int
+lastIndexImpl = fmap (_highIdx . _log) . liftIO . readTVarIO
+
+loadEntryImpl :: (MonadIO m) => Int -> TVar (Store k v e) -> m (Maybe e)
+loadEntryImpl k =
+    fmap (IM.lookup k . _entries . _log) . liftIO . readTVarIO
+
+storeEntriesImpl :: (MonadIO m, Entry e) => [e] -> TVar (Store k v e) -> m ()
+storeEntriesImpl es
+    = liftIO
+    . modifyTVarIO (\s -> s { _log = storeEntriesLog es (_log s) })
+
+deleteRangeImpl :: (MonadIO m) => Int -> Int -> TVar (Store k v e) -> m ()
+deleteRangeImpl a b
+    = liftIO
+    . modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
+
+-- ApplyEntryM instance implementations
+
+applyEntryImpl :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
+applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do
+    mapM_ (liftIO . atomically . flip putTMVar ()) lock
+    applyStore entry
+  where
+    applyStore (Change _ k v) = setValue k v
+    applyStore (Delete _ k)   = deleteValue k
+    applyStore _              = return ()
+
+-- Pure store functions
 
 getStore :: (Ord k) => k -> Store k v e -> Maybe v
 getStore k s = _map s M.!? k
