@@ -9,6 +9,7 @@ import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
 import HaskKV.Server
+import HaskKV.Store
 
 handleRequestVote :: ( MonadIO m
                      , ServerM (RaftMessage e) ServerEvent m
@@ -98,3 +99,20 @@ handleAppendEntries ae s
                                 $ AppendResponse (_currTerm s) True lastIndex
     failResponse s = Response (_serverID s)
                    $ AppendResponse (_currTerm s) False 0
+
+handleInstallSnapshot :: ( StorageM k v m
+                         , LogM e m
+                         , ServerM (RaftMessage e) ServerEvent m
+                         , MonadState RaftState m
+                         , Entry e
+                         )
+                      => RaftMessage e
+                      -> RaftState
+                      -> m ()
+handleInstallSnapshot is s
+    | getField @"_term" is < _currTerm s =
+        send (_leaderId is) $ failResponse s
+    | otherwise = undefined
+  where
+    failResponse s = Response (_serverID s)
+                   $ InstallSnapshotResponse (_currTerm s)

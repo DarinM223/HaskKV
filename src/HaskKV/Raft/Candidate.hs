@@ -9,11 +9,13 @@ import HaskKV.Raft.RPC
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
 import HaskKV.Server
+import HaskKV.Store
 
 runCandidate :: ( MonadIO m
                 , MonadState RaftState m
                 , LogM e m
                 , ServerM (RaftMessage e) ServerEvent m
+                , StorageM k v m
                 , Entry e
                 )
              => m ()
@@ -22,10 +24,11 @@ runCandidate = recv >>= \case
         debug "Restarting election"
         reset ElectionTimeout
         startElection
-    Left HeartbeatTimeout    -> reset HeartbeatTimeout
-    Right rv@RequestVote{}   -> get >>= handleRequestVote rv
-    Right ae@AppendEntries{} -> get >>= handleAppendEntries ae
-    Right (Response _ resp)  -> get >>= handleCandidateResponse resp
+    Left HeartbeatTimeout      -> reset HeartbeatTimeout
+    Right rv@RequestVote{}     -> get >>= handleRequestVote rv
+    Right ae@AppendEntries{}   -> get >>= handleAppendEntries ae
+    Right is@InstallSnapshot{} -> get >>= handleInstallSnapshot is
+    Right (Response _ resp)    -> get >>= handleCandidateResponse resp
 
 handleCandidateResponse msg@(VoteResponse term success) s
     | term > _currTerm s = do

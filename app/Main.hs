@@ -3,6 +3,7 @@ module Main where
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Control.Exception
+import Control.Monad
 import Data.Binary
 import HaskKV
 import HaskKV.Store
@@ -50,6 +51,8 @@ handleArgs (path:sid:_) = do
 
     -- Add init entries to log and store.
     initEntries <- readEntries $ sid ++ ".init"
+    unless (null initEntries) $
+        debugM "conduit" $ "Loading init entries: " ++ show initEntries
     flip runAppTConfig appConfig $ do
         storeEntries initEntries
         mapM_ applyEntry initEntries

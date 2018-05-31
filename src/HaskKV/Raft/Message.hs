@@ -3,6 +3,8 @@ module HaskKV.Raft.Message where
 import Data.Binary
 import GHC.Generics
 
+import qualified Data.ByteString as B
+
 data RaftResponse
     = AppendResponse
         { _term      :: Int
@@ -12,6 +14,9 @@ data RaftResponse
     | VoteResponse
         { _term    :: Int
         , _success :: Bool
+        }
+    | InstallSnapshotResponse
+        { _term :: Int
         }
     deriving (Show, Eq, Generic)
 
@@ -29,6 +34,15 @@ data RaftMessage e
         , _prevLogTerm :: Int
         , _entries     :: [e]
         , _commitIdx   :: Int
+        }
+    | InstallSnapshot
+        { _term              :: Int
+        , _leaderId          :: Int
+        , _lastIncludedIndex :: Int
+        , _lastIncludedTerm  :: Int
+        , _offset            :: Int
+        , _data              :: B.ByteString
+        , _done              :: Bool
         }
     | Response Int RaftResponse
     deriving (Show, Eq, Generic)
