@@ -68,7 +68,7 @@ configToServerState config@Config{ _backpressure     = backpressure
                                  , _electionTimeout  = eTimeout
                                  , _heartbeatTimeout = hTimeout
                                  } = do
-    initServerState <- createServerState backpressure eTimeout hTimeout
+    initServerState <- newServerState backpressure eTimeout hTimeout
     outgoing' <- foldM (insert backpressure) (_outgoing initServerState)
                . _serverData
                $ config

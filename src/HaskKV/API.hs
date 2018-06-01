@@ -56,14 +56,14 @@ checkLeader config handler =
 applyEntryData :: AppConfig msg k v (LogEntry k v)
                -> LogEntryData k v
                -> Handler ()
-applyEntryData config entryData = do
-    completed <- Completed . Just <$> liftIO newEmptyTMVarIO
+applyEntryData config entryData = liftIO $ do
+    completed <- Completed . Just <$> newEmptyTMVarIO
     let entry = LogEntry
             { _term      = 0
             , _index     = 0
             , _data      = entryData
             , _completed = completed
             }
-    f <- liftIO $ async $ runAppTConfig (apply entry) config
-    liftIO $ runAppTConfig (inject HeartbeatTimeout) config
-    liftIO $ wait f
+    f <- async $ runAppTConfig (apply entry) config
+    runAppTConfig (inject HeartbeatTimeout) config
+    wait f

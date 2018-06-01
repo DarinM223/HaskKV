@@ -6,8 +6,8 @@ import HaskKV.Utils
 
 newtype TempLog e = TempLog { unTempLog :: TVar [e] }
 
-createTempLog :: IO (TempLog e)
-createTempLog = TempLog <$> newTVarIO []
+newTempLog :: IO (TempLog e)
+newTempLog = TempLog <$> newTVarIO []
 
 maxTempEntries :: Int
 maxTempEntries = 1000

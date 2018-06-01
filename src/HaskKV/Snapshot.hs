@@ -20,8 +20,14 @@ data Snapshot = Snapshot
     }
 
 data SnapshotManager = SnapshotManager
-    { _completed :: Snapshot
+    { _completed :: Maybe Snapshot
     , _partial   :: [Snapshot]
+    }
+
+newSnapshotManager :: IO (TVar SnapshotManager)
+newSnapshotManager = newTVarIO SnapshotManager
+    { _completed = Nothing
+    , _partial   = []
     }
 
 createSnapshotImpl :: (MonadIO m) => Int -> TVar SnapshotManager -> m ()
@@ -58,8 +64,8 @@ saveSnapshotImpl index managerVar = liftIO $ do
     let completed = _completed manager
         snap      = find ((== index) . _index) . _partial $ manager
     forM_ snap $ \snap@Snapshot{ _index = index } -> do
-        completed' <- if _index completed < index
-            then const snap <$> hClose (_file completed)
+        completed' <- if maybe False ((< index) . _index) completed
+            then const (Just snap) <$> mapM_ (hClose . _file) completed
             else return completed
 
         forM_ (_partial manager) $ \partial ->

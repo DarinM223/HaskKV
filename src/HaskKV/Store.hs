@@ -78,8 +78,8 @@ data Store k v e = Store
     , _tempEntries :: [e]
     } deriving (Show)
 
-createStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
-createStoreValue seconds version val = do
+newStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
+newStoreValue seconds version val = do
     currTime <- getCurrentTime
     let newTime = addUTCTime diff currTime
     return StoreValue
@@ -194,7 +194,7 @@ replaceStore k v s
     | otherwise = (Nothing, s)
   where
     maybeV = _map s M.!? k
-    equalCAS = maybe True id ((== version v) . version <$> maybeV)
+    equalCAS = fromMaybe True ((== version v) . version <$> maybeV)
     cas' = version v + 1
     v' = setVersion cas' v
 

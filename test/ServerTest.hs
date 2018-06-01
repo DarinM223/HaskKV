@@ -38,19 +38,19 @@ unitTests = testGroup "Unit tests"
   where
     testReceiveMessage :: IO ()
     testReceiveMessage = do
-        state <- S.createServerState backpressure timeout longer
+        state <- S.newServerState backpressure timeout longer
         sourceMessages (["a", "b"] :: [ByteString]) state
         msg1 <- S.recvImpl state
-        liftIO $ msg1 @?= Right "a"
+        msg1 @?= Right "a"
         msg2 <- S.recvImpl state
-        liftIO $ msg2 @?= Right "b"
+        msg2 @?= Right "b"
         msg3 <- S.recvImpl state
-        liftIO $ msg3 @?= Left S.ElectionTimeout
+        msg3 @?= Left S.ElectionTimeout
         return ()
 
     testSendMessage :: IO ()
     testSendMessage = do
-        state <- S.createServerState backpressure timeout timeout
+        state <- S.newServerState backpressure timeout timeout
         state <- buildClientMap state [1..2]
         S.sendImpl 1 "a" state
         S.sendImpl 2 "b" state
@@ -59,7 +59,7 @@ unitTests = testGroup "Unit tests"
 
     testBroadcastMessage :: IO ()
     testBroadcastMessage = do
-        state <- S.createServerState backpressure timeout timeout
+        state <- S.newServerState backpressure timeout timeout
         state <- buildClientMap state [1..3]
         S.broadcastImpl "a" state
         results <- sinkClients state
@@ -67,43 +67,43 @@ unitTests = testGroup "Unit tests"
 
     testResetElection :: IO ()
     testResetElection = do
-        state <- S.createServerState
+        state <- S.newServerState
             backpressure
             (T.Timeout 4000)
             (T.Timeout 5000) :: IO (S.ServerState ByteString)
-        liftIO $ threadDelay 3000
+        threadDelay 3000
         S.resetImpl S.ElectionTimeout state
         msg1 <- S.recvImpl state
-        liftIO $ msg1 @?= Left S.HeartbeatTimeout
+        msg1 @?= Left S.HeartbeatTimeout
         msg2 <- S.recvImpl state
-        liftIO $ msg2 @?= Left S.ElectionTimeout
+        msg2 @?= Left S.ElectionTimeout
         return ()
 
     testResetHearbeat :: IO ()
     testResetHearbeat = do
-        state <- S.createServerState
+        state <- S.newServerState
             backpressure
             (T.Timeout 5000)
             (T.Timeout 4000) :: IO (S.ServerState ByteString)
-        liftIO $ threadDelay 3000
+        threadDelay 3000
         S.resetImpl S.HeartbeatTimeout state
         msg1 <- S.recvImpl state
-        liftIO $ msg1 @?= Left S.ElectionTimeout
+        msg1 @?= Left S.ElectionTimeout
         msg2 <- S.recvImpl state
-        liftIO $ msg2 @?= Left S.HeartbeatTimeout
+        msg2 @?= Left S.HeartbeatTimeout
         return ()
 
     testInject :: IO ()
     testInject = do
-        state <- S.createServerState
+        state <- S.newServerState
             backpressure
             (T.Timeout 5000)
             (T.Timeout 10000) :: IO (S.ServerState ByteString)
         S.injectImpl S.HeartbeatTimeout state
         msg1 <- S.recvImpl state
-        liftIO $ msg1 @?= Left S.HeartbeatTimeout
+        msg1 @?= Left S.HeartbeatTimeout
         msg2 <- S.recvImpl state
-        liftIO $ msg2 @?= Left S.ElectionTimeout
+        msg2 @?= Left S.ElectionTimeout
         return ()
 
 sourceMessages l s

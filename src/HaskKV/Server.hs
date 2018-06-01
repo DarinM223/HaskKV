@@ -37,11 +37,11 @@ data ServerState msg = ServerState
     , _heartbeatTimeout :: Timer.Timeout
     }
 
-createServerState :: Capacity
-                  -> Timer.Timeout
-                  -> Timer.Timeout
-                  -> IO (ServerState msg)
-createServerState backpressure electionTimeout heartbeatTimeout = do
+newServerState :: Capacity
+               -> Timer.Timeout
+               -> Timer.Timeout
+               -> IO (ServerState msg)
+newServerState backpressure electionTimeout heartbeatTimeout = do
     messages <- RQ.newIO (unCapacity backpressure)
     electionTimer <- Timer.newIO
     heartbeatTimer <- Timer.newIO
@@ -146,9 +146,9 @@ injectImpl ElectionTimeout s =
 resetImpl :: (MonadIO m) => ServerEvent -> ServerState msg -> m ()
 resetImpl HeartbeatTimeout s =
     liftIO $ Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
-resetImpl ElectionTimeout s = do
-    timeout <- liftIO $ Timer.randTimeout $ _electionTimeout s
-    liftIO $ Timer.reset (_electionTimer s) timeout
+resetImpl ElectionTimeout s = liftIO $ do
+    timeout <- Timer.randTimeout $ _electionTimeout s
+    Timer.reset (_electionTimer s) timeout
 
 serverIdsImpl :: ServerState msg -> [Int]
 serverIdsImpl = IM.keys . _outgoing

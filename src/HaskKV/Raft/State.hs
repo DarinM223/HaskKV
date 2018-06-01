@@ -33,8 +33,8 @@ data RaftState = RaftState
     } deriving (Show, Eq)
 makeFieldsNoPrefix ''RaftState
 
-createRaftState :: Int -> RaftState
-createRaftState sid = RaftState
+newRaftState :: Int -> RaftState
+newRaftState sid = RaftState
     { _stateType   = Follower
     , _currTerm    = 0
     , _votedFor    = Nothing
