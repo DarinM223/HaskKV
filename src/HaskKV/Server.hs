@@ -37,6 +37,12 @@ data ServerState msg = ServerState
     , _heartbeatTimeout :: Timer.Timeout
     }
 
+class HasServerState msg c | c -> msg where
+    getServerState :: c -> ServerState msg
+
+instance HasServerState msg (ServerState msg) where
+    getServerState = id
+
 newServerState :: Capacity
                -> Timer.Timeout
                -> Timer.Timeout
@@ -106,23 +112,30 @@ data ServerEvent = ElectionTimeout
                  | HeartbeatTimeout
                  deriving (Show, Eq)
 
--- ServerM instance implementations
-
-sendImpl :: (MonadIO m) => Int -> msg -> ServerState msg -> m ()
-sendImpl i msg s = do
+sendImpl :: (MonadIO m, MonadReader c m, HasServerState msg c)
+         => Int
+         -> msg
+         -> m ()
+sendImpl i msg = do
+    s <- getServerState <$> ask
     let rq = IM.lookup i . _outgoing $ s
     mapM_ (liftIO . atomically . flip RQ.write msg) rq
 
-broadcastImpl :: (MonadIO m) => msg -> ServerState msg -> m ()
+broadcastImpl :: (MonadIO m, MonadReader c m, HasServerState msg c)
+              => msg
+              -> m ()
 broadcastImpl msg
     = liftIO
     . atomically
     . mapM_ (`RQ.write` msg)
     . IM.elems
     . _outgoing
+  =<< fmap getServerState ask
 
-recvImpl :: (MonadIO m) => ServerState msg -> m (Either ServerEvent msg)
-recvImpl s =
+recvImpl :: (MonadIO m, MonadReader c m, HasServerState msg c)
+         => m (Either ServerEvent msg)
+recvImpl = do
+    s <- getServerState <$> ask
     liftIO . atomically $
         awaitElectionTimeout s
         `orElse` awaitHeartbeatTimeout s
@@ -137,18 +150,26 @@ recvImpl s =
         . Timer.await
         . _heartbeatTimer
 
-injectImpl :: (MonadIO m) => ServerEvent -> ServerState msg -> m ()
-injectImpl HeartbeatTimeout s =
+injectImpl :: (MonadIO m, MonadReader c m, HasServerState msg c)
+           => ServerEvent
+           -> m ()
+injectImpl HeartbeatTimeout = do
+    s <- getServerState <$> ask
     liftIO $ Timer.reset (_heartbeatTimer s) (Timer.Timeout 0)
-injectImpl ElectionTimeout s =
+injectImpl ElectionTimeout = do
+    s <- getServerState <$> ask
     liftIO $ Timer.reset (_electionTimer s) (Timer.Timeout 0)
 
-resetImpl :: (MonadIO m) => ServerEvent -> ServerState msg -> m ()
-resetImpl HeartbeatTimeout s =
+resetImpl :: (MonadIO m, MonadReader c m, HasServerState msg c)
+          => ServerEvent
+          -> m ()
+resetImpl HeartbeatTimeout = do
+    s <- getServerState <$> ask
     liftIO $ Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
-resetImpl ElectionTimeout s = liftIO $ do
-    timeout <- Timer.randTimeout $ _electionTimeout s
-    Timer.reset (_electionTimer s) timeout
+resetImpl ElectionTimeout =
+    fmap getServerState ask >>= \s -> liftIO $ do
+        timeout <- Timer.randTimeout $ _electionTimeout s
+        Timer.reset (_electionTimer s) timeout
 
-serverIdsImpl :: ServerState msg -> [Int]
-serverIdsImpl = IM.keys . _outgoing
+serverIdsImpl :: (MonadReader c m, HasServerState msg c) => m [Int]
+serverIdsImpl = IM.keys . _outgoing . getServerState <$> ask
