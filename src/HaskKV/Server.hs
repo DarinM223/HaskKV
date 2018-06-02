@@ -23,7 +23,6 @@ class (Monad m) => ServerM msg e m | m -> msg e where
     broadcast :: msg -> m ()
     recv      :: m (Either e msg)
     reset     :: e -> m ()
-    inject    :: e -> m ()
     serverIds :: m [Int]
 
 newtype Capacity = Capacity { unCapacity :: Int } deriving (Show, Eq)
@@ -106,6 +105,12 @@ data ServerEvent = ElectionTimeout
                  | HeartbeatTimeout
                  deriving (Show, Eq)
 
+inject :: (MonadIO m) => ServerEvent -> ServerState msg -> m ()
+inject HeartbeatTimeout s =
+    liftIO $ Timer.reset (_heartbeatTimer s) (Timer.Timeout 0)
+inject ElectionTimeout s =
+    liftIO $ Timer.reset (_electionTimer s) (Timer.Timeout 0)
+
 -- ServerM instance implementations
 
 sendImpl :: (MonadIO m) => Int -> msg -> ServerState msg -> m ()
@@ -136,12 +141,6 @@ recvImpl s =
         = fmap (const (Left HeartbeatTimeout))
         . Timer.await
         . _heartbeatTimer
-
-injectImpl :: (MonadIO m) => ServerEvent -> ServerState msg -> m ()
-injectImpl HeartbeatTimeout s =
-    liftIO $ Timer.reset (_heartbeatTimer s) (Timer.Timeout 0)
-injectImpl ElectionTimeout s =
-    liftIO $ Timer.reset (_electionTimer s) (Timer.Timeout 0)
 
 resetImpl :: (MonadIO m) => ServerEvent -> ServerState msg -> m ()
 resetImpl HeartbeatTimeout s =

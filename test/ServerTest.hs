@@ -99,7 +99,7 @@ unitTests = testGroup "Unit tests"
             backpressure
             (T.Timeout 5000)
             (T.Timeout 10000) :: IO (S.ServerState ByteString)
-        S.injectImpl S.HeartbeatTimeout state
+        S.inject S.HeartbeatTimeout state
         msg1 <- S.recvImpl state
         msg1 @?= Left S.HeartbeatTimeout
         msg2 <- S.recvImpl state

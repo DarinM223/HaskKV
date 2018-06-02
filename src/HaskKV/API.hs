@@ -8,7 +8,7 @@ import Control.Concurrent.STM
 import Control.Monad.Except
 import Data.Proxy
 import HaskKV.Log.Entry
-import HaskKV.Log.Utils (apply)
+import HaskKV.Log.Temp (waitApplyEntry)
 import HaskKV.Monad
 import HaskKV.Server
 import HaskKV.Store
@@ -23,12 +23,9 @@ type StoreAPI k v
 api :: Proxy (StoreAPI k v)
 api = Proxy
 
-get :: (KeyClass k, ValueClass v)
-    => AppConfig msg k v e
-    -> k
-    -> Handler (Maybe v)
+get :: (KeyClass k) => AppConfig msg k v e -> k -> Handler (Maybe v)
 get config key =
-    checkLeader config $ liftIO $ runAppTConfig (getValue key) config
+    checkLeader config $ liftIO $ getValueImpl key (_store config)
 
 set :: AppConfig msg k v (LogEntry k v) -> k -> v -> Handler ()
 set config key value =
@@ -42,7 +39,7 @@ delete config key =
   where
     entryData = Delete (TID 0) key
 
-server :: (KeyClass k, ValueClass v)
+server :: (KeyClass k)
        => AppConfig msg k v (LogEntry k v)
        -> Server (StoreAPI k v)
 server config = get config :<|> set config :<|> delete config
@@ -64,6 +61,6 @@ applyEntryData config entryData = liftIO $ do
             , _data      = entryData
             , _completed = completed
             }
-    f <- async $ runAppTConfig (apply entry) config
-    runAppTConfig (inject HeartbeatTimeout) config
+    f <- async $ waitApplyEntry entry (_tempLog config)
+    inject HeartbeatTimeout (_serverState config)
     wait f

@@ -133,7 +133,7 @@ cleanupExpiredImpl :: (Show k, Ord k, Storable v, MonadIO m)
                    -> m ()
 cleanupExpiredImpl t = liftIO . modifyTVarIO (cleanupStore t)
 
--- LogM  instance implementations
+-- LogM instance implementations
 
 firstIndexImpl :: (MonadIO m) => TVar (Store k v e) -> m Int
 firstIndexImpl = fmap (_lowIdx . _log) . liftIO . readTVarIO
