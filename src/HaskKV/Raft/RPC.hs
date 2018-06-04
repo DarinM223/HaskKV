@@ -9,6 +9,7 @@ import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
 import HaskKV.Server
+import HaskKV.Snapshot
 import HaskKV.Store
 
 handleRequestVote :: ( MonadIO m
@@ -103,6 +104,7 @@ handleAppendEntries ae s
 handleInstallSnapshot :: ( StorageM k v m
                          , LogM e m
                          , ServerM (RaftMessage e) ServerEvent m
+                         , SnapshotM m
                          , MonadState RaftState m
                          , Entry e
                          )
@@ -112,7 +114,27 @@ handleInstallSnapshot :: ( StorageM k v m
 handleInstallSnapshot is s
     | getField @"_term" is < _currTerm s =
         send (_leaderId is) $ failResponse s
-    | otherwise = undefined
+    | otherwise = do
+        -- TODO(DarinM223): get last snapshot index
+        let lastSnapIndex = undefined :: Int
+            snapIndex     = lastSnapIndex + 1
+        when (_offset is == 0) $ createSnapshot snapIndex
+
+        when (_done is) $ do
+            saveSnapshot snapIndex
+            loadEntry (_lastIncludedIndex is) >>= \case
+                Just e | entryIndex e == _lastIncludedIndex is
+                      && entryTerm e == _lastIncludedTerm is ->
+                    -- TODO(DarinM223): delete logs up to index
+                    return ()
+                _ ->
+                    -- TODO(DarinM223): discard entire log
+                    -- TODO(DarinM223): reset state machine using snapshot contents
+                    return ()
+
+        send (_leaderId is) $ successResponse s
   where
+    successResponse s = Response (_serverID s)
+                      $ InstallSnapshotResponse (_currTerm s)
     failResponse s = Response (_serverID s)
                    $ InstallSnapshotResponse (_currTerm s)

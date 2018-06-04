@@ -7,6 +7,7 @@ import HaskKV.Raft.RPC
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
 import HaskKV.Server
+import HaskKV.Snapshot
 import HaskKV.Store
 
 runFollower :: ( MonadIO m
@@ -14,6 +15,7 @@ runFollower :: ( MonadIO m
                , LogM e m
                , ServerM (RaftMessage e) ServerEvent m
                , StorageM k v m
+               , SnapshotM m
                , Entry e
                )
             => m ()

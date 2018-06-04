@@ -4,6 +4,9 @@ import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Control.Monad
 import Data.List
+import Data.Maybe
+import System.Directory
+import System.FilePath
 import System.IO
 
 import qualified Data.ByteString as B
@@ -16,63 +19,90 @@ class SnapshotM m where
 data Snapshot = Snapshot
     { _file     :: Handle
     , _index    :: Int
-    , _filepath :: String
+    , _filepath :: FilePath
     }
 
-data SnapshotManager = SnapshotManager
+data Snapshots = Snapshots
     { _completed :: Maybe Snapshot
     , _partial   :: [Snapshot]
     }
 
-newSnapshotManager :: IO (TVar SnapshotManager)
-newSnapshotManager = newTVarIO SnapshotManager
-    { _completed = Nothing
-    , _partial   = []
+data SnapshotManager = SnapshotManager
+    { _snapshots     :: TVar Snapshots
+    , _directoryPath :: FilePath
     }
 
-createSnapshotImpl :: (MonadIO m) => Int -> TVar SnapshotManager -> m ()
+newSnapshotManager :: Maybe FilePath -> IO SnapshotManager
+newSnapshotManager path = do
+    snapshots <- newTVarIO Snapshots
+        { _completed = Nothing
+        , _partial   = []
+        }
+    return SnapshotManager
+        { _snapshots = snapshots, _directoryPath = fromMaybe "" path }
+
+createSnapshotImpl :: (MonadIO m) => Int -> SnapshotManager -> m ()
 createSnapshotImpl index manager = liftIO $ do
     handle <- openFile filename WriteMode
-    atomically $ modifyTVar manager $ \m -> 
+    atomically $ modifyTVar (_snapshots manager) $ \s ->
         let snap = Snapshot
                 { _file     = handle
                 , _index    = index
                 , _filepath = filename
                 }
-        in m { _partial = snap:_partial m }
+        in s { _partial = snap:_partial s }
   where
-    filename = show index ++ ".snap"
+    filename = _directoryPath manager </> partialFilename index
 
 writeSnapshotImpl :: (MonadIO m)
                   => B.ByteString
                   -> Int
-                  -> TVar SnapshotManager
+                  -> SnapshotManager
                   -> m ()
-writeSnapshotImpl snapData index = mapM_ (put snapData)
-                                 . fmap _file
+writeSnapshotImpl snapData index = mapM_ (put snapData . _file)
                                  . find ((== index) . _index)
                                  . _partial
                                <=< liftIO . readTVarIO
+                                 . _snapshots
   where
     put snapData handle = liftIO $ do
         B.hPut handle snapData
         hFlush handle
 
-saveSnapshotImpl :: (MonadIO m) => Int -> TVar SnapshotManager -> m ()
-saveSnapshotImpl index managerVar = liftIO $ do
-    manager <- readTVarIO managerVar
-    let completed = _completed manager
-        snap      = find ((== index) . _index) . _partial $ manager
+saveSnapshotImpl :: (MonadIO m) => Int -> SnapshotManager -> m ()
+saveSnapshotImpl index manager = liftIO $ do
+    snapshots <- readTVarIO $ _snapshots manager
+    let completed = _completed snapshots
+        snap      = find ((== index) . _index) . _partial $ snapshots
     forM_ snap $ \snap@Snapshot{ _index = index } -> do
-        completed' <- if maybe False ((< index) . _index) completed
-            then const (Just snap) <$> mapM_ (hClose . _file) completed
-            else return completed
+        hClose $ _file snap
+        let path' = replaceFileName (_filepath snap) (completedFilename index)
+            snap' = snap { _filepath = path' }
+        renameFile (_filepath snap) (_filepath snap')
 
-        forM_ (_partial manager) $ \partial ->
-            when (_index partial < index) $ hClose (_file partial)
+        completed' <- case completed of
+            Just Snapshot{ _index = i
+                         , _file = file
+                         , _filepath = path
+                         } | i < index -> do
+                hClose file
+                removeFile path
+                return $ Just snap'
+            _ -> return completed
+
+        forM_ (_partial snapshots) $ \partial ->
+            when (_index partial < index) $ do
+                hClose $ _file partial
+                removeFile $ _filepath partial
         let partial' = filter ((< index) . _index)
                      . _partial
-                     $ manager
+                     $ snapshots
 
-        atomically $ writeTVar managerVar SnapshotManager
+        atomically $ writeTVar (_snapshots manager) Snapshots
             { _completed = completed', _partial = partial' }
+
+partialFilename :: Int -> String
+partialFilename i = show i ++ ".partial.snap"
+
+completedFilename :: Int -> String
+completedFilename i = show i ++ ".completed.snap"

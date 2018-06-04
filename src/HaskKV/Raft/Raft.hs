@@ -11,6 +11,7 @@ import HaskKV.Raft.Leader (runLeader)
 import HaskKV.Raft.Message
 import HaskKV.Raft.Utils
 import HaskKV.Raft.State
+import HaskKV.Snapshot
 
 run :: ( MonadIO m
        , MonadState RaftState m
@@ -18,6 +19,7 @@ run :: ( MonadIO m
        , ApplyEntryM k v e m
        , TempLogM e m
        , Entry e
+       , SnapshotM m
        )
     => m ()
 run = do

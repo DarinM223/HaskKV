@@ -16,21 +16,21 @@ data AppConfig msg k v e = AppConfig
     , _tempLog     :: TempLog e
     , _serverState :: ServerState msg
     , _isLeader    :: TVar Bool
-    , _snapshots   :: TVar SnapshotManager
+    , _snapManager :: SnapshotManager
     }
 
-newAppConfig :: ServerState msg -> IO (AppConfig msg k v e)
-newAppConfig serverState = do
+newAppConfig :: Maybe FilePath -> ServerState msg -> IO (AppConfig msg k v e)
+newAppConfig snapshotDirectory serverState = do
     isLeader <- newTVarIO False
     store <- newTVarIO emptyStore
     tempLog <- newTempLog
-    snapshots <- newSnapshotManager
+    snapManager <- newSnapshotManager snapshotDirectory
     return AppConfig
         { _store       = store
         , _tempLog     = tempLog
         , _serverState = serverState
         , _isLeader    = isLeader
-        , _snapshots   = snapshots
+        , _snapManager = snapManager
         }
 
 newtype AppT msg k v e a = AppT
@@ -87,6 +87,6 @@ instance (KeyClass k, ValueClass v) => ApplyEntryM k v (LogEntry k v) (AppT msg 
     applyEntry = applyEntryImpl
 
 instance SnapshotM (AppT msg k v (LogEntry k v)) where
-    createSnapshot index         = asks _snapshots >>= createSnapshotImpl index
-    writeSnapshot snapData index = asks _snapshots >>= writeSnapshotImpl snapData index
-    saveSnapshot index           = asks _snapshots >>= saveSnapshotImpl index
+    createSnapshot index         = asks _snapManager >>= createSnapshotImpl index
+    writeSnapshot snapData index = asks _snapManager >>= writeSnapshotImpl snapData index
+    saveSnapshot index           = asks _snapManager >>= saveSnapshotImpl index

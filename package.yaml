@@ -29,6 +29,8 @@ dependencies:
 - conduit
 - conduit-extra
 - containers
+- directory
+- filepath
 - heaps
 - hslogger
 - lens

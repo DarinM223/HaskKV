@@ -43,11 +43,12 @@ handleArgs (path:sid:_) = do
             }
     config <- readConfig initConfig path
     serverState <- configToServerState config
-    appConfig <- newAppConfig serverState :: IO MyConfig
-    let raftState = newRaftState sid'
-        raftPort  = configRaftPort sid' config
-        apiPort   = configAPIPort sid' config
-        settings  = configToSettings config
+    let raftState   = newRaftState sid'
+        raftPort    = configRaftPort sid' config
+        apiPort     = configAPIPort sid' config
+        settings    = configToSettings config
+        snapshotDir = configSnapshotDirectory sid' config
+    appConfig <- newAppConfig snapshotDir serverState :: IO MyConfig
 
     -- Add init entries to log and store.
     initEntries <- readEntries $ sid ++ ".init"

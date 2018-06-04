@@ -11,7 +11,6 @@ import HaskKV.Raft.RPC
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
 import HaskKV.Server
-import HaskKV.Store
 
 import qualified Data.IntMap as IM
 
@@ -20,7 +19,6 @@ runLeader :: ( MonadIO m
              , LogM e m
              , TempLogM e m
              , ServerM (RaftMessage e) ServerEvent m
-             , StorageM k v m
              , Entry e
              )
           => m ()
@@ -45,7 +43,7 @@ runLeader = recv >>= \case
         mapM_ (sendAppendEntries lastEntry commitIndex') otherServerIds
     Right rv@RequestVote{}       -> get >>= handleRequestVote rv
     Right ae@AppendEntries{}     -> get >>= handleAppendEntries ae
-    Right is@InstallSnapshot{}   -> get >>= handleInstallSnapshot is
+    Right InstallSnapshot{}      -> return ()
     Right (Response sender resp) -> get >>= handleLeaderResponse sender resp
 
 handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
