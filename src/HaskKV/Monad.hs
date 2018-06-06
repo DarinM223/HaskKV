@@ -1,8 +1,11 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module HaskKV.Monad where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Data.Deriving.Via
 import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp
@@ -18,6 +21,15 @@ data AppConfig msg k v e = AppConfig
     , _isLeader    :: TVar Bool
     , _snapManager :: SnapshotManager
     }
+
+instance HasServerState msg (AppConfig msg k v e) where
+    getServerState = _serverState
+instance HasStoreTVar k v e (AppConfig msg k v e) where
+    getStoreTVar = _store
+instance HasTempLog e (AppConfig msg k v e) where
+    getTempLog = _tempLog
+instance HasSnapshotManager (AppConfig msg k v e) where
+    getSnapshotManager = _snapManager
 
 newAppConfig :: Maybe FilePath -> ServerState msg -> IO (AppConfig msg k v e)
 newAppConfig snapshotDirectory serverState = do
@@ -40,6 +52,21 @@ newtype AppT msg k v e a = AppT
              , MonadReader (AppConfig msg k v e)
              )
 
+$(deriveVia [t| forall msg k v e. ServerM msg ServerEvent (AppT msg k v e)
+                            `Via` ServerT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v) =>
+                StorageM k v (AppT msg k v e)
+          `Via` StoreT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v. (KeyClass k, ValueClass v) =>
+                ApplyEntryM k v (LogEntry k v) (AppT msg k v (LogEntry k v))
+          `Via` StoreT (AppT msg k v (LogEntry k v)) |])
+$(deriveVia [t| forall msg k v e. (Entry e) => LogM e (AppT msg k v e)
+                                         `Via` StoreT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v e. TempLogM e (AppT msg k v e)
+                            `Via` TempLogT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v e. SnapshotM (AppT msg k v e)
+                            `Via` SnapshotT (AppT msg k v e) |])
+
 runAppT :: AppT msg k v e a
         -> AppConfig msg k v e
         -> RaftState
@@ -57,36 +84,3 @@ runAppTConfig m config = flip runReaderT config
                        $ m
   where
     emptyState = newRaftState 0
-
-instance ServerM msg ServerEvent (AppT msg k v e) where
-    send i msg    = asks _serverState >>= sendImpl i msg
-    broadcast msg = asks _serverState >>= broadcastImpl msg
-    recv          = asks _serverState >>= recvImpl
-    reset e       = asks _serverState >>= resetImpl e
-    serverIds     = serverIdsImpl <$> asks _serverState
-
-instance (KeyClass k, ValueClass v) => StorageM k v (AppT msg k v e) where
-    getValue k       = asks _store >>= getValueImpl k
-    setValue k v     = asks _store >>= setValueImpl k v
-    replaceValue k v = asks _store >>= replaceValueImpl k v
-    deleteValue k    = asks _store >>= deleteValueImpl k
-    cleanupExpired t = asks _store >>= cleanupExpiredImpl t
-
-instance (Entry e) => LogM e (AppT msg k v e) where
-    firstIndex      = asks _store >>= firstIndexImpl
-    lastIndex       = asks _store >>= lastIndexImpl
-    loadEntry k     = asks _store >>= loadEntryImpl k
-    storeEntries es = asks _store >>= storeEntriesImpl es
-    deleteRange a b = asks _store >>= deleteRangeImpl a b
-
-instance TempLogM e (AppT msg k v e) where
-    addTemporaryEntry e = asks _tempLog >>= addTemporaryEntryImpl e
-    temporaryEntries    = asks _tempLog >>= temporaryEntriesImpl
-
-instance (KeyClass k, ValueClass v) => ApplyEntryM k v (LogEntry k v) (AppT msg k v (LogEntry k v)) where
-    applyEntry = applyEntryImpl
-
-instance SnapshotM (AppT msg k v (LogEntry k v)) where
-    createSnapshot index         = asks _snapManager >>= createSnapshotImpl index
-    writeSnapshot snapData index = asks _snapManager >>= writeSnapshotImpl snapData index
-    saveSnapshot index           = asks _snapManager >>= saveSnapshotImpl index

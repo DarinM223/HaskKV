@@ -1,8 +1,11 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module HaskKV.Snapshot where
 
 import Control.Concurrent.STM
-import Control.Monad.IO.Class
 import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.Reader
 import Data.List
 import Data.Maybe
 import System.Directory
@@ -32,6 +35,9 @@ data SnapshotManager = SnapshotManager
     , _directoryPath :: FilePath
     }
 
+class HasSnapshotManager r where
+    getSnapshotManager :: r -> SnapshotManager
+
 newSnapshotManager :: Maybe FilePath -> IO SnapshotManager
 newSnapshotManager path = do
     snapshots <- newTVarIO Snapshots
@@ -40,6 +46,25 @@ newSnapshotManager path = do
         }
     return SnapshotManager
         { _snapshots = snapshots, _directoryPath = fromMaybe "" path }
+
+newtype SnapshotT m a = SnapshotT { unSnapshotT :: m a }
+    deriving (Functor, Applicative, Monad)
+
+instance MonadTrans SnapshotT where
+    lift = SnapshotT
+
+instance
+    ( MonadIO m
+    , MonadReader r m
+    , HasSnapshotManager r
+    ) => SnapshotM (SnapshotT m) where
+
+    createSnapshot i = lift . createSnapshotImpl i
+                   =<< getSnapshotManager <$> lift ask
+    writeSnapshot d i = lift . writeSnapshotImpl d i
+                    =<< getSnapshotManager <$> lift ask
+    saveSnapshot i = lift . saveSnapshotImpl i
+                 =<< getSnapshotManager <$> lift ask
 
 createSnapshotImpl :: (MonadIO m) => Int -> SnapshotManager -> m ()
 createSnapshotImpl index manager = liftIO $ do

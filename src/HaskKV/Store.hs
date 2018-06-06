@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module HaskKV.Store where
 
 import Control.Concurrent.STM
@@ -78,6 +80,9 @@ data Store k v e = Store
     , _tempEntries :: [e]
     } deriving (Show)
 
+class HasStoreTVar k v e r | r -> k v e where
+    getStoreTVar :: r -> TVar (Store k v e)
+
 newStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
 newStoreValue seconds version val = do
     currTime <- getCurrentTime
@@ -105,7 +110,49 @@ checkAndSet attempts k f
             Just Nothing  -> checkAndSet (attempts - 1) k f
             _             -> return False
 
--- StorageM instance implementations
+newtype StoreT m a = StoreT { unStoreT :: m a }
+    deriving (Functor, Applicative, Monad)
+
+instance MonadTrans StoreT where
+    lift = StoreT
+
+instance
+    ( MonadIO m
+    , MonadReader r m
+    , HasStoreTVar k v e r
+    , KeyClass k
+    , ValueClass v
+    ) => StorageM k v (StoreT m) where
+
+    getValue k = lift . getValueImpl k =<< getStoreTVar <$> lift ask
+    setValue k v = lift . setValueImpl k v =<< getStoreTVar <$> lift ask
+    replaceValue k v = lift . replaceValueImpl k v =<< getStoreTVar <$> lift ask
+    deleteValue k = lift . deleteValueImpl k =<< getStoreTVar <$> lift ask
+    cleanupExpired t = lift . cleanupExpiredImpl t =<< getStoreTVar <$> lift ask
+
+instance
+    ( MonadIO m
+    , MonadReader r m
+    , HasStoreTVar k v e r
+    , Entry e
+    ) => LogM e (StoreT m) where
+
+    firstIndex = lift . firstIndexImpl =<< getStoreTVar <$> lift ask
+    lastIndex = lift . lastIndexImpl =<< getStoreTVar <$> lift ask
+    loadEntry k = lift . loadEntryImpl k =<< getStoreTVar <$> lift ask
+    storeEntries es = lift . storeEntriesImpl es =<< getStoreTVar <$> lift ask
+    deleteRange a b = lift . deleteRangeImpl a b =<< getStoreTVar <$> lift ask
+
+instance
+    ( MonadIO m
+    , StorageM k v m
+    , MonadReader r m
+    , HasStoreTVar k v (LogEntry k v) r
+    , KeyClass k
+    , ValueClass v
+    ) => ApplyEntryM k v (LogEntry k v) (StoreT m) where
+
+    applyEntry = lift . applyEntryImpl
 
 getValueImpl :: (Ord k, MonadIO m) => k -> TVar (Store k v e) -> m (Maybe v)
 getValueImpl k = fmap (getStore k) . liftIO . readTVarIO
@@ -133,8 +180,6 @@ cleanupExpiredImpl :: (Show k, Ord k, Storable v, MonadIO m)
                    -> m ()
 cleanupExpiredImpl t = liftIO . modifyTVarIO (cleanupStore t)
 
--- LogM instance implementations
-
 firstIndexImpl :: (MonadIO m) => TVar (Store k v e) -> m Int
 firstIndexImpl = fmap (_lowIdx . _log) . liftIO . readTVarIO
 
@@ -154,8 +199,6 @@ deleteRangeImpl :: (MonadIO m) => Int -> Int -> TVar (Store k v e) -> m ()
 deleteRangeImpl a b
     = liftIO
     . modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
-
--- ApplyEntryM instance implementations
 
 applyEntryImpl :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
 applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do

@@ -1,15 +1,22 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module HaskKV.Log.Temp where
 
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
+import Control.Monad.Reader
 import Data.Maybe (fromJust)
 import GHC.Records
 import HaskKV.Utils
+import HaskKV.Log
 import HaskKV.Log.Entry
 
 import qualified HaskKV.Timer as Timer
 
 newtype TempLog e = TempLog { unTempLog :: TVar [e] }
+
+class HasTempLog e r | r -> e where
+    getTempLog :: r -> TempLog e
 
 newTempLog :: IO (TempLog e)
 newTempLog = TempLog <$> newTVarIO []
@@ -17,7 +24,21 @@ newTempLog = TempLog <$> newTVarIO []
 maxTempEntries :: Int
 maxTempEntries = 1000
 
--- TempLogM instance implementations.
+newtype TempLogT m a = TempLogT { unTempLogT :: m a }
+    deriving (Functor, Applicative, Monad)
+
+instance MonadTrans TempLogT where
+    lift = TempLogT
+
+instance
+    ( MonadIO m
+    , MonadReader r m
+    , HasTempLog e r
+    ) => TempLogM e (TempLogT m) where
+
+    addTemporaryEntry e = lift . addTemporaryEntryImpl e
+                      =<< getTempLog <$> lift ask
+    temporaryEntries = lift . temporaryEntriesImpl =<< getTempLog <$> lift ask
 
 addTemporaryEntryImpl :: (MonadIO m) => e -> TempLog e -> m ()
 addTemporaryEntryImpl e = liftIO . modifyTVarIO (addEntry e) . unTempLog

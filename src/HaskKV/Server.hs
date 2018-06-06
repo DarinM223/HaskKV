@@ -1,3 +1,5 @@
+{-# LANGUAGE UndecidableInstances #-}
+
 module HaskKV.Server where
 
 import Control.Concurrent (forkIO, threadDelay)
@@ -35,6 +37,9 @@ data ServerState msg = ServerState
     , _electionTimeout  :: Timer.Timeout
     , _heartbeatTimeout :: Timer.Timeout
     }
+
+class HasServerState msg r | r -> msg where
+    getServerState :: r -> ServerState msg
 
 newServerState :: Capacity
                -> Timer.Timeout
@@ -111,7 +116,23 @@ inject HeartbeatTimeout s =
 inject ElectionTimeout s =
     liftIO $ Timer.reset (_electionTimer s) (Timer.Timeout 0)
 
--- ServerM instance implementations
+newtype ServerT m a = ServerT { unServerT :: m a }
+    deriving (Functor, Applicative, Monad)
+
+instance MonadTrans ServerT where
+    lift = ServerT
+
+instance
+    ( MonadIO m
+    , MonadReader r m
+    , HasServerState msg r
+    ) => ServerM msg ServerEvent (ServerT m) where
+
+    send i msg = lift . sendImpl i msg =<< getServerState <$> lift ask
+    broadcast msg = lift . broadcastImpl msg =<< getServerState <$> lift ask
+    recv = lift . recvImpl =<< getServerState <$> lift ask
+    reset e = lift . resetImpl e =<< getServerState <$> lift ask
+    serverIds = serverIdsImpl . getServerState <$> lift ask
 
 sendImpl :: (MonadIO m) => Int -> msg -> ServerState msg -> m ()
 sendImpl i msg s = do
