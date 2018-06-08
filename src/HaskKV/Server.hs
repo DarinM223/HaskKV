@@ -110,17 +110,12 @@ data ServerEvent = ElectionTimeout
                  | HeartbeatTimeout
                  deriving (Show, Eq)
 
-inject :: (MonadIO m) => ServerEvent -> ServerState msg -> m ()
-inject HeartbeatTimeout s =
-    liftIO $ Timer.reset (_heartbeatTimer s) (Timer.Timeout 0)
-inject ElectionTimeout s =
-    liftIO $ Timer.reset (_electionTimer s) (Timer.Timeout 0)
+inject :: ServerEvent -> ServerState msg -> IO ()
+inject HeartbeatTimeout s = Timer.reset (_heartbeatTimer s) (Timer.Timeout 0)
+inject ElectionTimeout s  = Timer.reset (_electionTimer s) (Timer.Timeout 0)
 
 newtype ServerT m a = ServerT { unServerT :: m a }
-    deriving (Functor, Applicative, Monad)
-
-instance MonadTrans ServerT where
-    lift = ServerT
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
 instance
     ( MonadIO m
@@ -128,31 +123,25 @@ instance
     , HasServerState msg r
     ) => ServerM msg ServerEvent (ServerT m) where
 
-    send i msg = lift . sendImpl i msg =<< getServerState <$> lift ask
-    broadcast msg = lift . broadcastImpl msg =<< getServerState <$> lift ask
-    recv = lift . recvImpl =<< getServerState <$> lift ask
-    reset e = lift . resetImpl e =<< getServerState <$> lift ask
-    serverIds = serverIdsImpl . getServerState <$> lift ask
+    send i msg = liftIO . sendImpl i msg =<< asks getServerState
+    broadcast msg = liftIO . broadcastImpl msg =<< asks getServerState
+    recv = liftIO . recvImpl =<< asks getServerState
+    reset e = liftIO . resetImpl e =<< asks getServerState
+    serverIds = serverIdsImpl <$> asks getServerState
 
-sendImpl :: (MonadIO m) => Int -> msg -> ServerState msg -> m ()
+sendImpl :: Int -> msg -> ServerState msg -> IO ()
 sendImpl i msg s = do
     let rq = IM.lookup i . _outgoing $ s
-    mapM_ (liftIO . atomically . flip RQ.write msg) rq
+    mapM_ (atomically . flip RQ.write msg) rq
 
-broadcastImpl :: (MonadIO m) => msg -> ServerState msg -> m ()
-broadcastImpl msg
-    = liftIO
-    . atomically
-    . mapM_ (`RQ.write` msg)
-    . IM.elems
-    . _outgoing
+broadcastImpl :: msg -> ServerState msg -> IO ()
+broadcastImpl msg = atomically . mapM_ (`RQ.write` msg) . IM.elems . _outgoing
 
-recvImpl :: (MonadIO m) => ServerState msg -> m (Either ServerEvent msg)
-recvImpl s =
-    liftIO . atomically $
-        awaitElectionTimeout s
-        `orElse` awaitHeartbeatTimeout s
-        `orElse` (Right . fst <$> RQ.read (_messages s))
+recvImpl :: ServerState msg -> IO (Either ServerEvent msg)
+recvImpl s = atomically $
+    awaitElectionTimeout s
+    `orElse` awaitHeartbeatTimeout s
+    `orElse` (Right . fst <$> RQ.read (_messages s))
   where
     awaitElectionTimeout
         = fmap (const (Left ElectionTimeout))
@@ -163,10 +152,10 @@ recvImpl s =
         . Timer.await
         . _heartbeatTimer
 
-resetImpl :: (MonadIO m) => ServerEvent -> ServerState msg -> m ()
+resetImpl :: ServerEvent -> ServerState msg -> IO ()
 resetImpl HeartbeatTimeout s =
-    liftIO $ Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
-resetImpl ElectionTimeout s = liftIO $ do
+    Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
+resetImpl ElectionTimeout s = do
     timeout <- Timer.randTimeout $ _electionTimeout s
     Timer.reset (_electionTimer s) timeout
 

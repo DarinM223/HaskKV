@@ -111,10 +111,7 @@ checkAndSet attempts k f
             _             -> return False
 
 newtype StoreT m a = StoreT { unStoreT :: m a }
-    deriving (Functor, Applicative, Monad)
-
-instance MonadTrans StoreT where
-    lift = StoreT
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
 instance
     ( MonadIO m
@@ -124,11 +121,11 @@ instance
     , ValueClass v
     ) => StorageM k v (StoreT m) where
 
-    getValue k = lift . getValueImpl k =<< getStoreTVar <$> lift ask
-    setValue k v = lift . setValueImpl k v =<< getStoreTVar <$> lift ask
-    replaceValue k v = lift . replaceValueImpl k v =<< getStoreTVar <$> lift ask
-    deleteValue k = lift . deleteValueImpl k =<< getStoreTVar <$> lift ask
-    cleanupExpired t = lift . cleanupExpiredImpl t =<< getStoreTVar <$> lift ask
+    getValue k = liftIO . getValueImpl k =<< asks getStoreTVar
+    setValue k v = liftIO . setValueImpl k v =<< asks getStoreTVar
+    replaceValue k v = liftIO . replaceValueImpl k v =<< asks getStoreTVar
+    deleteValue k = liftIO . deleteValueImpl k =<< asks getStoreTVar
+    cleanupExpired t = liftIO . cleanupExpiredImpl t =<< asks getStoreTVar
 
 instance
     ( MonadIO m
@@ -137,11 +134,11 @@ instance
     , Entry e
     ) => LogM e (StoreT m) where
 
-    firstIndex = lift . firstIndexImpl =<< getStoreTVar <$> lift ask
-    lastIndex = lift . lastIndexImpl =<< getStoreTVar <$> lift ask
-    loadEntry k = lift . loadEntryImpl k =<< getStoreTVar <$> lift ask
-    storeEntries es = lift . storeEntriesImpl es =<< getStoreTVar <$> lift ask
-    deleteRange a b = lift . deleteRangeImpl a b =<< getStoreTVar <$> lift ask
+    firstIndex = liftIO . firstIndexImpl =<< asks getStoreTVar
+    lastIndex = liftIO . lastIndexImpl =<< asks getStoreTVar
+    loadEntry k = liftIO . loadEntryImpl k =<< asks getStoreTVar
+    storeEntries es = liftIO . storeEntriesImpl es =<< asks getStoreTVar
+    deleteRange a b = liftIO . deleteRangeImpl a b =<< asks getStoreTVar
 
 instance
     ( MonadIO m
@@ -152,53 +149,51 @@ instance
     , ValueClass v
     ) => ApplyEntryM k v (LogEntry k v) (StoreT m) where
 
-    applyEntry = lift . applyEntryImpl
+    applyEntry = applyEntryImpl
 
-getValueImpl :: (Ord k, MonadIO m) => k -> TVar (Store k v e) -> m (Maybe v)
-getValueImpl k = fmap (getStore k) . liftIO . readTVarIO
+getValueImpl :: (Ord k) => k -> TVar (Store k v e) -> IO (Maybe v)
+getValueImpl k = fmap (getStore k) . readTVarIO
 
-setValueImpl :: (Ord k, Storable v, MonadIO m)
+setValueImpl :: (Ord k, Storable v)
              => k
              -> v
              -> TVar (Store k v e)
-             -> m ()
-setValueImpl k v = liftIO . modifyTVarIO (setStore k v)
+             -> IO ()
+setValueImpl k v = modifyTVarIO (setStore k v)
 
-replaceValueImpl :: (Ord k, Storable v, MonadIO m)
+replaceValueImpl :: (Ord k, Storable v)
                  => k
                  -> v
                  -> TVar (Store k v e)
-                 -> m (Maybe CAS)
-replaceValueImpl k v = liftIO . stateTVarIO (replaceStore k v)
+                 -> IO (Maybe CAS)
+replaceValueImpl k v = stateTVarIO (replaceStore k v)
 
-deleteValueImpl :: (Ord k, MonadIO m) => k -> TVar (Store k v e) -> m ()
-deleteValueImpl k = liftIO . modifyTVarIO (deleteStore k)
+deleteValueImpl :: (Ord k) => k -> TVar (Store k v e) -> IO ()
+deleteValueImpl k = modifyTVarIO (deleteStore k)
 
-cleanupExpiredImpl :: (Show k, Ord k, Storable v, MonadIO m)
+cleanupExpiredImpl :: (Show k, Ord k, Storable v)
                    => Time
                    -> TVar (Store k v e)
-                   -> m ()
-cleanupExpiredImpl t = liftIO . modifyTVarIO (cleanupStore t)
+                   -> IO ()
+cleanupExpiredImpl t = modifyTVarIO (cleanupStore t)
 
-firstIndexImpl :: (MonadIO m) => TVar (Store k v e) -> m Int
-firstIndexImpl = fmap (_lowIdx . _log) . liftIO . readTVarIO
+firstIndexImpl :: TVar (Store k v e) -> IO Int
+firstIndexImpl = fmap (_lowIdx . _log) . readTVarIO
 
-lastIndexImpl :: (MonadIO m) => TVar (Store k v e) -> m Int
-lastIndexImpl = fmap (_highIdx . _log) . liftIO . readTVarIO
+lastIndexImpl :: TVar (Store k v e) -> IO Int
+lastIndexImpl = fmap (_highIdx . _log) . readTVarIO
 
-loadEntryImpl :: (MonadIO m) => Int -> TVar (Store k v e) -> m (Maybe e)
+loadEntryImpl :: Int -> TVar (Store k v e) -> IO (Maybe e)
 loadEntryImpl k =
-    fmap (IM.lookup k . _entries . _log) . liftIO . readTVarIO
+    fmap (IM.lookup k . _entries . _log) . readTVarIO
 
-storeEntriesImpl :: (MonadIO m, Entry e) => [e] -> TVar (Store k v e) -> m ()
-storeEntriesImpl es
-    = liftIO
-    . modifyTVarIO (\s -> s { _log = storeEntriesLog es (_log s) })
+storeEntriesImpl :: (Entry e) => [e] -> TVar (Store k v e) -> IO ()
+storeEntriesImpl es =
+    modifyTVarIO (\s -> s { _log = storeEntriesLog es (_log s) })
 
-deleteRangeImpl :: (MonadIO m) => Int -> Int -> TVar (Store k v e) -> m ()
-deleteRangeImpl a b
-    = liftIO
-    . modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
+deleteRangeImpl :: Int -> Int -> TVar (Store k v e) -> IO ()
+deleteRangeImpl a b =
+    modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
 
 applyEntryImpl :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
 applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do

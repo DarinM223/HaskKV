@@ -25,10 +25,7 @@ maxTempEntries :: Int
 maxTempEntries = 1000
 
 newtype TempLogT m a = TempLogT { unTempLogT :: m a }
-    deriving (Functor, Applicative, Monad)
-
-instance MonadTrans TempLogT where
-    lift = TempLogT
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
 instance
     ( MonadIO m
@@ -36,33 +33,28 @@ instance
     , HasTempLog e r
     ) => TempLogM e (TempLogT m) where
 
-    addTemporaryEntry e = lift . addTemporaryEntryImpl e
-                      =<< getTempLog <$> lift ask
-    temporaryEntries = lift . temporaryEntriesImpl =<< getTempLog <$> lift ask
+    addTemporaryEntry e = liftIO . addTemporaryEntryImpl e =<< asks getTempLog
+    temporaryEntries = liftIO . temporaryEntriesImpl =<< asks getTempLog
 
-addTemporaryEntryImpl :: (MonadIO m) => e -> TempLog e -> m ()
-addTemporaryEntryImpl e = liftIO . modifyTVarIO (addEntry e) . unTempLog
+addTemporaryEntryImpl :: e -> TempLog e -> IO ()
+addTemporaryEntryImpl e = modifyTVarIO (addEntry e) . unTempLog
   where
     addEntry e es
         | length es + 1 > maxTempEntries = es
         | otherwise                      = e:es
 
-temporaryEntriesImpl :: (MonadIO m) => TempLog e -> m [e]
-temporaryEntriesImpl (TempLog var) =
-    liftIO $ atomically $ do
-        entries <- reverse <$> readTVar var
-        writeTVar var []
-        return entries
+temporaryEntriesImpl :: TempLog e -> IO [e]
+temporaryEntriesImpl (TempLog var) = atomically $ do
+    entries <- reverse <$> readTVar var
+    writeTVar var []
+    return entries
 
 applyTimeout :: Timer.Timeout
 applyTimeout = Timer.Timeout 5000000
 
 -- | Stores entry in the log and then blocks until log entry is committed.
-waitApplyEntry :: (MonadIO m, HasField "_completed" e Completed)
-               => e
-               -> TempLog e
-               -> m ()
-waitApplyEntry entry temp = liftIO $ do
+waitApplyEntry :: (HasField "_completed" e Completed) => e -> TempLog e -> IO ()
+waitApplyEntry entry temp = do
     addTemporaryEntryImpl entry temp
 
     timer <- Timer.newIO

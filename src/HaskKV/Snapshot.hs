@@ -47,11 +47,11 @@ newSnapshotManager path = do
     return SnapshotManager
         { _snapshots = snapshots, _directoryPath = fromMaybe "" path }
 
-newtype SnapshotT m a = SnapshotT { unSnapshotT :: m a }
-    deriving (Functor, Applicative, Monad)
+loadSnapshots :: FilePath -> TVar Snapshots -> IO ()
+loadSnapshots path snapshots = undefined -- TODO(DarinM223): implement this
 
-instance MonadTrans SnapshotT where
-    lift = SnapshotT
+newtype SnapshotT m a = SnapshotT { unSnapshotT :: m a }
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
 instance
     ( MonadIO m
@@ -59,15 +59,14 @@ instance
     , HasSnapshotManager r
     ) => SnapshotM (SnapshotT m) where
 
-    createSnapshot i = lift . createSnapshotImpl i
-                   =<< getSnapshotManager <$> lift ask
-    writeSnapshot d i = lift . writeSnapshotImpl d i
-                    =<< getSnapshotManager <$> lift ask
-    saveSnapshot i = lift . saveSnapshotImpl i
-                 =<< getSnapshotManager <$> lift ask
+    createSnapshot i = liftIO . createSnapshotImpl i
+                   =<< asks getSnapshotManager
+    writeSnapshot d i = liftIO . writeSnapshotImpl d i
+                    =<< asks getSnapshotManager
+    saveSnapshot i = liftIO . saveSnapshotImpl i =<< asks getSnapshotManager
 
-createSnapshotImpl :: (MonadIO m) => Int -> SnapshotManager -> m ()
-createSnapshotImpl index manager = liftIO $ do
+createSnapshotImpl :: Int -> SnapshotManager -> IO ()
+createSnapshotImpl index manager = do
     handle <- openFile filename WriteMode
     atomically $ modifyTVar (_snapshots manager) $ \s ->
         let snap = Snapshot
@@ -79,23 +78,19 @@ createSnapshotImpl index manager = liftIO $ do
   where
     filename = _directoryPath manager </> partialFilename index
 
-writeSnapshotImpl :: (MonadIO m)
-                  => B.ByteString
-                  -> Int
-                  -> SnapshotManager
-                  -> m ()
+writeSnapshotImpl :: B.ByteString -> Int -> SnapshotManager -> IO ()
 writeSnapshotImpl snapData index = mapM_ (put snapData . _file)
                                  . find ((== index) . _index)
                                  . _partial
-                               <=< liftIO . readTVarIO
+                               <=< readTVarIO
                                  . _snapshots
   where
-    put snapData handle = liftIO $ do
+    put snapData handle = do
         B.hPut handle snapData
         hFlush handle
 
-saveSnapshotImpl :: (MonadIO m) => Int -> SnapshotManager -> m ()
-saveSnapshotImpl index manager = liftIO $ do
+saveSnapshotImpl :: Int -> SnapshotManager -> IO ()
+saveSnapshotImpl index manager = do
     snapshots <- readTVarIO $ _snapshots manager
     let snap = find ((== index) . _index) . _partial $ snapshots
 
@@ -129,7 +124,7 @@ saveSnapshotImpl index manager = liftIO $ do
         removeFile $ _filepath snap
 
     filterSnapshot index = \case
-        snap@Snapshot{ _index = i } | i < index -> liftIO $ do
+        snap@Snapshot{ _index = i } | i < index -> do
             removeSnapshot snap
             return False
         Snapshot{ _index = i } | i > index -> return True
