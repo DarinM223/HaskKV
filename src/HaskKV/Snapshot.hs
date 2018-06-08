@@ -23,12 +23,15 @@ data Snapshot = Snapshot
     { _file     :: Handle
     , _index    :: Int
     , _filepath :: FilePath
-    } deriving (Show)
+    } deriving (Show, Eq)
+
+instance Ord Snapshot where
+    compare s1 s2 = compare (_index s1) (_index s2)
 
 data Snapshots = Snapshots
     { _completed :: Maybe Snapshot
     , _partial   :: [Snapshot]
-    }
+    } deriving (Show, Eq)
 
 data SnapshotManager = SnapshotManager
     { _snapshots     :: TVar Snapshots
@@ -40,15 +43,32 @@ class HasSnapshotManager r where
 
 newSnapshotManager :: Maybe FilePath -> IO SnapshotManager
 newSnapshotManager path = do
-    snapshots <- newTVarIO Snapshots
-        { _completed = Nothing
-        , _partial   = []
-        }
+    let directoryPath = fromMaybe "" path
+    snapshots <- loadSnapshots directoryPath
     return SnapshotManager
-        { _snapshots = snapshots, _directoryPath = fromMaybe "" path }
+        { _snapshots = snapshots, _directoryPath = directoryPath }
 
-loadSnapshots :: FilePath -> TVar Snapshots -> IO ()
-loadSnapshots path snapshots = undefined -- TODO(DarinM223): implement this
+closeSnapshotManager :: SnapshotManager -> IO ()
+closeSnapshotManager manager = do
+    snapshots <- readTVarIO $ _snapshots manager
+    mapM_ (hClose . _file) (_completed snapshots)
+    mapM_ (hClose . _file) (_partial snapshots)
+
+loadSnapshots :: FilePath -> IO (TVar Snapshots)
+loadSnapshots path = do
+    files <- getDirectoryContents path
+    partial <- mapM (toSnapshot . (path </>)) . filter isPartial $ files
+    completed <- mapM (toSnapshot . (path </>)) . filter isCompleted $ files
+    newTVarIO Snapshots
+        { _completed = listToMaybe completed, _partial = partial }
+  where
+    toSnapshot path = do
+        let index = read . fileBase $ path :: Int
+        handle <- openFile path AppendMode
+        return Snapshot { _file = handle, _index = index, _filepath = path }
+
+    isPartial = (== ".partial.snap") . fileExt
+    isCompleted = (== ".completed.snap") . fileExt
 
 newtype SnapshotT m a = SnapshotT { unSnapshotT :: m a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
@@ -67,7 +87,7 @@ instance
 
 createSnapshotImpl :: Int -> SnapshotManager -> IO ()
 createSnapshotImpl index manager = do
-    handle <- openFile filename WriteMode
+    handle <- openFile filename AppendMode
     atomically $ modifyTVar (_snapshots manager) $ \s ->
         let snap = Snapshot
                 { _file     = handle
@@ -98,17 +118,17 @@ saveSnapshotImpl index manager = do
         -- Close and rename snapshot file as completed.
         hClose $ _file snap
         let path' = replaceFileName (_filepath snap) (completedFilename index)
-            snap' = snap { _filepath = path' }
-        renameFile (_filepath snap) (_filepath snap')
+        renameFile (_filepath snap) path'
+        reopened <- openFile path' AppendMode
+        let snap' = snap { _file = reopened, _filepath = path' }
 
         -- Replace the existing completed snapshot file if its
         -- index is smaller than the saving snapshot's index.
         completed' <- case _completed snapshots of
-            Just old@Snapshot{ _index = i } | i < index -> do
-                removeSnapshot old
-                return $ Just snap'
-            Nothing   -> return $ Just snap'
-            completed -> return completed
+            Just old@Snapshot{ _index = i } | i < index ->
+                removeSnapshot old >> pure (Just snap')
+            Nothing   -> pure (Just snap')
+            completed -> removeSnapshot snap' >> pure completed
 
         -- Remove partial snapshots with an index smaller than
         -- the saving snapshot's index.
@@ -135,3 +155,15 @@ partialFilename i = show i ++ ".partial.snap"
 
 completedFilename :: Int -> String
 completedFilename i = show i ++ ".completed.snap"
+
+fileBase :: FilePath -> String
+fileBase path
+    | hasExtension path = fileBase $ takeBaseName path
+    | otherwise         = path
+
+fileExt :: FilePath -> String
+fileExt = go ""
+  where
+    go fullExt path = case splitExtension path of
+        (_, "")           -> fullExt
+        (incomplete, ext) -> go (ext ++ fullExt) incomplete
