@@ -23,7 +23,7 @@ data Snapshot = Snapshot
     { _file     :: Handle
     , _index    :: Int
     , _filepath :: FilePath
-    }
+    } deriving (Show)
 
 data Snapshots = Snapshots
     { _completed :: Maybe Snapshot
@@ -97,34 +97,43 @@ writeSnapshotImpl snapData index = mapM_ (put snapData . _file)
 saveSnapshotImpl :: (MonadIO m) => Int -> SnapshotManager -> m ()
 saveSnapshotImpl index manager = liftIO $ do
     snapshots <- readTVarIO $ _snapshots manager
-    let completed = _completed snapshots
-        snap      = find ((== index) . _index) . _partial $ snapshots
+    let snap = find ((== index) . _index) . _partial $ snapshots
+
     forM_ snap $ \snap@Snapshot{ _index = index } -> do
+        -- Close and rename snapshot file as completed.
         hClose $ _file snap
         let path' = replaceFileName (_filepath snap) (completedFilename index)
             snap' = snap { _filepath = path' }
         renameFile (_filepath snap) (_filepath snap')
 
-        completed' <- case completed of
-            Just Snapshot{ _index = i
-                         , _file = file
-                         , _filepath = path
-                         } | i < index -> do
-                hClose file
-                removeFile path
+        -- Replace the existing completed snapshot file if its
+        -- index is smaller than the saving snapshot's index.
+        completed' <- case _completed snapshots of
+            Just old@Snapshot{ _index = i } | i < index -> do
+                removeSnapshot old
                 return $ Just snap'
-            _ -> return completed
+            Nothing   -> return $ Just snap'
+            completed -> return completed
 
-        forM_ (_partial snapshots) $ \partial ->
-            when (_index partial < index) $ do
-                hClose $ _file partial
-                removeFile $ _filepath partial
-        let partial' = filter ((< index) . _index)
-                     . _partial
-                     $ snapshots
+        -- Remove partial snapshots with an index smaller than
+        -- the saving snapshot's index.
+        partial' <- filterM (filterSnapshot index)
+                  . _partial
+                  $ snapshots
 
         atomically $ writeTVar (_snapshots manager) Snapshots
             { _completed = completed', _partial = partial' }
+  where
+    removeSnapshot snap = do
+        hClose $ _file snap
+        removeFile $ _filepath snap
+
+    filterSnapshot index = \case
+        snap@Snapshot{ _index = i } | i < index -> liftIO $ do
+            removeSnapshot snap
+            return False
+        Snapshot{ _index = i } | i > index -> return True
+        _                                  -> return False
 
 partialFilename :: Int -> String
 partialFilename i = show i ++ ".partial.snap"
