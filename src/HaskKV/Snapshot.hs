@@ -9,7 +9,6 @@ import Control.Monad.Reader
 import Data.Binary
 import Data.List
 import Data.Maybe
-import Data.Proxy
 import System.Directory
 import System.FilePath
 import System.IO
@@ -17,8 +16,7 @@ import System.IO
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 
-class (Binary s) => HasSnapshotType s m | m -> s where
-    snapshotType :: m (Proxy s)
+class (Binary s) => HasSnapshotType s (m :: * -> *) | m -> s
 
 class (Binary s) => SnapshotM s m | m -> s where
     createSnapshot :: Int -> m ()
@@ -173,11 +171,10 @@ saveSnapshotImpl index manager = do
         removeFile $ _filepath snap
 
     filterSnapshot index = \case
-        snap@Snapshot{ _index = i } | i < index -> do
-            removeSnapshot snap
-            return False
-        Snapshot{ _index = i } | i > index -> return True
-        _                                  -> return False
+        snap@Snapshot{ _index = i } | i < index ->
+            removeSnapshot snap >> pure False
+        Snapshot{ _index = i } | i > index -> pure True
+        _                                  -> pure False
 
 partialFilename :: Int -> String
 partialFilename i = show i ++ ".partial.snap"

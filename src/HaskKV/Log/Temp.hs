@@ -2,24 +2,24 @@
 
 module HaskKV.Log.Temp where
 
+import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Maybe (fromJust)
 import GHC.Records
-import HaskKV.Utils
 import HaskKV.Log
 import HaskKV.Log.Entry
 
 import qualified HaskKV.Timer as Timer
 
-newtype TempLog e = TempLog { unTempLog :: TVar [e] }
+newtype TempLog e = TempLog { unTempLog :: MVar [e] }
 
 class HasTempLog e r | r -> e where
     getTempLog :: r -> TempLog e
 
 newTempLog :: IO (TempLog e)
-newTempLog = TempLog <$> newTVarIO []
+newTempLog = TempLog <$> newMVar []
 
 maxTempEntries :: Int
 maxTempEntries = 1000
@@ -37,16 +37,16 @@ instance
     temporaryEntries = liftIO . temporaryEntriesImpl =<< asks getTempLog
 
 addTemporaryEntryImpl :: e -> TempLog e -> IO ()
-addTemporaryEntryImpl e = modifyTVarIO (addEntry e) . unTempLog
+addTemporaryEntryImpl e = flip modifyMVar_ (pure . addEntry e) . unTempLog
   where
     addEntry e es
         | length es + 1 > maxTempEntries = es
         | otherwise                      = e:es
 
 temporaryEntriesImpl :: TempLog e -> IO [e]
-temporaryEntriesImpl (TempLog var) = atomically $ do
-    entries <- reverse <$> readTVar var
-    writeTVar var []
+temporaryEntriesImpl (TempLog var) = do
+    entries <- reverse <$> takeMVar var
+    putMVar var []
     return entries
 
 applyTimeout :: Timer.Timeout

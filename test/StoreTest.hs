@@ -1,7 +1,6 @@
 module StoreTest (tests) where
 
 import Control.Concurrent
-import Control.Concurrent.STM
 import Control.Monad
 import Data.Time
 import Test.Tasty
@@ -13,10 +12,10 @@ import HaskKV.Log.Entry
 tests :: TestTree
 tests = testGroup "Store tests" [unitTests]
 
-createStore :: IO (TVar (Store Int
-                               (StoreValue String)
-                               (LogEntry Int (StoreValue String))))
-createStore = newTVarIO emptyStore
+createStore :: IO (Store Int
+                         (StoreValue String)
+                         (LogEntry Int (StoreValue String)))
+createStore = emptyStore
 
 unitTests :: TestTree
 unitTests = testGroup "UnitTests"

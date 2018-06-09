@@ -105,6 +105,7 @@ handleInstallSnapshot :: ( StorageM k v m
                          , LogM e m
                          , ServerM (RaftMessage e) ServerEvent m
                          , SnapshotM s m
+                         , LoadSnapshotM s m
                          , MonadState RaftState m
                          , Entry e
                          )
@@ -125,10 +126,15 @@ handleInstallSnapshot is s
                       && entryTerm e == _lastIncludedTerm is ->
                     -- TODO(DarinM223): delete logs up to index
                     return ()
-                _ ->
-                    -- TODO(DarinM223): discard entire log
-                    -- TODO(DarinM223): reset state machine using snapshot contents
-                    return ()
+                _ -> do
+                    -- Discard entire log and reset state machine
+                    -- using snapshot contents.
+                    first <- firstIndex
+                    last <- lastIndex
+                    deleteRange first last
+
+                    snap <- readSnapshot snapIndex
+                    mapM_ loadSnapshot snap
 
         send (_leaderId is) $ successResponse s
   where

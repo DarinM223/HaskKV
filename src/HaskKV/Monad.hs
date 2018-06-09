@@ -5,8 +5,10 @@ module HaskKV.Monad where
 import Control.Concurrent.STM
 import Control.Monad.Reader
 import Control.Monad.State.Strict
+import Data.Binary
+import Data.Binary.Orphans ()
 import Data.Deriving.Via
-import Data.Proxy
+import Data.Map (Map)
 import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp
@@ -16,7 +18,7 @@ import HaskKV.Snapshot
 import HaskKV.Store
 
 data AppConfig msg k v e = AppConfig
-    { _store       :: TVar (Store k v e)
+    { _store       :: Store k v e
     , _tempLog     :: TempLog e
     , _serverState :: ServerState msg
     , _isLeader    :: TVar Bool
@@ -25,8 +27,8 @@ data AppConfig msg k v e = AppConfig
 
 instance HasServerState msg (AppConfig msg k v e) where
     getServerState = _serverState
-instance HasStoreTVar k v e (AppConfig msg k v e) where
-    getStoreTVar = _store
+instance HasStore k v e (AppConfig msg k v e) where
+    getStore = _store
 instance HasTempLog e (AppConfig msg k v e) where
     getTempLog = _tempLog
 instance HasSnapshotManager (AppConfig msg k v e) where
@@ -35,7 +37,7 @@ instance HasSnapshotManager (AppConfig msg k v e) where
 newAppConfig :: Maybe FilePath -> ServerState msg -> IO (AppConfig msg k v e)
 newAppConfig snapshotDirectory serverState = do
     isLeader <- newTVarIO False
-    store <- newTVarIO emptyStore
+    store <- emptyStore
     tempLog <- newTempLog
     snapManager <- newSnapshotManager snapshotDirectory
     return AppConfig
@@ -53,11 +55,9 @@ newtype AppT msg k v e a = AppT
              , MonadReader (AppConfig msg k v e)
              )
 
--- TODO(DarinM223): change to actual snapshot type.
-type SnapshotType = Int
-
-instance HasSnapshotType SnapshotType (AppT msg k v e) where
-    snapshotType = pure Proxy
+type SnapshotType k v = Map k v
+instance (Binary k, Binary v) =>
+    HasSnapshotType (SnapshotType k v) (AppT msg k v e)
 
 $(deriveVia [t| forall msg k v e. ServerM msg ServerEvent (AppT msg k v e)
                             `Via` ServerT (AppT msg k v e) |])
@@ -69,10 +69,14 @@ $(deriveVia [t| forall msg k v. (KeyClass k, ValueClass v) =>
           `Via` StoreT (AppT msg k v (LogEntry k v)) |])
 $(deriveVia [t| forall msg k v e. (Entry e) => LogM e (AppT msg k v e)
                                          `Via` StoreT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v) =>
+                LoadSnapshotM (SnapshotType k v) (AppT msg k v e)
+          `Via` StoreT (AppT msg k v e) |])
 $(deriveVia [t| forall msg k v e. TempLogM e (AppT msg k v e)
                             `Via` TempLogT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. SnapshotM SnapshotType (AppT msg k v e)
-                            `Via` SnapshotT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v e. (Binary k, Binary v) =>
+                SnapshotM (SnapshotType k v) (AppT msg k v e)
+          `Via` SnapshotT (AppT msg k v e) |])
 
 runAppT :: AppT msg k v e a
         -> AppConfig msg k v e

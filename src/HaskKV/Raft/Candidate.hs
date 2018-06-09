@@ -18,6 +18,7 @@ runCandidate :: ( MonadIO m
                 , ServerM (RaftMessage e) ServerEvent m
                 , StorageM k v m
                 , SnapshotM s m
+                , LoadSnapshotM s m
                 , Entry e
                 )
              => m ()
