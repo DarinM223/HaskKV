@@ -6,18 +6,26 @@ import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader
+import Data.Binary
 import Data.List
 import Data.Maybe
+import Data.Proxy
 import System.Directory
 import System.FilePath
 import System.IO
 
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 
-class SnapshotM m where
+class (Binary s) => HasSnapshotType s m | m -> s where
+    snapshotType :: m (Proxy s)
+
+class (Binary s) => SnapshotM s m | m -> s where
     createSnapshot :: Int -> m ()
     writeSnapshot  :: B.ByteString -> Int -> m ()
     saveSnapshot   :: Int -> m ()
+    readSnapshot   :: Int -> m (Maybe s)
+    readChunk      :: Int -> Int -> m (Maybe BL.ByteString)
 
 data Snapshot = Snapshot
     { _file     :: Handle
@@ -57,15 +65,17 @@ closeSnapshotManager manager = do
 loadSnapshots :: FilePath -> IO (TVar Snapshots)
 loadSnapshots path = do
     files <- getDirectoryContents path
-    partial <- mapM (toSnapshot . (path </>)) . filter isPartial $ files
-    completed <- mapM (toSnapshot . (path </>)) . filter isCompleted $ files
+    partial <- mapM (toPartial . (path </>)) . filter isPartial $ files
+    completed <- mapM (toCompleted . (path </>)) . filter isCompleted $ files
     newTVarIO Snapshots
         { _completed = listToMaybe completed, _partial = partial }
   where
-    toSnapshot path = do
+    toSnapshot mode path = do
         let index = read . fileBase $ path :: Int
-        handle <- openFile path AppendMode
+        handle <- openFile path mode
         return Snapshot { _file = handle, _index = index, _filepath = path }
+    toPartial = toSnapshot AppendMode
+    toCompleted = toSnapshot ReadMode
 
     isPartial = (== ".partial.snap") . fileExt
     isCompleted = (== ".completed.snap") . fileExt
@@ -77,13 +87,16 @@ instance
     ( MonadIO m
     , MonadReader r m
     , HasSnapshotManager r
-    ) => SnapshotM (SnapshotT m) where
+    , HasSnapshotType s m
+    ) => SnapshotM s (SnapshotT m) where
 
     createSnapshot i = liftIO . createSnapshotImpl i
                    =<< asks getSnapshotManager
     writeSnapshot d i = liftIO . writeSnapshotImpl d i
                     =<< asks getSnapshotManager
     saveSnapshot i = liftIO . saveSnapshotImpl i =<< asks getSnapshotManager
+    readSnapshot i = liftIO . readSnapshotImpl i =<< asks getSnapshotManager
+    readChunk a i = liftIO . readChunkImpl a i =<< asks getSnapshotManager
 
 createSnapshotImpl :: Int -> SnapshotManager -> IO ()
 createSnapshotImpl index manager = do
@@ -109,6 +122,22 @@ writeSnapshotImpl snapData index = mapM_ (put snapData . _file)
         B.hPut handle snapData
         hFlush handle
 
+readSnapshotImpl :: (Binary s) => Int -> SnapshotManager -> IO (Maybe s)
+readSnapshotImpl index manager = do
+    snapshots <- readTVarIO $ _snapshots manager
+    case _completed snapshots of
+        Just Snapshot{ _index = i, _file = file } | i == index ->
+            pure . Just . decode =<< BL.hGetContents file
+        _ -> return Nothing
+
+readChunkImpl :: Int -> Int -> SnapshotManager -> IO (Maybe BL.ByteString)
+readChunkImpl amount index manager = do
+    snapshots <- readTVarIO $ _snapshots manager
+    case _completed snapshots of
+        Just Snapshot{ _index = i, _file = file } | i == index ->
+            pure . Just =<< BL.hGet file amount
+        _ -> return Nothing
+
 saveSnapshotImpl :: Int -> SnapshotManager -> IO ()
 saveSnapshotImpl index manager = do
     snapshots <- readTVarIO $ _snapshots manager
@@ -119,7 +148,7 @@ saveSnapshotImpl index manager = do
         hClose $ _file snap
         let path' = replaceFileName (_filepath snap) (completedFilename index)
         renameFile (_filepath snap) path'
-        reopened <- openFile path' AppendMode
+        reopened <- openFile path' ReadMode
         let snap' = snap { _file = reopened, _filepath = path' }
 
         -- Replace the existing completed snapshot file if its

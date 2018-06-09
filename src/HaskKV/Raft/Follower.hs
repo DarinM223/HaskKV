@@ -15,7 +15,7 @@ runFollower :: ( MonadIO m
                , LogM e m
                , ServerM (RaftMessage e) ServerEvent m
                , StorageM k v m
-               , SnapshotM m
+               , SnapshotM s m
                , Entry e
                )
             => m ()

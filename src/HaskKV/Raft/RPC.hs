@@ -104,7 +104,7 @@ handleAppendEntries ae s
 handleInstallSnapshot :: ( StorageM k v m
                          , LogM e m
                          , ServerM (RaftMessage e) ServerEvent m
-                         , SnapshotM m
+                         , SnapshotM s m
                          , MonadState RaftState m
                          , Entry e
                          )
@@ -115,15 +115,13 @@ handleInstallSnapshot is s
     | getField @"_term" is < _currTerm s =
         send (_leaderId is) $ failResponse s
     | otherwise = do
-        -- TODO(DarinM223): get last snapshot index
-        let lastSnapIndex = undefined :: Int
-            snapIndex     = lastSnapIndex + 1
+        let snapIndex = _lastIncludedIndex is
         when (_offset is == 0) $ createSnapshot snapIndex
 
         when (_done is) $ do
             saveSnapshot snapIndex
-            loadEntry (_lastIncludedIndex is) >>= \case
-                Just e | entryIndex e == _lastIncludedIndex is
+            loadEntry snapIndex >>= \case
+                Just e | entryIndex e == snapIndex
                       && entryTerm e == _lastIncludedTerm is ->
                     -- TODO(DarinM223): delete logs up to index
                     return ()

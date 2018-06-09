@@ -19,7 +19,7 @@ run :: ( MonadIO m
        , ApplyEntryM k v e m
        , TempLogM e m
        , Entry e
-       , SnapshotM m
+       , SnapshotM s m
        )
     => m ()
 run = do

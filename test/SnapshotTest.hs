@@ -48,7 +48,6 @@ testWriteAndSave =
             let snapData = "Sample text"
             writeSnapshotImpl (C.pack snapData) 101 manager
             saveSnapshotImpl 101 manager
-            closeSnapshotManager manager
             s <- readFile (path </> completedFilename 101)
             s @?= snapData
 
@@ -86,6 +85,8 @@ testSnapshotLoading =
             createSnapshotImpl 103 manager
             createSnapshotImpl 104 manager
             createSnapshotImpl 102 manager
+            let snapData = "Sample text"
+            writeSnapshotImpl (C.pack snapData) 102 manager
             saveSnapshotImpl 102 manager
             createSnapshotImpl 105 manager
 
@@ -99,3 +100,7 @@ testSnapshotLoading =
                 s { _partial = sort (_partial s) }
             snapshots' <- readTVarIO $ _snapshots manager'
             show snapshots @?= show snapshots'
+
+            -- Test that the completed file is not locked and can be read.
+            s <- readFile (path </> completedFilename 102)
+            s @?= snapData

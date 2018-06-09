@@ -49,6 +49,9 @@ class (Monad s, KeyClass k, ValueClass v) => StorageM k v s | s -> k v where
     -- | Deletes all values that passed the expiration time.
     cleanupExpired :: Time -> s ()
 
+class (StorageM k v m, Binary s) => LoadSnapshotM k v s m | m -> k v s where
+    loadSnapshot :: s -> m ()
+
 class (StorageM k v m, LogM e m) => ApplyEntryM k v e m | m -> k v e where
     -- | Applies a log entry.
     applyEntry :: e -> m ()

@@ -6,6 +6,7 @@ import Control.Concurrent.STM
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Deriving.Via
+import Data.Proxy
 import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp
@@ -52,6 +53,12 @@ newtype AppT msg k v e a = AppT
              , MonadReader (AppConfig msg k v e)
              )
 
+-- TODO(DarinM223): change to actual snapshot type.
+type SnapshotType = Int
+
+instance HasSnapshotType SnapshotType (AppT msg k v e) where
+    snapshotType = pure Proxy
+
 $(deriveVia [t| forall msg k v e. ServerM msg ServerEvent (AppT msg k v e)
                             `Via` ServerT (AppT msg k v e) |])
 $(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v) =>
@@ -64,7 +71,7 @@ $(deriveVia [t| forall msg k v e. (Entry e) => LogM e (AppT msg k v e)
                                          `Via` StoreT (AppT msg k v e) |])
 $(deriveVia [t| forall msg k v e. TempLogM e (AppT msg k v e)
                             `Via` TempLogT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. SnapshotM (AppT msg k v e)
+$(deriveVia [t| forall msg k v e. SnapshotM SnapshotType (AppT msg k v e)
                             `Via` SnapshotT (AppT msg k v e) |])
 
 runAppT :: AppT msg k v e a
