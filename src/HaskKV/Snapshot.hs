@@ -6,7 +6,8 @@ import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Data.Binary
+import Control.Monad.State
+import Data.Binary hiding (get)
 import Data.List
 import Data.Maybe
 import System.Directory
@@ -15,15 +16,19 @@ import System.IO
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.IntMap as IM
 
 class (Binary s) => HasSnapshotType s (m :: * -> *) | m -> s
+
+data SnapshotChunk = FullChunk BL.ByteString
+                   | EndChunk BL.ByteString
 
 class (Binary s) => SnapshotM s m | m -> s where
     createSnapshot :: Int -> m ()
     writeSnapshot  :: B.ByteString -> Int -> m ()
     saveSnapshot   :: Int -> m ()
     readSnapshot   :: Int -> m (Maybe s)
-    readChunk      :: Int -> Int -> m (Maybe BL.ByteString)
+    readChunk      :: Int -> Int -> m (Maybe SnapshotChunk)
 
 data Snapshot = Snapshot
     { _file     :: Handle
@@ -37,6 +42,7 @@ instance Ord Snapshot where
 data Snapshots = Snapshots
     { _completed :: Maybe Snapshot
     , _partial   :: [Snapshot]
+    , _chunks    :: IM.IntMap Handle
     } deriving (Show, Eq)
 
 data SnapshotManager = SnapshotManager
@@ -66,7 +72,10 @@ loadSnapshots path = do
     partial <- mapM (toPartial . (path </>)) . filter isPartial $ files
     completed <- mapM (toCompleted . (path </>)) . filter isCompleted $ files
     newTVarIO Snapshots
-        { _completed = listToMaybe completed, _partial = partial }
+        { _completed = listToMaybe completed
+        , _partial   = partial
+        , _chunks    = IM.empty
+        }
   where
     toSnapshot mode path = do
         let index = read . fileBase $ path :: Int
@@ -128,12 +137,28 @@ readSnapshotImpl index manager = do
             pure . Just . decode =<< BL.hGetContents file
         _ -> return Nothing
 
-readChunkImpl :: Int -> Int -> SnapshotManager -> IO (Maybe BL.ByteString)
-readChunkImpl amount index manager = do
+readChunkImpl :: Int -> Int -> SnapshotManager -> IO (Maybe SnapshotChunk)
+readChunkImpl amount sid manager = do
     snapshots <- readTVarIO $ _snapshots manager
     case _completed snapshots of
-        Just Snapshot{ _index = i, _file = file } | i == index ->
-            pure . Just =<< BL.hGet file amount
+        Just Snapshot{ _filepath = filepath } -> do
+            (chunk, chunks') <- flip runStateT (_chunks snapshots) $ do
+                handle <- IM.lookup sid <$> get >>= \case
+                    Just handle -> return handle
+                    Nothing -> do
+                        handle <- liftIO $ openFile filepath ReadMode
+                        modify $ IM.insert sid handle
+                        return handle
+                chunk <- liftIO $ BL.hGet handle amount
+                liftIO (hIsEOF handle) >>= \case
+                    True -> do
+                        liftIO $ hClose handle
+                        modify (IM.delete sid)
+                        return $ EndChunk chunk
+                    False -> return $ FullChunk chunk
+            atomically $ modifyTVar (_snapshots manager) $ \snaps ->
+                snaps { _chunks = chunks' }
+            return $ Just chunk
         _ -> return Nothing
 
 saveSnapshotImpl :: Int -> SnapshotManager -> IO ()
@@ -163,8 +188,8 @@ saveSnapshotImpl index manager = do
                   . _partial
                   $ snapshots
 
-        atomically $ writeTVar (_snapshots manager) Snapshots
-            { _completed = completed', _partial = partial' }
+        atomically $ modifyTVar (_snapshots manager) $ \s ->
+            s { _completed = completed', _partial = partial' }
   where
     removeSnapshot snap = do
         hClose $ _file snap

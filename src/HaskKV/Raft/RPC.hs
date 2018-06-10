@@ -122,10 +122,10 @@ handleInstallSnapshot is s
         when (_done is) $ do
             saveSnapshot snapIndex
             loadEntry snapIndex >>= \case
-                Just e | entryIndex e == snapIndex
-                      && entryTerm e == _lastIncludedTerm is ->
-                    -- TODO(DarinM223): delete logs up to index
-                    return ()
+                Just e | entryTerm e == _lastIncludedTerm is -> do
+                    -- Delete logs up to index.
+                    first <- firstIndex
+                    deleteRange first snapIndex
                 _ -> do
                     -- Discard entire log and reset state machine
                     -- using snapshot contents.
