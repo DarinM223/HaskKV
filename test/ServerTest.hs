@@ -46,7 +46,6 @@ testReceiveMessage = testCase "Receives message" $ do
     msg2 @?= Right "b"
     msg3 <- S.recvImpl state
     msg3 @?= Left S.ElectionTimeout
-    return ()
 
 testSendMessage :: TestTree
 testSendMessage = testCase "Sends message" $ do
@@ -78,7 +77,6 @@ testResetElection = testCase "Resets election timer" $ do
     msg1 @?= Left S.HeartbeatTimeout
     msg2 <- S.recvImpl state
     msg2 @?= Left S.ElectionTimeout
-    return ()
 
 testResetHearbeat :: TestTree
 testResetHearbeat = testCase "Resets heartbeat timer" $ do
@@ -93,7 +91,6 @@ testResetHearbeat = testCase "Resets heartbeat timer" $ do
     msg1 @?= Left S.ElectionTimeout
     msg2 <- S.recvImpl state
     msg2 @?= Left S.HeartbeatTimeout
-    return ()
 
 testInject :: TestTree
 testInject = testCase "Inject takes priority" $ do
@@ -106,7 +103,6 @@ testInject = testCase "Inject takes priority" $ do
     msg1 @?= Left S.HeartbeatTimeout
     msg2 <- S.recvImpl state
     msg2 @?= Left S.ElectionTimeout
-    return ()
 
 sourceMessages l s
     = runConduit

@@ -8,6 +8,8 @@ import Test.Tasty.HUnit
 import System.Directory
 import System.FilePath
 
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Char8 as C
 
 openFolder :: FilePath -> IO FilePath
@@ -25,6 +27,7 @@ unitTests = testGroup "Unit tests"
     , testWriteAndSave
     , testSaveRemovesOlderSnapshots
     , testSnapshotLoading
+    , testReadChunks
     ]
 
 testCreateSnapshot :: TestTree
@@ -36,7 +39,6 @@ testCreateSnapshot =
             createSnapshotImpl 100 manager
             doesFileExist (path </> partialFilename 100) >>=
                 (@? "File doesn't exist")
-            return ()
 
 testWriteAndSave :: TestTree
 testWriteAndSave =
@@ -74,7 +76,6 @@ testSaveRemovesOlderSnapshots =
                 (@? "File doesn't exist")
             doesFileExist (path </> partialFilename 106) >>=
                 (@? "File doesn't exist")
-            return ()
 
 testSnapshotLoading :: TestTree
 testSnapshotLoading =
@@ -104,3 +105,34 @@ testSnapshotLoading =
             -- Test that the completed file is not locked and can be read.
             s <- readFile (path </> completedFilename 102)
             s @?= snapData
+
+testReadChunks :: TestTree
+testReadChunks =
+    withResource (openFolder "snapshot_readchunk") closeFolder $ \getPath ->
+        testCase "Tests reads chunks from snapshot" $ do
+            path <- getPath
+            manager <- newSnapshotManager $ Just path
+            let snapData = replicate 1000 'a'
+            createSnapshotImpl 101 manager
+            writeSnapshotImpl (C.pack snapData) 101 manager
+            saveSnapshotImpl 101 manager
+            let sids = [1, 2, 3, 4]
+            mapM_ (`createSnapshotImpl` manager) sids
+            readLoop sids manager
+            closeSnapshotManager manager
+            files <- mapM (readFile . (path </>) . partialFilename) sids
+            length (nub files) @?= 1
+            head files @?= snapData
+  where
+    toStrict = B.concat . BL.toChunks
+    toByteString = \case
+        FullChunk chunk -> toStrict chunk
+        EndChunk chunk  -> toStrict chunk
+    readLoop [] _ = return ()
+    readLoop (sid:sids) manager = do
+        chunk <- readChunkImpl 9 sid manager
+        mapM_ (\c -> writeSnapshotImpl (toByteString c) sid manager) chunk
+        case chunk of
+            Just (FullChunk _) -> readLoop (sids ++ [sid]) manager
+            Just (EndChunk _)  -> readLoop sids manager
+            _                  -> error "Invalid chunk"
