@@ -10,6 +10,7 @@ import Control.Monad.State
 import Data.Binary hiding (get)
 import Data.List
 import Data.Maybe
+import GHC.IO.Handle
 import System.Directory
 import System.FilePath
 import System.IO
@@ -20,8 +21,13 @@ import qualified Data.IntMap as IM
 
 class (Binary s) => HasSnapshotType s (m :: * -> *) | m -> s
 
-data SnapshotChunk = FullChunk BL.ByteString
-                   | EndChunk BL.ByteString
+data SnapshotChunkType = FullChunk | EndChunk
+
+data SnapshotChunk = SnapshotChunk
+    { _data   :: BL.ByteString
+    , _type   :: SnapshotChunkType
+    , _offset :: Int
+    }
 
 class (Binary s) => SnapshotM s m | m -> s where
     createSnapshot :: Int -> m ()
@@ -34,6 +40,7 @@ data Snapshot = Snapshot
     { _file     :: Handle
     , _index    :: Int
     , _filepath :: FilePath
+    , _offset   :: Int
     } deriving (Show, Eq)
 
 instance Ord Snapshot where
@@ -80,7 +87,14 @@ loadSnapshots path = do
     toSnapshot mode path = do
         let index = read . fileBase $ path :: Int
         handle <- openFile path mode
-        return Snapshot { _file = handle, _index = index, _filepath = path }
+        fileSize <- hFileSize handle
+        let offset = if fileSize > 0 then fromIntegral fileSize - 1 else 0
+        return Snapshot
+            { _file     = handle
+            , _index    = index
+            , _filepath = path
+            , _offset   = offset
+            }
     toPartial = toSnapshot AppendMode
     toCompleted = toSnapshot ReadMode
 
@@ -107,17 +121,20 @@ instance
 
 createSnapshotImpl :: Int -> SnapshotManager -> IO ()
 createSnapshotImpl index manager = do
-    handle <- openFile filename AppendMode
+    handle <- openFile filename WriteMode
     atomically $ modifyTVar (_snapshots manager) $ \s ->
         let snap = Snapshot
                 { _file     = handle
                 , _index    = index
                 , _filepath = filename
+                , _offset   = 0
                 }
         in s { _partial = snap:_partial s }
   where
     filename = _directoryPath manager </> partialFilename index
 
+-- TODO(DarinM223): add offset to check.
+-- TODO(DarinM223): update offset after writing.
 writeSnapshotImpl :: B.ByteString -> Int -> SnapshotManager -> IO ()
 writeSnapshotImpl snapData index = mapM_ (put snapData . _file)
                                  . find ((== index) . _index)
@@ -149,13 +166,16 @@ readChunkImpl amount sid manager = do
                         handle <- liftIO $ openFile filepath ReadMode
                         modify $ IM.insert sid handle
                         return handle
+                offset <- liftIO . fmap getPos $ hGetPosn handle
                 chunk <- liftIO $ BL.hGet handle amount
-                liftIO (hIsEOF handle) >>= \case
+                chunkType <- liftIO (hIsEOF handle) >>= \case
                     True -> do
                         liftIO $ hClose handle
                         modify (IM.delete sid)
-                        return $ EndChunk chunk
-                    False -> return $ FullChunk chunk
+                        return EndChunk
+                    False -> return FullChunk
+                return SnapshotChunk
+                    { _data = chunk, _type = chunkType, _offset = offset }
             atomically $ modifyTVar (_snapshots manager) $ \snaps ->
                 snaps { _chunks = chunks' }
             return $ Just chunk
@@ -218,3 +238,6 @@ fileExt = go ""
     go fullExt path = case splitExtension path of
         (_, "")           -> fullExt
         (incomplete, ext) -> go (ext ++ fullExt) incomplete
+
+getPos :: HandlePosn -> Int
+getPos (HandlePosn _ pos) = fromIntegral pos

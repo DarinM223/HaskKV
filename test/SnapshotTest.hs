@@ -125,14 +125,12 @@ testReadChunks =
             head files @?= snapData
   where
     toStrict = B.concat . BL.toChunks
-    toByteString = \case
-        FullChunk chunk -> toStrict chunk
-        EndChunk chunk  -> toStrict chunk
+    toByteString = toStrict . _data
     readLoop [] _ = return ()
     readLoop (sid:sids) manager = do
         chunk <- readChunkImpl 9 sid manager
         mapM_ (\c -> writeSnapshotImpl (toByteString c) sid manager) chunk
-        case chunk of
-            Just (FullChunk _) -> readLoop (sids ++ [sid]) manager
-            Just (EndChunk _)  -> readLoop sids manager
-            _                  -> error "Invalid chunk"
+        case fmap _type chunk of
+            Just FullChunk -> readLoop (sids ++ [sid]) manager
+            Just EndChunk  -> readLoop sids manager
+            _              -> error "Invalid chunk"

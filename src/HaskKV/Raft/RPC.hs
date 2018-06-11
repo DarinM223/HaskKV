@@ -117,7 +117,7 @@ handleInstallSnapshot is s
         send (_leaderId is) $ failResponse s
     | otherwise = do
         let snapIndex = _lastIncludedIndex is
-        when (_offset is == 0) $ createSnapshot snapIndex
+        when (getField @"_offset" is == 0) $ createSnapshot snapIndex
 
         when (_done is) $ do
             saveSnapshot snapIndex
