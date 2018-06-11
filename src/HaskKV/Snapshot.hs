@@ -11,6 +11,7 @@ import Data.Binary hiding (get)
 import Data.List
 import Data.Maybe
 import GHC.IO.Handle
+import GHC.Records
 import System.Directory
 import System.FilePath
 import System.IO
@@ -31,7 +32,7 @@ data SnapshotChunk = SnapshotChunk
 
 class (Binary s) => SnapshotM s m | m -> s where
     createSnapshot :: Int -> m ()
-    writeSnapshot  :: B.ByteString -> Int -> m ()
+    writeSnapshot  :: Int -> B.ByteString -> Int -> m ()
     saveSnapshot   :: Int -> m ()
     readSnapshot   :: Int -> m (Maybe s)
     readChunk      :: Int -> Int -> m (Maybe SnapshotChunk)
@@ -88,7 +89,7 @@ loadSnapshots path = do
         let index = read . fileBase $ path :: Int
         handle <- openFile path mode
         fileSize <- hFileSize handle
-        let offset = if fileSize > 0 then fromIntegral fileSize - 1 else 0
+        let offset = if fileSize > 0 then fromIntegral fileSize else 0
         return Snapshot
             { _file     = handle
             , _index    = index
@@ -113,8 +114,8 @@ instance
 
     createSnapshot i = liftIO . createSnapshotImpl i
                    =<< asks getSnapshotManager
-    writeSnapshot d i = liftIO . writeSnapshotImpl d i
-                    =<< asks getSnapshotManager
+    writeSnapshot o d i = liftIO . writeSnapshotImpl o d i
+                      =<< asks getSnapshotManager
     saveSnapshot i = liftIO . saveSnapshotImpl i =<< asks getSnapshotManager
     readSnapshot i = liftIO . readSnapshotImpl i =<< asks getSnapshotManager
     readChunk a i = liftIO . readChunkImpl a i =<< asks getSnapshotManager
@@ -133,18 +134,25 @@ createSnapshotImpl index manager = do
   where
     filename = _directoryPath manager </> partialFilename index
 
--- TODO(DarinM223): add offset to check.
--- TODO(DarinM223): update offset after writing.
-writeSnapshotImpl :: B.ByteString -> Int -> SnapshotManager -> IO ()
-writeSnapshotImpl snapData index = mapM_ (put snapData . _file)
-                                 . find ((== index) . _index)
-                                 . _partial
-                               <=< readTVarIO
-                                 . _snapshots
+writeSnapshotImpl :: Int -> B.ByteString -> Int -> SnapshotManager -> IO ()
+writeSnapshotImpl offset snapData index manager = do
+    snapshots <- readTVarIO $ _snapshots manager
+    partial' <- mapM (putAndUpdate offset snapData index) (_partial snapshots)
+    atomically $ modifyTVar (_snapshots manager) $ \s ->
+        s { _partial = partial' }
   where
-    put snapData handle = do
-        B.hPut handle snapData
-        hFlush handle
+    putAndUpdate offset snapData index snap
+        | index == _index snap && offset == getField @"_offset" snap =
+            putAndReturnOffset snapData snap
+        | index == _index snap && offset == 0 =
+            hSetFileSize (_file snap) 0 >> putAndReturnOffset snapData snap
+        | otherwise = return snap
+      where
+        putAndReturnOffset snapData snap = do
+            B.hPut (_file snap) snapData
+            hFlush $ _file snap
+            offset <- getPos <$> hGetPosn (_file snap)
+            return (snap { _offset = offset } :: Snapshot)
 
 readSnapshotImpl :: (Binary s) => Int -> SnapshotManager -> IO (Maybe s)
 readSnapshotImpl index manager = do
