@@ -144,8 +144,10 @@ writeSnapshotImpl offset snapData index manager = do
     putAndUpdate offset snapData index snap
         | index == _index snap && offset == getField @"_offset" snap =
             putAndReturnOffset snapData snap
-        | index == _index snap && offset == 0 =
-            hSetFileSize (_file snap) 0 >> putAndReturnOffset snapData snap
+        | index == _index snap && offset == 0 = do
+            hSetFileSize (_file snap) 0
+            hSetPosn $ HandlePosn (_file snap) 0
+            putAndReturnOffset snapData snap
         | otherwise = return snap
       where
         putAndReturnOffset snapData snap = do

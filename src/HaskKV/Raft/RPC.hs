@@ -106,7 +106,6 @@ handleInstallSnapshot :: ( StorageM k v m
                          , ServerM (RaftMessage e) ServerEvent m
                          , SnapshotM s m
                          , LoadSnapshotM s m
-                         , MonadState RaftState m
                          , Entry e
                          )
                       => RaftMessage e
@@ -117,8 +116,9 @@ handleInstallSnapshot is s
         send (_leaderId is) $ failResponse s
     | otherwise = do
         let snapIndex = _lastIncludedIndex is
-        when (getField @"_offset" is == 0) $ createSnapshot snapIndex
-        writeSnapshot (getField @"_offset" is) (getField @"_data" is) snapIndex
+            offset    = getField @"_offset" is
+        when (offset == 0) $ createSnapshot snapIndex
+        writeSnapshot offset (getField @"_data" is) snapIndex
 
         when (_done is) $ do
             saveSnapshot snapIndex

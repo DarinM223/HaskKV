@@ -49,11 +49,15 @@ testWriteAndSave =
             path <- getPath
             manager <- newSnapshotManager $ Just path
             createSnapshotImpl 101 manager
-            let snapData = "Sample text"
+            let snapData   = "Sample text"
+                snapData'  = "This overrides snapData"
+                snapData'' = "This doesn't override and gets ignored instead"
             writeSnapshotImpl 0 (C.pack snapData) 101 manager
+            writeSnapshotImpl 0 (C.pack snapData') 101 manager
+            writeSnapshotImpl 20 (C.pack snapData'') 101 manager
             saveSnapshotImpl 101 manager
             s <- readFile (path </> completedFilename 101)
-            s @?= snapData
+            s @?= snapData'
 
 testSaveRemovesOlderSnapshots :: TestTree
 testSaveRemovesOlderSnapshots =
