@@ -10,6 +10,8 @@ import Control.Monad.State
 import Data.Binary hiding (get)
 import Data.List
 import Data.Maybe
+import GHC.IO.Handle
+import GHC.Records
 import System.Directory
 import System.FilePath
 import System.IO
@@ -20,12 +22,17 @@ import qualified Data.IntMap as IM
 
 class (Binary s) => HasSnapshotType s (m :: * -> *) | m -> s
 
-data SnapshotChunk = FullChunk BL.ByteString
-                   | EndChunk BL.ByteString
+data SnapshotChunkType = FullChunk | EndChunk
+
+data SnapshotChunk = SnapshotChunk
+    { _data   :: BL.ByteString
+    , _type   :: SnapshotChunkType
+    , _offset :: Int
+    }
 
 class (Binary s) => SnapshotM s m | m -> s where
     createSnapshot :: Int -> m ()
-    writeSnapshot  :: B.ByteString -> Int -> m ()
+    writeSnapshot  :: Int -> B.ByteString -> Int -> m ()
     saveSnapshot   :: Int -> m ()
     readSnapshot   :: Int -> m (Maybe s)
     readChunk      :: Int -> Int -> m (Maybe SnapshotChunk)
@@ -34,6 +41,7 @@ data Snapshot = Snapshot
     { _file     :: Handle
     , _index    :: Int
     , _filepath :: FilePath
+    , _offset   :: Int
     } deriving (Show, Eq)
 
 instance Ord Snapshot where
@@ -80,7 +88,14 @@ loadSnapshots path = do
     toSnapshot mode path = do
         let index = read . fileBase $ path :: Int
         handle <- openFile path mode
-        return Snapshot { _file = handle, _index = index, _filepath = path }
+        fileSize <- hFileSize handle
+        let offset = if fileSize > 0 then fromIntegral fileSize else 0
+        return Snapshot
+            { _file     = handle
+            , _index    = index
+            , _filepath = path
+            , _offset   = offset
+            }
     toPartial = toSnapshot AppendMode
     toCompleted = toSnapshot ReadMode
 
@@ -99,35 +114,47 @@ instance
 
     createSnapshot i = liftIO . createSnapshotImpl i
                    =<< asks getSnapshotManager
-    writeSnapshot d i = liftIO . writeSnapshotImpl d i
-                    =<< asks getSnapshotManager
+    writeSnapshot o d i = liftIO . writeSnapshotImpl o d i
+                      =<< asks getSnapshotManager
     saveSnapshot i = liftIO . saveSnapshotImpl i =<< asks getSnapshotManager
     readSnapshot i = liftIO . readSnapshotImpl i =<< asks getSnapshotManager
     readChunk a i = liftIO . readChunkImpl a i =<< asks getSnapshotManager
 
 createSnapshotImpl :: Int -> SnapshotManager -> IO ()
 createSnapshotImpl index manager = do
-    handle <- openFile filename AppendMode
+    handle <- openFile filename WriteMode
     atomically $ modifyTVar (_snapshots manager) $ \s ->
         let snap = Snapshot
                 { _file     = handle
                 , _index    = index
                 , _filepath = filename
+                , _offset   = 0
                 }
         in s { _partial = snap:_partial s }
   where
     filename = _directoryPath manager </> partialFilename index
 
-writeSnapshotImpl :: B.ByteString -> Int -> SnapshotManager -> IO ()
-writeSnapshotImpl snapData index = mapM_ (put snapData . _file)
-                                 . find ((== index) . _index)
-                                 . _partial
-                               <=< readTVarIO
-                                 . _snapshots
+writeSnapshotImpl :: Int -> B.ByteString -> Int -> SnapshotManager -> IO ()
+writeSnapshotImpl offset snapData index manager = do
+    snapshots <- readTVarIO $ _snapshots manager
+    partial' <- mapM (putAndUpdate offset snapData index) (_partial snapshots)
+    atomically $ modifyTVar (_snapshots manager) $ \s ->
+        s { _partial = partial' }
   where
-    put snapData handle = do
-        B.hPut handle snapData
-        hFlush handle
+    putAndUpdate offset snapData index snap
+        | index == _index snap && offset == getField @"_offset" snap =
+            putAndReturnOffset snapData snap
+        | index == _index snap && offset == 0 = do
+            hSetFileSize (_file snap) 0
+            hSetPosn $ HandlePosn (_file snap) 0
+            putAndReturnOffset snapData snap
+        | otherwise = return snap
+      where
+        putAndReturnOffset snapData snap = do
+            B.hPut (_file snap) snapData
+            hFlush $ _file snap
+            offset <- getPos <$> hGetPosn (_file snap)
+            return (snap { _offset = offset } :: Snapshot)
 
 readSnapshotImpl :: (Binary s) => Int -> SnapshotManager -> IO (Maybe s)
 readSnapshotImpl index manager = do
@@ -149,13 +176,16 @@ readChunkImpl amount sid manager = do
                         handle <- liftIO $ openFile filepath ReadMode
                         modify $ IM.insert sid handle
                         return handle
+                offset <- liftIO . fmap getPos $ hGetPosn handle
                 chunk <- liftIO $ BL.hGet handle amount
-                liftIO (hIsEOF handle) >>= \case
+                chunkType <- liftIO (hIsEOF handle) >>= \case
                     True -> do
                         liftIO $ hClose handle
                         modify (IM.delete sid)
-                        return $ EndChunk chunk
-                    False -> return $ FullChunk chunk
+                        return EndChunk
+                    False -> return FullChunk
+                return SnapshotChunk
+                    { _data = chunk, _type = chunkType, _offset = offset }
             atomically $ modifyTVar (_snapshots manager) $ \snaps ->
                 snaps { _chunks = chunks' }
             return $ Just chunk
@@ -218,3 +248,6 @@ fileExt = go ""
     go fullExt path = case splitExtension path of
         (_, "")           -> fullExt
         (incomplete, ext) -> go (ext ++ fullExt) incomplete
+
+getPos :: HandlePosn -> Int
+getPos (HandlePosn _ pos) = fromIntegral pos

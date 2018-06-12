@@ -1,7 +1,9 @@
 module SnapshotTest (tests) where
 
 import Control.Concurrent.STM
+import Control.Monad
 import Data.List
+import GHC.Records
 import HaskKV.Snapshot
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -47,11 +49,15 @@ testWriteAndSave =
             path <- getPath
             manager <- newSnapshotManager $ Just path
             createSnapshotImpl 101 manager
-            let snapData = "Sample text"
-            writeSnapshotImpl (C.pack snapData) 101 manager
+            let snapData   = "Sample text"
+                snapData'  = "This overrides snapData"
+                snapData'' = "This doesn't override and gets ignored instead"
+            writeSnapshotImpl 0 (C.pack snapData) 101 manager
+            writeSnapshotImpl 0 (C.pack snapData') 101 manager
+            writeSnapshotImpl 20 (C.pack snapData'') 101 manager
             saveSnapshotImpl 101 manager
             s <- readFile (path </> completedFilename 101)
-            s @?= snapData
+            s @?= snapData'
 
 testSaveRemovesOlderSnapshots :: TestTree
 testSaveRemovesOlderSnapshots =
@@ -87,7 +93,7 @@ testSnapshotLoading =
             createSnapshotImpl 104 manager
             createSnapshotImpl 102 manager
             let snapData = "Sample text"
-            writeSnapshotImpl (C.pack snapData) 102 manager
+            writeSnapshotImpl 0 (C.pack snapData) 102 manager
             saveSnapshotImpl 102 manager
             createSnapshotImpl 105 manager
 
@@ -114,7 +120,7 @@ testReadChunks =
             manager <- newSnapshotManager $ Just path
             let snapData = replicate 1000 'a'
             createSnapshotImpl 101 manager
-            writeSnapshotImpl (C.pack snapData) 101 manager
+            writeSnapshotImpl 0 (C.pack snapData) 101 manager
             saveSnapshotImpl 101 manager
             let sids = [1, 2, 3, 4]
             mapM_ (`createSnapshotImpl` manager) sids
@@ -125,14 +131,16 @@ testReadChunks =
             head files @?= snapData
   where
     toStrict = B.concat . BL.toChunks
-    toByteString = \case
-        FullChunk chunk -> toStrict chunk
-        EndChunk chunk  -> toStrict chunk
+    toByteString = toStrict . _data
     readLoop [] _ = return ()
     readLoop (sid:sids) manager = do
         chunk <- readChunkImpl 9 sid manager
-        mapM_ (\c -> writeSnapshotImpl (toByteString c) sid manager) chunk
-        case chunk of
-            Just (FullChunk _) -> readLoop (sids ++ [sid]) manager
-            Just (EndChunk _)  -> readLoop sids manager
-            _                  -> error "Invalid chunk"
+        forM_ chunk $ \c ->
+            writeSnapshotImpl (getField @"_offset" c)
+                              (toByteString c)
+                              sid
+                              manager
+        case _type <$> chunk of
+            Just FullChunk -> readLoop (sids ++ [sid]) manager
+            Just EndChunk  -> readLoop sids manager
+            _              -> error "Invalid chunk"
