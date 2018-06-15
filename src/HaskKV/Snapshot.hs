@@ -22,13 +22,13 @@ import qualified Data.IntMap as IM
 
 class (Binary s) => HasSnapshotType s (m :: * -> *) | m -> s
 
-data SnapshotChunkType = FullChunk | EndChunk
+data SnapshotChunkType = FullChunk | EndChunk deriving (Show, Eq)
 
 data SnapshotChunk = SnapshotChunk
-    { _data   :: BL.ByteString
+    { _data   :: B.ByteString
     , _type   :: SnapshotChunkType
     , _offset :: Int
-    }
+    } deriving (Show, Eq)
 
 class (Binary s) => SnapshotM s m | m -> s where
     createSnapshot :: Int -> m ()
@@ -177,7 +177,9 @@ readChunkImpl amount sid manager = do
                         modify $ IM.insert sid handle
                         return handle
                 offset <- liftIO . fmap getPos $ hGetPosn handle
-                chunk <- liftIO $ BL.hGet handle amount
+                chunk <- liftIO
+                       . fmap (B.concat . BL.toChunks)
+                       $ BL.hGet handle amount
                 chunkType <- liftIO (hIsEOF handle) >>= \case
                     True -> do
                         liftIO $ hClose handle

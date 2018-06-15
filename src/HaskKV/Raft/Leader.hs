@@ -4,6 +4,7 @@ import Control.Lens
 import Control.Monad.State
 import Data.Maybe
 import Data.List
+import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Utils
 import HaskKV.Raft.Message
@@ -11,6 +12,7 @@ import HaskKV.Raft.RPC
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
 import HaskKV.Server
+import HaskKV.Snapshot
 
 import qualified Data.IntMap as IM
 
@@ -19,6 +21,7 @@ runLeader :: ( MonadIO m
              , LogM e m
              , TempLogM e m
              , ServerM (RaftMessage e) ServerEvent m
+             , SnapshotM s m
              , Entry e
              )
           => m ()
@@ -100,9 +103,14 @@ storeTemporaryEntries = do
         e' = setEntryTerm term . setEntryIndex idx $ e
         rest = setIndexAndTerms (idx + 1) term es
 
-sendAppendEntries :: ( MonadState RaftState m
+snapshotChunkSize :: Int
+snapshotChunkSize = 10
+
+sendAppendEntries :: forall event e s m.
+                     ( MonadState RaftState m
                      , LogM e m
                      , ServerM (RaftMessage e) event m
+                     , SnapshotM s m
                      , Entry e
                      )
                   => Maybe e
@@ -111,34 +119,47 @@ sendAppendEntries :: ( MonadState RaftState m
                   -> m ()
 sendAppendEntries entry commitIndex id = do
     let lastIndex = maybe 0 entryIndex entry
-        lastTerm  = maybe 0 entryTerm entry
-
     nextIndexes <- preuse (stateType._Leader.nextIndex)
-    entries <- case nextIndexes >>= IM.lookup id of
-        Just nextIndex -> fromMaybe [] <$> entryRange nextIndex lastIndex
-        Nothing        -> return []
-
-    term <- use currTerm
-    sid <- use serverID
-    if null entries
-        then send id AppendEntries
+    case nextIndexes >>= IM.lookup id of
+        Just nextIndex -> do
+            prevEntry <- loadEntry $ prevIndex nextIndex
+            entries <- entryRange nextIndex lastIndex
+            if isNothing entries || isNothing prevEntry
+                then tryInstallSnapshot id prevEntry commitIndex
+                else sendAppend id prevEntry (fromMaybe [] entries) commitIndex
+        Nothing -> sendAppend id (Nothing :: Maybe e) [] commitIndex
+  where
+    sendAppend id prevEntry entries commitIndex = do
+        term <- use currTerm
+        sid <- use serverID
+        let prevLogIdx  = maybe 0 entryIndex prevEntry
+            prevLogTerm = maybe 0 entryTerm prevEntry
+        send id AppendEntries
             { _term        = term
             , _leaderId    = sid
-            , _prevLogIdx  = lastIndex
-            , _prevLogTerm = lastTerm
-            , _entries     = []
+            , _prevLogIdx  = prevLogIdx
+            , _prevLogTerm = prevLogTerm
+            , _entries     = entries
             , _commitIdx   = commitIndex
             }
-        else do
-            let firstSendingIdx = entryIndex $ head entries
-            prevEntry <- loadEntry $ prevIndex firstSendingIdx
-            let prevLogIdx  = maybe 0 entryIndex prevEntry
-                prevLogTerm = maybe 0 entryTerm prevEntry
-            send id AppendEntries
-                { _term        = term
-                , _leaderId    = sid
-                , _prevLogIdx  = prevLogIdx
-                , _prevLogTerm = prevLogTerm
-                , _entries     = entries
-                , _commitIdx   = commitIndex
-                }
+    tryInstallSnapshot id prevEntry commitIndex =
+        readChunk snapshotChunkSize id >>= \case
+            Just chunk -> do
+                term <- use currTerm
+                sid <- use serverID
+                -- TODO(DarinM223): fix this to use the snapshot's index and term.
+                let done      = _type chunk == EndChunk
+                    lastIndex = maybe 0 entryIndex prevEntry
+                    lastTerm  = maybe 0 entryTerm prevEntry
+                    offset    = getField @"_offset" chunk
+                    snapData  = getField @"_data" chunk
+                send id InstallSnapshot
+                    { _term              = term
+                    , _leaderId          = sid
+                    , _lastIncludedIndex = lastIndex
+                    , _lastIncludedTerm  = lastTerm
+                    , _offset            = offset
+                    , _data              = snapData
+                    , _done              = done
+                    }
+            Nothing -> sendAppend id (Nothing :: Maybe e) [] commitIndex

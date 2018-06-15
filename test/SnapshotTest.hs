@@ -10,8 +10,6 @@ import Test.Tasty.HUnit
 import System.Directory
 import System.FilePath
 
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Char8 as C
 
 openFolder :: FilePath -> IO FilePath
@@ -130,14 +128,12 @@ testReadChunks =
             length (nub files) @?= 1
             head files @?= snapData
   where
-    toStrict = B.concat . BL.toChunks
-    toByteString = toStrict . _data
     readLoop [] _ = return ()
     readLoop (sid:sids) manager = do
         chunk <- readChunkImpl 9 sid manager
         forM_ chunk $ \c ->
             writeSnapshotImpl (getField @"_offset" c)
-                              (toByteString c)
+                              (_data c)
                               sid
                               manager
         case _type <$> chunk of
