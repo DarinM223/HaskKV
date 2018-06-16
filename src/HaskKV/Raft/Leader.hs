@@ -125,7 +125,7 @@ sendAppendEntries entry commitIndex id = do
             prevEntry <- loadEntry $ prevIndex nextIndex
             entries <- entryRange nextIndex lastIndex
             if isNothing entries || isNothing prevEntry
-                then tryInstallSnapshot id prevEntry commitIndex
+                then tryInstallSnapshot id commitIndex
                 else sendAppend id prevEntry (fromMaybe [] entries) commitIndex
         Nothing -> sendAppend id (Nothing :: Maybe e) [] commitIndex
   where
@@ -142,15 +142,14 @@ sendAppendEntries entry commitIndex id = do
             , _entries     = entries
             , _commitIdx   = commitIndex
             }
-    tryInstallSnapshot id prevEntry commitIndex =
+    tryInstallSnapshot id commitIndex =
         readChunk snapshotChunkSize id >>= \case
             Just chunk -> do
                 term <- use currTerm
                 sid <- use serverID
-                -- TODO(DarinM223): fix this to use the snapshot's index and term.
                 let done      = _type chunk == EndChunk
-                    lastIndex = maybe 0 entryIndex prevEntry
-                    lastTerm  = maybe 0 entryTerm prevEntry
+                    lastIndex = getField @"_index" chunk
+                    lastTerm  = getField @"_term" chunk
                     offset    = getField @"_offset" chunk
                     snapData  = getField @"_data" chunk
                 send id InstallSnapshot

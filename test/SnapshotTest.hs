@@ -36,8 +36,8 @@ testCreateSnapshot =
         testCase "Creates snapshot" $ do
             path <- getPath
             manager <- newSnapshotManager $ Just path
-            createSnapshotImpl 100 manager
-            doesFileExist (path </> partialFilename 100) >>=
+            createSnapshotImpl 100 1 manager
+            doesFileExist (path </> partialFilename 100 1) >>=
                 (@? "File doesn't exist")
 
 testWriteAndSave :: TestTree
@@ -46,7 +46,7 @@ testWriteAndSave =
         testCase "Writes to snapshot" $ do
             path <- getPath
             manager <- newSnapshotManager $ Just path
-            createSnapshotImpl 101 manager
+            createSnapshotImpl 101 1 manager
             let snapData   = "Sample text"
                 snapData'  = "This overrides snapData"
                 snapData'' = "This doesn't override and gets ignored instead"
@@ -54,7 +54,7 @@ testWriteAndSave =
             writeSnapshotImpl 0 (C.pack snapData') 101 manager
             writeSnapshotImpl 20 (C.pack snapData'') 101 manager
             saveSnapshotImpl 101 manager
-            s <- readFile (path </> completedFilename 101)
+            s <- readFile (path </> completedFilename 101 1)
             s @?= snapData'
 
 testSaveRemovesOlderSnapshots :: TestTree
@@ -63,22 +63,22 @@ testSaveRemovesOlderSnapshots =
         testCase "Save removes older snapshots" $ do
             path <- getPath
             manager <- newSnapshotManager $ Just path
-            createSnapshotImpl 102 manager
-            createSnapshotImpl 103 manager
-            createSnapshotImpl 104 manager
-            createSnapshotImpl 106 manager
+            createSnapshotImpl 102 1 manager
+            createSnapshotImpl 103 1 manager
+            createSnapshotImpl 104 1 manager
+            createSnapshotImpl 106 1 manager
             saveSnapshotImpl 104 manager
-            createSnapshotImpl 105 manager
+            createSnapshotImpl 105 1 manager
             saveSnapshotImpl 105 manager
-            doesFileExist (path </> partialFilename 102) >>=
+            doesFileExist (path </> partialFilename 102 1) >>=
                 (@? "File exists") . not
-            doesFileExist (path </> partialFilename 103) >>=
+            doesFileExist (path </> partialFilename 103 1) >>=
                 (@? "File exists") . not
-            doesFileExist (path </> completedFilename 104) >>=
+            doesFileExist (path </> completedFilename 104 1) >>=
                 (@? "File exists") . not
-            doesFileExist (path </> completedFilename 105) >>=
+            doesFileExist (path </> completedFilename 105 1) >>=
                 (@? "File doesn't exist")
-            doesFileExist (path </> partialFilename 106) >>=
+            doesFileExist (path </> partialFilename 106 1) >>=
                 (@? "File doesn't exist")
 
 testSnapshotLoading :: TestTree
@@ -87,13 +87,13 @@ testSnapshotLoading =
         testCase "Tests snapshot loading from directory" $ do
             path <- getPath
             manager <- newSnapshotManager $ Just path
-            createSnapshotImpl 103 manager
-            createSnapshotImpl 104 manager
-            createSnapshotImpl 102 manager
+            createSnapshotImpl 103 1 manager
+            createSnapshotImpl 104 1 manager
+            createSnapshotImpl 102 1 manager
             let snapData = "Sample text"
             writeSnapshotImpl 0 (C.pack snapData) 102 manager
             saveSnapshotImpl 102 manager
-            createSnapshotImpl 105 manager
+            createSnapshotImpl 105 1 manager
 
             atomically $ modifyTVar (_snapshots manager) $ \s ->
                 s { _partial = sort (_partial s) }
@@ -107,7 +107,7 @@ testSnapshotLoading =
             show snapshots @?= show snapshots'
 
             -- Test that the completed file is not locked and can be read.
-            s <- readFile (path </> completedFilename 102)
+            s <- readFile (path </> completedFilename 102 1)
             s @?= snapData
 
 testReadChunks :: TestTree
@@ -117,14 +117,14 @@ testReadChunks =
             path <- getPath
             manager <- newSnapshotManager $ Just path
             let snapData = replicate 1000 'a'
-            createSnapshotImpl 101 manager
+            createSnapshotImpl 101 1 manager
             writeSnapshotImpl 0 (C.pack snapData) 101 manager
             saveSnapshotImpl 101 manager
             let sids = [1, 2, 3, 4]
-            mapM_ (`createSnapshotImpl` manager) sids
+            mapM_ (\sid -> createSnapshotImpl sid 1 manager) sids
             readLoop sids manager
             closeSnapshotManager manager
-            files <- mapM (readFile . (path </>) . partialFilename) sids
+            files <- mapM (readFile . (path </>) . flip partialFilename 1) sids
             length (nub files) @?= 1
             head files @?= snapData
   where

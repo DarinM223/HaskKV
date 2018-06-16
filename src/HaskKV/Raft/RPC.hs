@@ -117,7 +117,7 @@ handleInstallSnapshot is s
     | otherwise = do
         let snapIndex = _lastIncludedIndex is
             offset    = getField @"_offset" is
-        when (offset == 0) $ createSnapshot snapIndex
+        when (offset == 0) $ createSnapshot snapIndex (_lastIncludedTerm is)
         writeSnapshot offset (getField @"_data" is) snapIndex
 
         when (_done is) $ do
