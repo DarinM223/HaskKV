@@ -70,6 +70,12 @@ handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
             debug $ "Updating commit index to " ++ show n
             commitIndex .= n
 
+handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
+    | term < _currTerm s = return ()
+    | term > _currTerm s = transitionToFollower msg
+    | otherwise =
+        readChunk snapshotChunkSize sender >>= mapM_ (sendSnapshotChunk sender)
+
 handleLeaderResponse _ _ _ = return ()
 
 quorumIndex :: ( MonadState RaftState m
@@ -144,21 +150,27 @@ sendAppendEntries entry commitIndex id = do
             }
     tryInstallSnapshot id commitIndex =
         readChunk snapshotChunkSize id >>= \case
-            Just chunk -> do
-                term <- use currTerm
-                sid <- use serverID
-                let done      = _type chunk == EndChunk
-                    lastIndex = getField @"_index" chunk
-                    lastTerm  = getField @"_term" chunk
-                    offset    = getField @"_offset" chunk
-                    snapData  = getField @"_data" chunk
-                send id InstallSnapshot
-                    { _term              = term
-                    , _leaderId          = sid
-                    , _lastIncludedIndex = lastIndex
-                    , _lastIncludedTerm  = lastTerm
-                    , _offset            = offset
-                    , _data              = snapData
-                    , _done              = done
-                    }
-            Nothing -> sendAppend id (Nothing :: Maybe e) [] commitIndex
+            Just chunk -> sendSnapshotChunk id chunk
+            Nothing    -> sendAppend id (Nothing :: Maybe e) [] commitIndex
+
+sendSnapshotChunk :: (MonadState RaftState m, ServerM (RaftMessage e) event m)
+                  => Int
+                  -> SnapshotChunk
+                  -> m ()
+sendSnapshotChunk id chunk = do
+    term <- use currTerm
+    sid <- use serverID
+    let done      = _type chunk == EndChunk
+        lastIndex = getField @"_index" chunk
+        lastTerm  = getField @"_term" chunk
+        offset    = getField @"_offset" chunk
+        snapData  = getField @"_data" chunk
+    send id InstallSnapshot
+        { _term              = term
+        , _leaderId          = sid
+        , _lastIncludedIndex = lastIndex
+        , _lastIncludedTerm  = lastTerm
+        , _offset            = offset
+        , _data              = snapData
+        , _done              = done
+        }
