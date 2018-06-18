@@ -2,9 +2,10 @@
 
 module HaskKV.Store where
 
+import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad.Reader
-import Data.Aeson
+import Data.Aeson hiding (encode)
 import Data.Binary
 import Data.Binary.Orphans ()
 import Data.Maybe (fromJust, fromMaybe)
@@ -14,7 +15,9 @@ import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
 import HaskKV.Utils
+import HaskKV.Snapshot
 
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
 import qualified Data.Heap as H
@@ -51,6 +54,9 @@ class (Monad s, KeyClass k, ValueClass v) => StorageM k v s | s -> k v where
 
 class (Binary s) => LoadSnapshotM s m | m -> s where
     loadSnapshot :: s -> m ()
+
+class TakeSnapshotM m where
+    takeSnapshot :: m ()
 
 class (StorageM k v m, LogM e m) => ApplyEntryM k v e m | m -> k v e where
     -- | Applies a log entry.
@@ -120,13 +126,10 @@ checkAndSet attempts k f
 newtype StoreT m a = StoreT { unStoreT :: m a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
-instance
-    ( MonadIO m
-    , MonadReader r m
-    , HasStore k v e r
-    , KeyClass k
-    , ValueClass v
-    ) => StorageM k v (StoreT m) where
+type StoreClass k v e r m = (MonadIO m, MonadReader r m, HasStore k v e r)
+
+instance (StoreClass k v e r m, KeyClass k, ValueClass v) =>
+    StorageM k v (StoreT m) where
 
     getValue k = liftIO . getValueImpl k =<< asks getStore
     setValue k v = liftIO . setValueImpl k v =<< asks getStore
@@ -134,39 +137,27 @@ instance
     deleteValue k = liftIO . deleteValueImpl k =<< asks getStore
     cleanupExpired t = liftIO . cleanupExpiredImpl t =<< asks getStore
 
-instance
-    ( MonadIO m
-    , MonadReader r m
-    , HasStore k v e r
-    , Entry e
-    ) => LogM e (StoreT m) where
-
+instance (StoreClass k v e r m, Entry e) => LogM e (StoreT m) where
     firstIndex = liftIO . firstIndexImpl =<< asks getStore
     lastIndex = liftIO . lastIndexImpl =<< asks getStore
     loadEntry k = liftIO . loadEntryImpl k =<< asks getStore
     storeEntries es = liftIO . storeEntriesImpl es =<< asks getStore
     deleteRange a b = liftIO . deleteRangeImpl a b =<< asks getStore
 
-instance
-    ( MonadIO m
-    , StorageM k v m
-    , MonadReader r m
-    , HasStore k v (LogEntry k v) r
-    , KeyClass k
-    , ValueClass v
-    ) => ApplyEntryM k v (LogEntry k v) (StoreT m) where
+instance (StoreClass k v (LogEntry k v) r m, KeyClass k, ValueClass v) =>
+    ApplyEntryM k v (LogEntry k v) (StoreT m) where
 
     applyEntry = applyEntryImpl
 
-instance
-    ( MonadIO m
-    , MonadReader r m
-    , HasStore k v e r
-    , KeyClass k
-    , ValueClass v
-    ) => LoadSnapshotM (M.Map k v) (StoreT m) where
+instance (StoreClass k v e r m, KeyClass k, ValueClass v) =>
+    LoadSnapshotM (M.Map k v) (StoreT m) where
 
     loadSnapshot map = liftIO . loadSnapshotImpl map =<< asks getStore
+
+instance (StoreClass k v e r m, Entry e, Binary k, Binary v) =>
+    TakeSnapshotM (StoreT m) where
+
+    takeSnapshot = liftIO . takeSnapshotImpl =<< asks getStore
 
 getValueImpl :: (Ord k) => k -> Store k v e -> IO (Maybe v)
 getValueImpl k = fmap (getKey k) . readTVarIO . unStore
@@ -222,6 +213,21 @@ loadSnapshotImpl :: (Ord k, Storable v) => M.Map k v -> Store k v e -> IO ()
 loadSnapshotImpl map (Store store) = atomically $
     forM_ (M.assocs map) $ \(k, v) ->
         modifyTVar' store (setKey k v)
+
+takeSnapshotImpl :: (Binary k, Binary v, Entry e) => Store k v e -> IO ()
+takeSnapshotImpl (Store store) = do
+    storeData <- readTVarIO store
+    let firstIndex = _lowIdx $ _log storeData
+        lastIndex  = _highIdx $ _log storeData
+        lastTerm   = entryTerm . fromJust
+                   . IM.lookup lastIndex
+                   . _entries . _log
+                   $ storeData
+        filename   = completedFilename lastIndex lastTerm
+    forkIO $ do
+        BL.writeFile filename . encode . _map $ storeData
+        deleteRangeImpl firstIndex lastIndex (Store store)
+    return ()
 
 -- Pure store functions
 

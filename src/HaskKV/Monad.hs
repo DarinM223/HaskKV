@@ -72,6 +72,9 @@ $(deriveVia [t| forall msg k v e. (Entry e) => LogM e (AppT msg k v e)
 $(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v) =>
                 LoadSnapshotM (SnapshotType k v) (AppT msg k v e)
           `Via` StoreT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v e. (Entry e, Binary k, Binary v) =>
+                TakeSnapshotM (AppT msg k v e)
+          `Via` StoreT (AppT msg k v e) |])
 $(deriveVia [t| forall msg k v e. TempLogM e (AppT msg k v e)
                             `Via` TempLogT (AppT msg k v e) |])
 $(deriveVia [t| forall msg k v e. (Binary k, Binary v) =>
