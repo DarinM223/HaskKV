@@ -17,6 +17,7 @@ import HaskKV.Log.InMem
 import HaskKV.Utils
 import HaskKV.Snapshot
 
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
@@ -154,10 +155,18 @@ instance (StoreClass k v e r m, KeyClass k, ValueClass v) =>
 
     loadSnapshot map = liftIO . loadSnapshotImpl map =<< asks getStore
 
-instance (StoreClass k v e r m, Entry e, Binary k, Binary v) =>
-    TakeSnapshotM (StoreT m) where
+instance
+    ( StoreClass k v e r m
+    , HasSnapshotManager r
+    , Entry e
+    , Binary k
+    , Binary v
+    ) => TakeSnapshotM (StoreT m) where
 
-    takeSnapshot = liftIO . takeSnapshotImpl =<< asks getStore
+    takeSnapshot = do
+        store <- asks getStore
+        manager <- asks getSnapshotManager
+        liftIO $ takeSnapshotImpl manager store
 
 getValueImpl :: (Ord k) => k -> Store k v e -> IO (Maybe v)
 getValueImpl k = fmap (getKey k) . readTVarIO . unStore
@@ -214,19 +223,26 @@ loadSnapshotImpl map (Store store) = atomically $
     forM_ (M.assocs map) $ \(k, v) ->
         modifyTVar' store (setKey k v)
 
-takeSnapshotImpl :: (Binary k, Binary v, Entry e) => Store k v e -> IO ()
-takeSnapshotImpl (Store store) = do
-    storeData <- readTVarIO store
+takeSnapshotImpl :: (Binary k, Binary v, Entry e)
+                 => SnapshotManager
+                 -> Store k v e
+                 -> IO ()
+takeSnapshotImpl manager store = do
+    storeData <- readTVarIO $ unStore store
     let firstIndex = _lowIdx $ _log storeData
         lastIndex  = _highIdx $ _log storeData
         lastTerm   = entryTerm . fromJust
                    . IM.lookup lastIndex
                    . _entries . _log
                    $ storeData
-        filename   = completedFilename lastIndex lastTerm
     forkIO $ do
-        BL.writeFile filename . encode . _map $ storeData
-        deleteRangeImpl firstIndex lastIndex (Store store)
+        createSnapshotImpl lastIndex lastTerm manager
+        let snapData = B.concat . BL.toChunks . encode . _map $ storeData
+        -- FIXME(DarinM223): maybe write a version of writeSnapshotImpl
+        -- that takes in a lazy bytestring instead of a strict bytestring?
+        writeSnapshotImpl 0 snapData lastIndex manager
+        saveSnapshotImpl lastIndex manager
+        deleteRangeImpl firstIndex lastIndex store
     return ()
 
 -- Pure store functions
