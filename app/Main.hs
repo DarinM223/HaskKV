@@ -58,6 +58,12 @@ handleArgs (path:sid:_) = do
         storeEntries initEntries
         mapM_ applyEntry initEntries
 
+        snapIndex <- snapshotIndex
+        snapshot <- maybe (pure Nothing) readSnapshot snapIndex
+        case (snapIndex, snapshot) of
+            (Just index, Just snap) -> loadSnapshot index snap
+            _                       -> return ()
+
     -- Run Raft server and handler.
     mapM_ (\p -> runServer p "*" settings serverState) raftPort
     forkIO $ raftLoop appConfig raftState

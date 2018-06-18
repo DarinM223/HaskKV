@@ -39,6 +39,7 @@ class (Binary s) => SnapshotM s m | m -> s where
     saveSnapshot   :: Int -> m ()
     readSnapshot   :: Int -> m (Maybe s)
     readChunk      :: Int -> Int -> m (Maybe SnapshotChunk)
+    snapshotIndex  :: m (Maybe Int)
 
 data Snapshot = Snapshot
     { _file     :: Handle
@@ -124,6 +125,7 @@ instance
     saveSnapshot i = liftIO . saveSnapshotImpl i =<< asks getSnapshotManager
     readSnapshot i = liftIO . readSnapshotImpl i =<< asks getSnapshotManager
     readChunk a i = liftIO . readChunkImpl a i =<< asks getSnapshotManager
+    snapshotIndex = liftIO . snapshotIndexImpl =<< asks getSnapshotManager
 
 createSnapshotImpl :: Int -> Int -> SnapshotManager -> IO ()
 createSnapshotImpl index term manager = do
@@ -250,6 +252,11 @@ saveSnapshotImpl index manager = do
             removeSnapshot snap >> pure False
         Snapshot{ _index = i } | i > index -> pure True
         _                                  -> pure False
+
+snapshotIndexImpl :: SnapshotManager -> IO (Maybe Int)
+snapshotIndexImpl manager = do
+    snapshots <- readTVarIO $ _snapshots manager
+    return $ getField @"_index" <$> _completed snapshots
 
 partialFilename :: Int -> Int -> String
 partialFilename i t = (show i) ++ "_" ++ (show t) ++ ".partial.snap"

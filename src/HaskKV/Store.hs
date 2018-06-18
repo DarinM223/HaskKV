@@ -54,7 +54,7 @@ class (Monad s, KeyClass k, ValueClass v) => StorageM k v s | s -> k v where
     cleanupExpired :: Time -> s ()
 
 class (Binary s) => LoadSnapshotM s m | m -> s where
-    loadSnapshot :: s -> m ()
+    loadSnapshot :: Int -> s -> m ()
 
 class TakeSnapshotM m where
     takeSnapshot :: m ()
@@ -153,7 +153,7 @@ instance (StoreClass k v (LogEntry k v) r m, KeyClass k, ValueClass v) =>
 instance (StoreClass k v e r m, KeyClass k, ValueClass v) =>
     LoadSnapshotM (M.Map k v) (StoreT m) where
 
-    loadSnapshot map = liftIO . loadSnapshotImpl map =<< asks getStore
+    loadSnapshot i map = liftIO . loadSnapshotImpl i map =<< asks getStore
 
 instance
     ( StoreClass k v e r m
@@ -218,10 +218,17 @@ applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do
     applyStore (Delete _ k)   = deleteValue k
     applyStore _              = return ()
 
-loadSnapshotImpl :: (Ord k, Storable v) => M.Map k v -> Store k v e -> IO ()
-loadSnapshotImpl map (Store store) = atomically $
-    forM_ (M.assocs map) $ \(k, v) ->
-        modifyTVar' store (setKey k v)
+loadSnapshotImpl :: (Ord k, Storable v)
+                 => Int
+                 -> M.Map k v
+                 -> Store k v e
+                 -> IO ()
+loadSnapshotImpl lastIncludedIndex map store = do
+    atomically $ forM_ (M.assocs map) $ \(k, v) ->
+        modifyTVar' (unStore store) (setKey k v)
+    firstIndex <- fmap (_lowIdx . _log) . readTVarIO . unStore $ store
+    when (lastIncludedIndex > firstIndex) $
+        deleteRangeImpl firstIndex lastIncludedIndex store
 
 takeSnapshotImpl :: (Binary k, Binary v, Entry e)
                  => SnapshotManager

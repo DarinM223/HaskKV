@@ -135,7 +135,7 @@ handleInstallSnapshot is s
                     deleteRange first last
 
                     snap <- readSnapshot snapIndex
-                    mapM_ loadSnapshot snap
+                    mapM_ (loadSnapshot snapIndex) snap
 
         send (_leaderId is) $ successResponse s
   where
