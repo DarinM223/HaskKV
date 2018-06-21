@@ -116,8 +116,9 @@ handleInstallSnapshot is s
         send (_leaderId is) $ failResponse s
     | otherwise = do
         let snapIndex = _lastIncludedIndex is
+            snapTerm  = _lastIncludedTerm is
             offset    = getField @"_offset" is
-        when (offset == 0) $ createSnapshot snapIndex (_lastIncludedTerm is)
+        when (offset == 0) $ createSnapshot snapIndex snapTerm
         writeSnapshot offset (getField @"_data" is) snapIndex
 
         when (_done is) $ do
@@ -135,7 +136,7 @@ handleInstallSnapshot is s
                     deleteRange first last
 
                     snap <- readSnapshot snapIndex
-                    mapM_ (loadSnapshot snapIndex) snap
+                    mapM_ (loadSnapshot snapIndex snapTerm) snap
 
         send (_leaderId is) $ successResponse s
   where

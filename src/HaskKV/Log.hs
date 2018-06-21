@@ -18,6 +18,9 @@ class (Monad m) => LogM e m | m -> e where
     -- | Gets a log entry at the specified index.
     loadEntry :: Int -> m (Maybe e)
 
+    -- | Gets the term of the entry for the given index.
+    termFromIndex :: Int -> m (Maybe Int)
+
     -- | Stores multiple log entries.
     storeEntries :: [e] -> m ()
 

@@ -55,7 +55,7 @@ class (Monad s, KeyClass k, ValueClass v) => StorageM k v s | s -> k v where
     cleanupExpired :: Time -> s ()
 
 class (Binary s) => LoadSnapshotM s m | m -> s where
-    loadSnapshot :: Int -> s -> m ()
+    loadSnapshot :: Int -> Int -> s -> m ()
 
 class TakeSnapshotM m where
     takeSnapshot :: m ()
@@ -143,6 +143,7 @@ instance (StoreClass k v e r m, Entry e) => LogM e (StoreT m) where
     firstIndex = liftIO . firstIndexImpl =<< asks getStore
     lastIndex = liftIO . lastIndexImpl =<< asks getStore
     loadEntry k = liftIO . loadEntryImpl k =<< asks getStore
+    termFromIndex i = liftIO . termFromIndexImpl i =<< asks getStore
     storeEntries es = liftIO . storeEntriesImpl es =<< asks getStore
     deleteRange a b = liftIO . deleteRangeImpl a b =<< asks getStore
 
@@ -154,7 +155,7 @@ instance (StoreClass k v (LogEntry k v) r m, KeyClass k, ValueClass v) =>
 instance (StoreClass k v e r m, KeyClass k, ValueClass v) =>
     LoadSnapshotM (M.Map k v) (StoreT m) where
 
-    loadSnapshot i map = liftIO . loadSnapshotImpl i map =<< asks getStore
+    loadSnapshot i t map = liftIO . loadSnapshotImpl i t map =<< asks getStore
 
 instance
     ( StoreClass k v e r m
@@ -200,6 +201,9 @@ lastIndexImpl = fmap (lastIndexLog . _log) . readTVarIO . unStore
 loadEntryImpl :: Int -> Store k v e -> IO (Maybe e)
 loadEntryImpl k = fmap (IM.lookup k . _entries . _log) . readTVarIO . unStore
 
+termFromIndexImpl :: (Entry e) => Int -> Store k v e -> IO (Maybe Int)
+termFromIndexImpl i = fmap (entryTermLog i . _log) . readTVarIO . unStore
+
 storeEntriesImpl :: (Entry e) => [e] -> Store k v e -> IO ()
 storeEntriesImpl es
     = modifyTVarIO (\s -> s { _log = storeEntriesLog es (_log s) })
@@ -221,11 +225,12 @@ applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do
 
 loadSnapshotImpl :: (Ord k, Storable v)
                  => Int
+                 -> Int
                  -> M.Map k v
                  -> Store k v e
                  -> IO ()
-loadSnapshotImpl lastIncludedIndex map (Store store) = atomically $
-    modifyTVar' store (loadSnapshotStore lastIncludedIndex map)
+loadSnapshotImpl lastIndex lastTerm map (Store store) = atomically $
+    modifyTVar' store (loadSnapshotStore lastIndex lastTerm map)
 
 takeSnapshotImpl :: (Binary k, Binary v, Entry e)
                  => SnapshotManager
@@ -308,12 +313,15 @@ cleanupStore curr s = case minHeapMaybe (_heap s) of
 
 loadSnapshotStore :: (Ord k, Storable v)
                   => Int
+                  -> Int
                   -> M.Map k v
                   -> StoreData k v e
                   -> StoreData k v e
-loadSnapshotStore lastIncludedIndex map store
+loadSnapshotStore lastIncludedIndex lastIncludedTerm map store
     = modifyLog (truncateLog lastIncludedIndex)
-    . modifyLog (\l -> l { _snapshotLastIndex = Just lastIncludedIndex })
+    . modifyLog (\l -> l { _snapshotLastIndex = Just lastIncludedIndex
+                         , _snapshotLastTerm  = Just lastIncludedTerm
+                         })
     . foldl' (\store (k, v) -> setKey k v store) store
     . M.assocs
     $ map

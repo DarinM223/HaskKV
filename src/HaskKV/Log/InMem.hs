@@ -9,6 +9,7 @@ data Log e = Log
     , _highIdx           :: Int
     , _lowIdx            :: Int
     , _snapshotLastIndex :: Maybe Int
+    , _snapshotLastTerm  :: Maybe Int
     } deriving (Show)
 
 emptyLog :: Log e
@@ -16,12 +17,18 @@ emptyLog = Log { _entries           = IM.empty
                , _highIdx           = 0
                , _lowIdx            = 0
                , _snapshotLastIndex = Nothing
+               , _snapshotLastTerm  = Nothing
                }
 
 lastIndexLog :: Log e -> Int
 lastIndexLog l = case _snapshotLastIndex l of
     Just index | index > _highIdx l -> index
     _                               -> _highIdx l
+
+entryTermLog :: (Entry e) => Int -> Log e -> Maybe Int
+entryTermLog i log
+    | _snapshotLastIndex log == Just i = _snapshotLastTerm log
+    | otherwise = fmap entryTerm . IM.lookup i . _entries $ log
 
 deleteRangeLog :: Int -> Int -> Log e -> Log e
 deleteRangeLog min max l =
