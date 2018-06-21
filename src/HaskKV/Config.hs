@@ -71,12 +71,12 @@ configToSettings = foldl' insert IM.empty . _serverData
                               } =
         IM.insert sid (clientSettings port $ C.pack host) settings
 
-configToServerState :: Config -> IO (ServerState msg)
-configToServerState config@Config{ _backpressure     = backpressure
-                                 , _electionTimeout  = eTimeout
-                                 , _heartbeatTimeout = hTimeout
-                                 } = do
-    initServerState <- newServerState backpressure eTimeout hTimeout
+configToServerState :: Int -> Config -> IO (ServerState msg)
+configToServerState sid config@Config{ _backpressure     = backpressure
+                                     , _electionTimeout  = eTimeout
+                                     , _heartbeatTimeout = hTimeout
+                                     } = do
+    initServerState <- newServerState backpressure eTimeout hTimeout sid
     outgoing' <- foldM (insert backpressure) (_outgoing initServerState)
                . _serverData
                $ config

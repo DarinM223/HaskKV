@@ -4,6 +4,7 @@ import Control.Lens
 import Control.Monad.State
 import Data.Maybe
 import Data.List
+import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Utils
 import HaskKV.Raft.Message
@@ -11,6 +12,7 @@ import HaskKV.Raft.RPC
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
 import HaskKV.Server
+import HaskKV.Snapshot
 
 import qualified Data.IntMap as IM
 
@@ -19,6 +21,7 @@ runLeader :: ( MonadIO m
              , LogM e m
              , TempLogM e m
              , ServerM (RaftMessage e) ServerEvent m
+             , SnapshotM s m
              , Entry e
              )
           => m ()
@@ -32,15 +35,12 @@ runLeader = recv >>= \case
         storeTemporaryEntries
 
         -- Update the highest replicated index for our server.
-        lastEntry <- lastIndex >>= loadEntry
-        stateType._Leader.matchIndex %= ( IM.insert serverID'
-                                        . maybe 0 entryIndex
-                                        $ lastEntry
-                                        )
+        lastIndex' <- lastIndex
+        stateType._Leader.matchIndex %= IM.insert serverID' lastIndex'
         ids <- serverIds
         let otherServerIds = filter (/= serverID') ids
         debug "Sending AppendEntries"
-        mapM_ (sendAppendEntries lastEntry commitIndex') otherServerIds
+        mapM_ (sendAppendEntries lastIndex' commitIndex') otherServerIds
     Right rv@RequestVote{}       -> get >>= handleRequestVote rv
     Right ae@AppendEntries{}     -> get >>= handleAppendEntries ae
     Right InstallSnapshot{}      -> return ()
@@ -66,6 +66,12 @@ handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
         when (n > _commitIndex s) $ do
             debug $ "Updating commit index to " ++ show n
             commitIndex .= n
+
+handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
+    | term < _currTerm s = return ()
+    | term > _currTerm s = transitionToFollower msg
+    | otherwise =
+        readChunk snapshotChunkSize sender >>= mapM_ (sendSnapshotChunk sender)
 
 handleLeaderResponse _ _ _ = return ()
 
@@ -100,45 +106,67 @@ storeTemporaryEntries = do
         e' = setEntryTerm term . setEntryIndex idx $ e
         rest = setIndexAndTerms (idx + 1) term es
 
-sendAppendEntries :: ( MonadState RaftState m
+snapshotChunkSize :: Int
+snapshotChunkSize = 10
+
+sendAppendEntries :: forall event e s m.
+                     ( MonadState RaftState m
                      , LogM e m
                      , ServerM (RaftMessage e) event m
+                     , SnapshotM s m
                      , Entry e
                      )
-                  => Maybe e
+                  => Int
                   -> Int
                   -> Int
                   -> m ()
-sendAppendEntries entry commitIndex id = do
-    let lastIndex = maybe 0 entryIndex entry
-        lastTerm  = maybe 0 entryTerm entry
-
+sendAppendEntries lastIndex commitIndex id = do
     nextIndexes <- preuse (stateType._Leader.nextIndex)
-    entries <- case nextIndexes >>= IM.lookup id of
-        Just nextIndex -> fromMaybe [] <$> entryRange nextIndex lastIndex
-        Nothing        -> return []
-
-    term <- use currTerm
-    sid <- use serverID
-    if null entries
-        then send id AppendEntries
+    case nextIndexes >>= IM.lookup id of
+        Just nextIndex -> do
+            prevEntry <- loadEntry $ prevIndex nextIndex
+            entries <- entryRange nextIndex lastIndex
+            if isNothing entries || isNothing prevEntry
+                then tryInstallSnapshot id commitIndex
+                else sendAppend id prevEntry (fromMaybe [] entries) commitIndex
+        Nothing -> sendAppend id (Nothing :: Maybe e) [] commitIndex
+  where
+    sendAppend id prevEntry entries commitIndex = do
+        term <- use currTerm
+        sid <- use serverID
+        let prevLogIdx  = maybe 0 entryIndex prevEntry
+            prevLogTerm = maybe 0 entryTerm prevEntry
+        send id AppendEntries
             { _term        = term
             , _leaderId    = sid
-            , _prevLogIdx  = lastIndex
-            , _prevLogTerm = lastTerm
-            , _entries     = []
+            , _prevLogIdx  = prevLogIdx
+            , _prevLogTerm = prevLogTerm
+            , _entries     = entries
             , _commitIdx   = commitIndex
             }
-        else do
-            let firstSendingIdx = entryIndex $ head entries
-            prevEntry <- loadEntry $ prevIndex firstSendingIdx
-            let prevLogIdx  = maybe 0 entryIndex prevEntry
-                prevLogTerm = maybe 0 entryTerm prevEntry
-            send id AppendEntries
-                { _term        = term
-                , _leaderId    = sid
-                , _prevLogIdx  = prevLogIdx
-                , _prevLogTerm = prevLogTerm
-                , _entries     = entries
-                , _commitIdx   = commitIndex
-                }
+    tryInstallSnapshot id commitIndex =
+        readChunk snapshotChunkSize id >>= \case
+            Just chunk -> sendSnapshotChunk id chunk
+            Nothing    -> sendAppend id (Nothing :: Maybe e) [] commitIndex
+
+sendSnapshotChunk :: (MonadState RaftState m, ServerM (RaftMessage e) event m)
+                  => Int
+                  -> SnapshotChunk
+                  -> m ()
+sendSnapshotChunk id chunk = do
+    term <- use currTerm
+    sid <- use serverID
+    let done      = _type chunk == EndChunk
+        lastIndex = getField @"_index" chunk
+        lastTerm  = getField @"_term" chunk
+        offset    = getField @"_offset" chunk
+        snapData  = getField @"_data" chunk
+    send id InstallSnapshot
+        { _term              = term
+        , _leaderId          = sid
+        , _lastIncludedIndex = lastIndex
+        , _lastIncludedTerm  = lastTerm
+        , _offset            = offset
+        , _data              = snapData
+        , _done              = done
+        }

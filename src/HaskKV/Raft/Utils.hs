@@ -2,6 +2,7 @@ module HaskKV.Raft.Utils where
 
 import Control.Lens
 import Control.Monad.State
+import Data.Maybe
 import GHC.Records
 import HaskKV.Log
 import HaskKV.Raft.Message
@@ -21,7 +22,6 @@ transitionToFollower msg = do
 transitionToLeader :: ( LogM e m
                       , MonadState RaftState m
                       , ServerM (RaftMessage e) ServerEvent m
-                      , Entry e
                       , HasField "_term" msg Int
                       )
                    => msg
@@ -29,22 +29,21 @@ transitionToLeader :: ( LogM e m
 transitionToLeader msg = do
     reset HeartbeatTimeout
 
-    lastEntry <- lastIndex >>= loadEntry
-    let lastEntryIndex = maybe 0 entryIndex lastEntry
-        lastEntryTerm  = maybe 0 entryTerm lastEntry
+    lastIndex' <- lastIndex
+    lastTerm <- fromMaybe 0 <$> termFromIndex lastIndex'
 
     sid <- use serverID
     broadcast $ AppendEntries
         { _term        = getField @"_term" msg
         , _leaderId    = sid
-        , _prevLogIdx  = lastEntryIndex
-        , _prevLogTerm = lastEntryTerm
+        , _prevLogIdx  = lastIndex'
+        , _prevLogTerm = lastTerm
         , _entries     = []
         , _commitIdx   = 0
         }
 
     ids <- serverIds
-    let initNextIndex = lastEntryIndex + 1
+    let initNextIndex = lastIndex' + 1
         nextIndexes   = IM.fromList . fmap (, initNextIndex) $ ids
         matchIndexes  = IM.fromList . fmap (, 0) $ ids
         leaderState   = LeaderState
@@ -61,7 +60,6 @@ quorumSize = do
 startElection :: ( MonadState RaftState m
                  , LogM e m
                  , ServerM (RaftMessage e) event m
-                 , Entry e
                  )
               => m ()
 startElection = do
@@ -70,16 +68,15 @@ startElection = do
     updateCurrTerm (+ 1)
     votedFor .= Just sid
 
-    lastEntry <- lastIndex >>= loadEntry
-    let lastEntryIndex = maybe 0 entryIndex lastEntry
-        lastEntryTerm  = maybe 0 entryTerm lastEntry
+    lastIndex' <- lastIndex
+    lastTerm <- fromMaybe 0 <$> termFromIndex lastIndex'
 
     term <- use currTerm
     broadcast RequestVote
         { _candidateID = sid
         , _term        = term
-        , _lastLogIdx  = lastEntryIndex
-        , _lastLogTerm = lastEntryTerm
+        , _lastLogIdx  = lastIndex'
+        , _lastLogTerm = lastTerm
         }
 
 debug :: (MonadIO m, MonadState RaftState m) => String -> m ()

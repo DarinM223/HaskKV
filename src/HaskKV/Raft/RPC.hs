@@ -2,6 +2,7 @@ module HaskKV.Raft.RPC where
 
 import Control.Lens
 import Control.Monad.State
+import Data.Maybe
 import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Utils
@@ -29,9 +30,10 @@ handleRequestVote rv s
         transitionToFollower rv
         get >>= handleRequestVote rv
     | canVote (_candidateID rv) s = do
-        lastEntry <- lastIndex >>= loadEntry
-        let validLog = maybe (True, True) (checkValid rv) lastEntry
-        if validLog == (True, True)
+        index <- lastIndex
+        term <- termFromIndex index
+        let isValid = checkValid rv index (fromMaybe 0 term)
+        if isValid
             then do
                 debug $ "Sending vote to " ++ show (_candidateID rv)
                 send (_candidateID rv) $ successResponse s
@@ -47,9 +49,7 @@ handleRequestVote rv s
     existingLeader rv s = _leader s /= Nothing
                        && _leader s /= Just (_candidateID rv)
     canVote cid s = _votedFor s == Nothing || _votedFor s == Just cid
-    checkValid rv e = (checkIndex rv e, checkTerm rv e)
-    checkIndex rv e = _lastLogIdx rv >= entryIndex e
-    checkTerm rv e = _lastLogTerm rv >= entryTerm e
+    checkValid rv i t = _lastLogIdx rv >= i && _lastLogTerm rv >= t
     fail rv = send (_candidateID rv) . failResponse
 
 handleAppendEntries :: ( MonadIO m
@@ -72,7 +72,7 @@ handleAppendEntries ae s
         leader .= Just (_leaderId ae)
         reset ElectionTimeout
 
-        prevLogTerm <- fmap (maybe 0 entryTerm) . loadEntry . _prevLogIdx $ ae
+        prevLogTerm <- fromMaybe 0 <$> (termFromIndex $ _prevLogIdx ae)
         if prevLogTerm == _prevLogTerm ae
             then do
                 lastLogIndex <- lastIndex
@@ -116,8 +116,9 @@ handleInstallSnapshot is s
         send (_leaderId is) $ failResponse s
     | otherwise = do
         let snapIndex = _lastIncludedIndex is
+            snapTerm  = _lastIncludedTerm is
             offset    = getField @"_offset" is
-        when (offset == 0) $ createSnapshot snapIndex
+        when (offset == 0) $ createSnapshot snapIndex snapTerm
         writeSnapshot offset (getField @"_data" is) snapIndex
 
         when (_done is) $ do
@@ -135,7 +136,7 @@ handleInstallSnapshot is s
                     deleteRange first last
 
                     snap <- readSnapshot snapIndex
-                    mapM_ loadSnapshot snap
+                    mapM_ (loadSnapshot snapIndex snapTerm) snap
 
         send (_leaderId is) $ successResponse s
   where

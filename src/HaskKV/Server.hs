@@ -32,6 +32,7 @@ newtype Capacity = Capacity { unCapacity :: Int } deriving (Show, Eq)
 data ServerState msg = ServerState
     { _messages         :: RQ.RollingQueue msg
     , _outgoing         :: IM.IntMap (RQ.RollingQueue msg)
+    , _sid              :: Int
     , _electionTimer    :: Timer.Timer
     , _heartbeatTimer   :: Timer.Timer
     , _electionTimeout  :: Timer.Timeout
@@ -44,8 +45,9 @@ class HasServerState msg r | r -> msg where
 newServerState :: Capacity
                -> Timer.Timeout
                -> Timer.Timeout
+               -> Int
                -> IO (ServerState msg)
-newServerState backpressure electionTimeout heartbeatTimeout = do
+newServerState backpressure electionTimeout heartbeatTimeout sid = do
     messages <- RQ.newIO (unCapacity backpressure)
     electionTimer <- Timer.newIO
     heartbeatTimer <- Timer.newIO
@@ -56,6 +58,7 @@ newServerState backpressure electionTimeout heartbeatTimeout = do
     return ServerState
         { _messages         = messages
         , _outgoing         = IM.empty
+        , _sid              = sid
         , _electionTimer    = electionTimer
         , _heartbeatTimer   = heartbeatTimer
         , _electionTimeout  = electionTimeout
@@ -135,7 +138,11 @@ sendImpl i msg s = do
     mapM_ (atomically . flip RQ.write msg) rq
 
 broadcastImpl :: msg -> ServerState msg -> IO ()
-broadcastImpl msg = atomically . mapM_ (`RQ.write` msg) . IM.elems . _outgoing
+broadcastImpl msg ss = atomically
+                     . mapM_ ((`RQ.write` msg) . snd)
+                     . filter ((/= _sid ss) . fst)
+                     . IM.assocs
+                     $ _outgoing ss
 
 recvImpl :: ServerState msg -> IO (Either ServerEvent msg)
 recvImpl s = atomically $

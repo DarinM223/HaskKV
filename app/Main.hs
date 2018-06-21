@@ -42,7 +42,7 @@ handleArgs (path:sid:_) = do
             , _serverData       = []
             }
     config <- readConfig initConfig path
-    serverState <- configToServerState config
+    serverState <- configToServerState sid' config
     let raftState   = newRaftState sid'
         raftPort    = configRaftPort sid' config
         apiPort     = configAPIPort sid' config
@@ -57,6 +57,12 @@ handleArgs (path:sid:_) = do
     flip runAppTConfig appConfig $ do
         storeEntries initEntries
         mapM_ applyEntry initEntries
+
+        info <- snapshotInfo
+        snapshot <- maybe (pure Nothing) (readSnapshot . fst) info
+        case (info, snapshot) of
+            (Just (index, term), Just snap) -> loadSnapshot index term snap
+            _                               -> return ()
 
     -- Run Raft server and handler.
     mapM_ (\p -> runServer p "*" settings serverState) raftPort

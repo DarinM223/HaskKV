@@ -42,8 +42,8 @@ diffEntriesWithLog last entries =
     diffEntriesStart lastIndex ((i, e):es)
         | entryIndex e > lastIndex = return $ Just i
         | otherwise =
-            loadEntry (entryIndex e) >>= \case
-                Just storeEntry | entryTerm e /= entryTerm storeEntry -> do
+            termFromIndex (entryIndex e) >>= \case
+                Just term | entryTerm e /= term -> do
                     deleteRange (entryIndex e) lastIndex
                     return $ Just i
                 _ -> diffEntriesStart lastIndex es
