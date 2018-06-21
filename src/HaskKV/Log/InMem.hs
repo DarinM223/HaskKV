@@ -5,13 +5,23 @@ import HaskKV.Log
 import qualified Data.IntMap as IM
 
 data Log e = Log
-    { _entries :: IM.IntMap e
-    , _highIdx :: Int
-    , _lowIdx  :: Int
+    { _entries           :: IM.IntMap e
+    , _highIdx           :: Int
+    , _lowIdx            :: Int
+    , _snapshotLastIndex :: Maybe Int
     } deriving (Show)
 
 emptyLog :: Log e
-emptyLog = Log { _entries = IM.empty, _highIdx = 0, _lowIdx = 0 }
+emptyLog = Log { _entries           = IM.empty
+               , _highIdx           = 0
+               , _lowIdx            = 0
+               , _snapshotLastIndex = Nothing
+               }
+
+lastIndexLog :: Log e -> Int
+lastIndexLog l = case _snapshotLastIndex l of
+    Just index | index > _highIdx l -> index
+    _                               -> _highIdx l
 
 deleteRangeLog :: Int -> Int -> Log e -> Log e
 deleteRangeLog min max l =

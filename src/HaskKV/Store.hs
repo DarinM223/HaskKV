@@ -8,6 +8,7 @@ import Control.Monad.Reader
 import Data.Aeson hiding (encode)
 import Data.Binary
 import Data.Binary.Orphans ()
+import Data.List
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Time
 import GHC.Generics
@@ -194,7 +195,7 @@ firstIndexImpl :: Store k v e -> IO Int
 firstIndexImpl = fmap (_lowIdx . _log) . readTVarIO . unStore
 
 lastIndexImpl :: Store k v e -> IO Int
-lastIndexImpl = fmap (_highIdx . _log) . readTVarIO . unStore
+lastIndexImpl = fmap (lastIndexLog . _log) . readTVarIO . unStore
 
 loadEntryImpl :: Int -> Store k v e -> IO (Maybe e)
 loadEntryImpl k = fmap (IM.lookup k . _entries . _log) . readTVarIO . unStore
@@ -223,12 +224,8 @@ loadSnapshotImpl :: (Ord k, Storable v)
                  -> M.Map k v
                  -> Store k v e
                  -> IO ()
-loadSnapshotImpl lastIncludedIndex map store = do
-    atomically $ forM_ (M.assocs map) $ \(k, v) ->
-        modifyTVar' (unStore store) (setKey k v)
-    firstIndex <- fmap (_lowIdx . _log) . readTVarIO . unStore $ store
-    when (lastIncludedIndex > firstIndex) $
-        deleteRangeImpl firstIndex lastIncludedIndex store
+loadSnapshotImpl lastIncludedIndex map (Store store) = atomically $
+    modifyTVar' store (loadSnapshotStore lastIncludedIndex map)
 
 takeSnapshotImpl :: (Binary k, Binary v, Entry e)
                  => SnapshotManager
@@ -308,3 +305,21 @@ cleanupStore curr s = case minHeapMaybe (_heap s) of
     _ -> s
   where
     diff a b = realToFrac (diffUTCTime a b)
+
+loadSnapshotStore :: (Ord k, Storable v)
+                  => Int
+                  -> M.Map k v
+                  -> StoreData k v e
+                  -> StoreData k v e
+loadSnapshotStore lastIncludedIndex map store
+    = modifyLog (truncateLog lastIncludedIndex)
+    . modifyLog (\l -> l { _snapshotLastIndex = Just lastIncludedIndex })
+    . foldl' (\store (k, v) -> setKey k v store) store
+    . M.assocs
+    $ map
+  where
+    modifyLog f store = store { _log = f (_log store) }
+    truncateLog lastIncludedIndex log
+        | lastIncludedIndex > _lowIdx log =
+            deleteRangeLog (_lowIdx log) lastIncludedIndex log
+        | otherwise = log
