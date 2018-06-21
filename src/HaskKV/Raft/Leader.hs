@@ -35,15 +35,12 @@ runLeader = recv >>= \case
         storeTemporaryEntries
 
         -- Update the highest replicated index for our server.
-        lastEntry <- lastIndex >>= loadEntry
-        stateType._Leader.matchIndex %= ( IM.insert serverID'
-                                        . maybe 0 entryIndex
-                                        $ lastEntry
-                                        )
+        lastIndex' <- lastIndex
+        stateType._Leader.matchIndex %= IM.insert serverID' lastIndex'
         ids <- serverIds
         let otherServerIds = filter (/= serverID') ids
         debug "Sending AppendEntries"
-        mapM_ (sendAppendEntries lastEntry commitIndex') otherServerIds
+        mapM_ (sendAppendEntries lastIndex' commitIndex') otherServerIds
     Right rv@RequestVote{}       -> get >>= handleRequestVote rv
     Right ae@AppendEntries{}     -> get >>= handleAppendEntries ae
     Right InstallSnapshot{}      -> return ()
@@ -119,12 +116,11 @@ sendAppendEntries :: forall event e s m.
                      , SnapshotM s m
                      , Entry e
                      )
-                  => Maybe e
+                  => Int
                   -> Int
                   -> Int
                   -> m ()
-sendAppendEntries entry commitIndex id = do
-    let lastIndex = maybe 0 entryIndex entry
+sendAppendEntries lastIndex commitIndex id = do
     nextIndexes <- preuse (stateType._Leader.nextIndex)
     case nextIndexes >>= IM.lookup id of
         Just nextIndex -> do

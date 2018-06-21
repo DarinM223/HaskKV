@@ -2,6 +2,7 @@ module HaskKV.Raft.RPC where
 
 import Control.Lens
 import Control.Monad.State
+import Data.Maybe
 import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Utils
@@ -29,9 +30,10 @@ handleRequestVote rv s
         transitionToFollower rv
         get >>= handleRequestVote rv
     | canVote (_candidateID rv) s = do
-        lastEntry <- lastIndex >>= loadEntry
-        let validLog = maybe (True, True) (checkValid rv) lastEntry
-        if validLog == (True, True)
+        index <- lastIndex
+        term <- termFromIndex index
+        let isValid = fromMaybe False $ checkValid rv index <$> term
+        if isValid
             then do
                 debug $ "Sending vote to " ++ show (_candidateID rv)
                 send (_candidateID rv) $ successResponse s
@@ -47,9 +49,7 @@ handleRequestVote rv s
     existingLeader rv s = _leader s /= Nothing
                        && _leader s /= Just (_candidateID rv)
     canVote cid s = _votedFor s == Nothing || _votedFor s == Just cid
-    checkValid rv e = (checkIndex rv e, checkTerm rv e)
-    checkIndex rv e = _lastLogIdx rv >= entryIndex e
-    checkTerm rv e = _lastLogTerm rv >= entryTerm e
+    checkValid rv i t = _lastLogIdx rv >= i && _lastLogTerm rv >= t
     fail rv = send (_candidateID rv) . failResponse
 
 handleAppendEntries :: ( MonadIO m
