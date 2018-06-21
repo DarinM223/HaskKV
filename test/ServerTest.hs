@@ -2,6 +2,7 @@ module ServerTest (tests) where
 
 import Conduit
 import Control.Concurrent (threadDelay, forkIO)
+import Control.Concurrent.STM
 import Control.Monad
 import Data.ByteString
 import Test.Tasty
@@ -38,7 +39,7 @@ unitTests = testGroup "Unit tests"
 
 testReceiveMessage :: TestTree
 testReceiveMessage = testCase "Receives message" $ do
-    state <- S.newServerState backpressure timeout longer
+    state <- S.newServerState backpressure timeout longer 1
     sourceMessages (["a", "b"] :: [ByteString]) state
     msg1 <- S.recvImpl state
     msg1 @?= Right "a"
@@ -49,7 +50,7 @@ testReceiveMessage = testCase "Receives message" $ do
 
 testSendMessage :: TestTree
 testSendMessage = testCase "Sends message" $ do
-    state <- S.newServerState backpressure timeout timeout
+    state <- S.newServerState backpressure timeout timeout 1
     state <- buildClientMap state [1..2]
     S.sendImpl 1 "a" state
     S.sendImpl 2 "b" state
@@ -58,18 +59,19 @@ testSendMessage = testCase "Sends message" $ do
 
 testBroadcastMessage :: TestTree
 testBroadcastMessage = testCase "Broadcasts message" $ do
-    state <- S.newServerState backpressure timeout timeout
+    state <- S.newServerState backpressure timeout timeout 1
     state <- buildClientMap state [1..3]
     S.broadcastImpl "a" state
     results <- sinkClients state
-    results @?= [["a"], ["a"], ["a"]]
+    results @?= [[], ["a"], ["a"]]
 
 testResetElection :: TestTree
 testResetElection = testCase "Resets election timer" $ do
     state <- S.newServerState
         backpressure
         (T.Timeout 500000)
-        (T.Timeout 600000) :: IO (S.ServerState ByteString)
+        (T.Timeout 600000)
+        1 :: IO (S.ServerState ByteString)
     forkIO $ do
         threadDelay 400000
         S.resetImpl S.ElectionTimeout state
@@ -83,7 +85,8 @@ testResetHearbeat = testCase "Resets heartbeat timer" $ do
     state <- S.newServerState
         backpressure
         (T.Timeout 600000)
-        (T.Timeout 500000) :: IO (S.ServerState ByteString)
+        (T.Timeout 500000)
+        1 :: IO (S.ServerState ByteString)
     forkIO $ do
         threadDelay 400000
         S.resetImpl S.HeartbeatTimeout state
@@ -97,7 +100,8 @@ testInject = testCase "Inject takes priority" $ do
     state <- S.newServerState
         backpressure
         (T.Timeout 5000)
-        (T.Timeout 10000) :: IO (S.ServerState ByteString)
+        (T.Timeout 10000)
+        1 :: IO (S.ServerState ByteString)
     S.inject S.HeartbeatTimeout state
     msg1 <- S.recvImpl state
     msg1 @?= Left S.HeartbeatTimeout
@@ -117,6 +121,6 @@ buildClientMap = foldM addToMap
 
 sinkClients s =
     forM (IM.assocs . S._outgoing $ s) $ \(_, rq) ->
-          runConduit
-        $ sourceRQOne rq
-       .| sinkList
+        atomically (RQ.isEmpty rq) >>= \case
+            True  -> return []
+            False -> runConduit $ sourceRQOne rq .| sinkList

@@ -3,6 +3,7 @@
 module HaskKV.Snapshot where
 
 import Control.Concurrent.STM
+import Control.Exception
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -81,7 +82,8 @@ closeSnapshotManager manager = do
 
 loadSnapshots :: FilePath -> IO (TVar Snapshots)
 loadSnapshots path = do
-    files <- getDirectoryContents path
+    files <- catch (getDirectoryContents path) $ \(_ :: SomeException) ->
+        return []
     partial <- mapM (toPartial . (path </>)) . filter isPartial $ files
     completed <- mapM (toCompleted . (path </>)) . filter isCompleted $ files
     newTVarIO Snapshots
@@ -169,12 +171,13 @@ writeSnapshotImpl offset snapData index manager = do
             return (snap { _offset = offset } :: Snapshot)
 
 readSnapshotImpl :: (Binary s) => Int -> SnapshotManager -> IO (Maybe s)
-readSnapshotImpl index manager = do
-    snapshots <- readTVarIO $ _snapshots manager
-    case _completed snapshots of
-        Just Snapshot{ _index = i, _file = file } | i == index ->
-            pure . Just . decode =<< BL.hGetContents file
-        _ -> return Nothing
+readSnapshotImpl index manager =
+    handle (\(_ :: SomeException) -> return Nothing) $ do
+        snapshots <- readTVarIO $ _snapshots manager
+        case _completed snapshots of
+            Just Snapshot{ _index = i, _file = file } | i == index ->
+                pure . Just . decode =<< BL.hGetContents file
+            _ -> return Nothing
 
 readChunkImpl :: Int -> Int -> SnapshotManager -> IO (Maybe SnapshotChunk)
 readChunkImpl amount sid manager = do

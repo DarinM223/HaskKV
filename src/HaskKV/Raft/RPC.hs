@@ -32,7 +32,7 @@ handleRequestVote rv s
     | canVote (_candidateID rv) s = do
         index <- lastIndex
         term <- termFromIndex index
-        let isValid = fromMaybe False $ checkValid rv index <$> term
+        let isValid = checkValid rv index (fromMaybe 0 term)
         if isValid
             then do
                 debug $ "Sending vote to " ++ show (_candidateID rv)
@@ -72,7 +72,7 @@ handleAppendEntries ae s
         leader .= Just (_leaderId ae)
         reset ElectionTimeout
 
-        prevLogTerm <- fmap (maybe 0 entryTerm) . loadEntry . _prevLogIdx $ ae
+        prevLogTerm <- fromMaybe 0 <$> (termFromIndex $ _prevLogIdx ae)
         if prevLogTerm == _prevLogTerm ae
             then do
                 lastLogIndex <- lastIndex
