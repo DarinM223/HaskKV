@@ -16,7 +16,9 @@ import HaskKV.Store hiding (HasStore)
 
 import qualified Control.Monad.State as S
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy as BL
+import qualified Data.ByteString.Lazy.Char8 as CL
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
 
@@ -27,15 +29,14 @@ type M = RaftMessage E
 
 data MockSnapshot = MockSnapshot
     { _file   :: String
-    , _index  :: Int
+    , _sIndex :: Int
     , _term   :: Int
-    , _offset :: Int
     }
 makeFieldsNoPrefix ''MockSnapshot
 
 data MockSnapshotManager = MockSnapshotManager
     { _completed :: Maybe MockSnapshot
-    , _partial   :: [MockSnapshot]
+    , _partial   :: IM.IntMap MockSnapshot
     , _chunks    :: IM.IntMap String
     }
 makeFieldsNoPrefix ''MockSnapshotManager
@@ -49,6 +50,7 @@ data MockConfig = MockConfig
     , _electionTimer   :: Bool
     , _heartbeatTimer  :: Bool
     , _appliedEntries  :: [E]
+    , _files           :: M.Map (Int, Int) String
     }
 makeFieldsNoPrefix ''MockConfig
 
@@ -114,9 +116,26 @@ instance ApplyEntryM K V E (State MockConfig) where
 {-readChunk      :: Int -> Int -> m (Maybe SnapshotChunk)-}
 {-snapshotInfo   :: m (Maybe (Int, Int))-}
 instance SnapshotM (M.Map K V) (State MockConfig) where
-    createSnapshot i t = undefined
-    writeSnapshot offset snapData i = undefined
-    saveSnapshot i = undefined
-    readSnapshot i = undefined
-    readChunk i t = undefined
-    snapshotInfo = undefined
+    createSnapshot i t = do
+        file <- preuse (files . ix (i, t))
+        forM_ file $ \file -> do
+            let snapshot = MockSnapshot { _file   = file
+                                        , _sIndex = i
+                                        , _term   = t
+                                        }
+            (snapshotManager . partial) %= (IM.insert i snapshot)
+    writeSnapshot _ snapData i =
+        (snapshotManager . partial . ix i . file) %= (++ (C.unpack snapData))
+    saveSnapshot i = do
+        snap <- fromJust <$> preuse (snapshotManager . partial . ix i)
+        (snapshotManager . completed . _Just) %= \s ->
+            if getField @"_sIndex" s < i then snap else s
+        (snapshotManager . partial) %= IM.filter ((> i) . getField @"_sIndex")
+    readSnapshot _ = do
+        snapData <- preuse (snapshotManager . completed . _Just . file)
+        return . fmap (decode . CL.pack) $ snapData
+    readChunk amount sid = undefined
+    snapshotInfo = do
+        snapIndex <- preuse (snapshotManager . completed . _Just . sIndex)
+        snapTerm <- preuse (snapshotManager . completed . _Just . term)
+        return $ (,) <$> snapIndex <*> snapTerm
