@@ -5,6 +5,7 @@ module Mock where
 import Control.Lens
 import Control.Monad.State
 import Data.Maybe
+import Data.Monoid
 import Data.Binary
 import GHC.Records
 import HaskKV.Log
@@ -109,12 +110,8 @@ instance ApplyEntryM K V E (State MockConfig) where
             Delete _ k   -> deleteValue k
             _            -> return ()
 
-{-createSnapshot :: Int -> Int -> m ()-}
-{-writeSnapshot  :: Int -> B.ByteString -> Int -> m ()-}
-{-saveSnapshot   :: Int -> m ()-}
-{-readSnapshot   :: Int -> m (Maybe s)-}
-{-readChunk      :: Int -> Int -> m (Maybe SnapshotChunk)-}
-{-snapshotInfo   :: m (Maybe (Int, Int))-}
+prezoom l m = getFirst <$> zoom l (First . Just <$> m)
+
 instance SnapshotM (M.Map K V) (State MockConfig) where
     createSnapshot i t = do
         file <- preuse (files . ix (i, t))
@@ -134,7 +131,22 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
     readSnapshot _ = do
         snapData <- preuse (snapshotManager . completed . _Just . file)
         return . fmap (decode . CL.pack) $ snapData
-    readChunk amount sid = undefined
+    readChunk amount sid = do
+        Just (i, t) <- snapshotInfo
+        temp <- preuse (snapshotManager . chunks . ix sid)
+        when (isNothing temp || temp == Just "") $ do
+            file <- use (files . ix (i, t))
+            (snapshotManager . chunks) %= (IM.insert sid file)
+        prezoom (snapshotManager . chunks . ix sid) $ S.state $ \s ->
+            let (chunkData, remainder) = splitAt amount s
+                chunkType = if null remainder then EndChunk else FullChunk
+                chunk = SnapshotChunk { _data   = C.pack chunkData
+                                      , _type   = chunkType
+                                      , _offset = 0
+                                      , _index  = i
+                                      , _term   = t
+                                      }
+            in (chunk, remainder)
     snapshotInfo = do
         snapIndex <- preuse (snapshotManager . completed . _Just . sIndex)
         snapTerm <- preuse (snapshotManager . completed . _Just . term)
