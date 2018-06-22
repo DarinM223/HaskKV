@@ -12,6 +12,7 @@ import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
 import HaskKV.Raft
+import HaskKV.Server
 import HaskKV.Snapshot hiding (HasSnapshotManager)
 import HaskKV.Store hiding (HasStore)
 
@@ -43,11 +44,14 @@ data MockSnapshotManager = MockSnapshotManager
 makeFieldsNoPrefix ''MockSnapshotManager
 
 data MockConfig = MockConfig
-    { _state           :: RaftState
+    { _raftState       :: RaftState
     , _store           :: StoreData K V E
     , _tempLog         :: [E]
     , _snapshotManager :: MockSnapshotManager
-    , _messages        :: [M]
+    , _receivingMsgs   :: [M]
+    , _sendingMsgs     :: IM.IntMap [M]
+    , _myServerID      :: Int
+    , _serverIDs       :: [Int]
     , _electionTimer   :: Bool
     , _heartbeatTimer  :: Bool
     , _appliedEntries  :: [E]
@@ -55,12 +59,18 @@ data MockConfig = MockConfig
     }
 makeFieldsNoPrefix ''MockConfig
 
--- TODO(DarinM223): use state monad and "zoom" into each MockConfig.
--- This means that StateT MockConfig needs instances for ServerM, StorageM,
--- ApplyEntryM, LogM, LoadSnapshotM, TakeSnapshotM, TempLogM, and
--- SnapshotM.
-
 type Servers = [MockConfig]
+
+newtype MockT a = MockT { unMockT :: State MockConfig a }
+    deriving ( Functor, Applicative, Monad
+             , TempLogM E, TakeSnapshotM, LogM E, StorageM K V
+             , LoadSnapshotM (M.Map K V), ApplyEntryM K V E
+             , SnapshotM (M.Map K V), ServerM M ServerEvent
+             )
+
+instance MonadState RaftState MockT where
+    get = MockT (gets _raftState)
+    put v = MockT (raftState .= v)
 
 instance TempLogM E (State MockConfig) where
     addTemporaryEntry e = tempLog %= (++ [e])
@@ -151,3 +161,27 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
         snapIndex <- preuse (snapshotManager . completed . _Just . sIndex)
         snapTerm <- preuse (snapshotManager . completed . _Just . term)
         return $ (,) <$> snapIndex <*> snapTerm
+
+instance ServerM M ServerEvent (State MockConfig) where
+    send sid msg = (sendingMsgs . ix sid) %= (++ [msg])
+    broadcast msg = do
+        sid <- use myServerID
+        sids <- use serverIDs
+        mapM_ (flip send msg) . filter (/= sid) $ sids
+    recv = S.get >>= go
+      where
+        go s
+            | getField @"_electionTimer" s = do
+                electionTimer .= False
+                return (Left ElectionTimeout)
+            | getField @"_heartbeatTimer" s = do
+                heartbeatTimer .= False
+                return (Left HeartbeatTimeout)
+            | otherwise = do
+                msgs <- use receivingMsgs
+                let (msg, msgs') = splitAt 1 msgs
+                receivingMsgs .= msgs'
+                return $ Right $ head msg
+    reset HeartbeatTimeout = heartbeatTimer .= False
+    reset ElectionTimeout = electionTimer .= False
+    serverIds = gets _serverIDs
