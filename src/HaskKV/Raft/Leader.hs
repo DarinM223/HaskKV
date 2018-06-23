@@ -7,6 +7,7 @@ import Data.List
 import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Utils
+import HaskKV.Raft.Debug
 import HaskKV.Raft.Message
 import HaskKV.Raft.RPC
 import HaskKV.Raft.State
@@ -16,7 +17,7 @@ import HaskKV.Snapshot
 
 import qualified Data.IntMap as IM
 
-runLeader :: ( MonadIO m
+runLeader :: ( DebugM m
              , MonadState RaftState m
              , LogM e m
              , TempLogM e m
@@ -85,7 +86,7 @@ quorumIndex = do
     quorumSize' <- quorumSize
     return $ sorted !! (quorumSize' - 1)
 
-storeTemporaryEntries :: ( MonadIO m
+storeTemporaryEntries :: ( DebugM m
                          , MonadState RaftState m
                          , LogM e m
                          , TempLogM e m

@@ -6,6 +6,7 @@ import Data.Maybe
 import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Utils
+import HaskKV.Raft.Debug
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
@@ -13,7 +14,7 @@ import HaskKV.Server
 import HaskKV.Snapshot
 import HaskKV.Store
 
-handleRequestVote :: ( MonadIO m
+handleRequestVote :: ( DebugM m
                      , ServerM (RaftMessage e) ServerEvent m
                      , MonadState RaftState m
                      , LogM e m
@@ -52,7 +53,7 @@ handleRequestVote rv s
     checkValid rv i t = _lastLogIdx rv >= i && _lastLogTerm rv >= t
     fail rv = send (_candidateID rv) . failResponse
 
-handleAppendEntries :: ( MonadIO m
+handleAppendEntries :: ( DebugM m
                        , ServerM (RaftMessage e) ServerEvent m
                        , MonadState RaftState m
                        , LogM e m

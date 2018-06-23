@@ -12,6 +12,7 @@ import Data.Map (Map)
 import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp
+import HaskKV.Raft.Debug
 import HaskKV.Raft.State
 import HaskKV.Server
 import HaskKV.Snapshot
@@ -80,6 +81,8 @@ $(deriveVia [t| forall msg k v e. TempLogM e (AppT msg k v e)
 $(deriveVia [t| forall msg k v e. (Binary k, Binary v) =>
                 SnapshotM (SnapshotType k v) (AppT msg k v e)
           `Via` SnapshotT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v e. DebugM (AppT msg k v e)
+                            `Via` PrintDebugT (AppT msg k v e) |])
 
 runAppT :: AppT msg k v e a
         -> AppConfig msg k v e

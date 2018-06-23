@@ -4,6 +4,7 @@ import Control.Lens
 import Control.Monad.State
 import Data.Maybe
 import HaskKV.Log
+import HaskKV.Raft.Debug
 import HaskKV.Raft.Message
 import HaskKV.Raft.RPC
 import HaskKV.Raft.State
@@ -12,7 +13,7 @@ import HaskKV.Server
 import HaskKV.Snapshot
 import HaskKV.Store
 
-runCandidate :: ( MonadIO m
+runCandidate :: ( DebugM m
                 , MonadState RaftState m
                 , LogM e m
                 , ServerM (RaftMessage e) ServerEvent m

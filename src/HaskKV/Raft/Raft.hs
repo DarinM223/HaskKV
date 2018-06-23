@@ -6,14 +6,14 @@ import HaskKV.Log
 import HaskKV.Server
 import HaskKV.Store
 import HaskKV.Raft.Candidate (runCandidate)
+import HaskKV.Raft.Debug
 import HaskKV.Raft.Follower (runFollower)
 import HaskKV.Raft.Leader (runLeader)
 import HaskKV.Raft.Message
-import HaskKV.Raft.Utils
 import HaskKV.Raft.State
 import HaskKV.Snapshot
 
-run :: ( MonadIO m
+run :: ( DebugM m
        , MonadState RaftState m
        , ServerM (RaftMessage e) ServerEvent m
        , ApplyEntryM k v e m
