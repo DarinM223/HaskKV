@@ -2,6 +2,7 @@ module HaskKV.Raft.Follower where
 
 import Control.Monad.State
 import HaskKV.Log
+import HaskKV.Raft.Debug
 import HaskKV.Raft.Message
 import HaskKV.Raft.RPC
 import HaskKV.Raft.State
@@ -10,7 +11,7 @@ import HaskKV.Server
 import HaskKV.Snapshot
 import HaskKV.Store
 
-runFollower :: ( MonadIO m
+runFollower :: ( DebugM m
                , MonadState RaftState m
                , LogM e m
                , ServerM (RaftMessage e) ServerEvent m
