@@ -106,13 +106,14 @@ newStoreValue seconds version val = do
     diff = fromRational . toRational . secondsToDiffTime $ seconds
 
 emptyStore :: IO (Store k v e)
-emptyStore = do
-    store <- newTVarIO StoreData { _map = M.empty
-                                 , _heap = H.empty
-                                 , _log = emptyLog
-                                 , _tempEntries = []
-                                 }
-    return $ Store store
+emptyStore = Store <$> newTVarIO emptyStoreData
+
+emptyStoreData :: StoreData k v e
+emptyStoreData = StoreData { _map         = M.empty
+                           , _heap        = H.empty
+                           , _log         = emptyLog
+                           , _tempEntries = []
+                           }
 
 checkAndSet :: (StorageM k v m) => Int -> k -> (v -> v) -> m Bool
 checkAndSet attempts k f

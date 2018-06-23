@@ -2,6 +2,9 @@ module Mock where
 
 import Control.Lens
 import Control.Monad.State
+import Data.List
+import Data.Maybe
+import Debug.Trace
 import HaskKV.Raft
 import Mock.Instances
 
@@ -15,6 +18,15 @@ crashServer sid = MockT $ modify $ IM.delete sid
 
 dropMessage :: Int -> MockT (IM.IntMap MockConfig) ()
 dropMessage i = void $ runServer i $ MockT $ receivingMsgs %= drop 1
+
+hasEvent :: Int -> MockT (IM.IntMap MockConfig) Bool
+hasEvent i = do
+    has <- runServer i $ MockT $ do
+        messages <- use receivingMsgs
+        heartbeat <- use heartbeatTimer
+        election <- use electionTimer
+        return $ (not $ null messages) || heartbeat || election
+    return $ fromMaybe False has
 
 runServer :: Int -> MockT MockConfig a -> MockT (IM.IntMap MockConfig) (Maybe a)
 runServer i m =
@@ -30,10 +42,28 @@ flushMessages i =
     MockT (preuse (ix i)) >>= \case
         Just s -> MockT $ do
             let messages = _sendingMsgs s
-            (ix i . sendingMsgs) .= IM.empty
-            forM_ (IM.assocs messages) $ \(sid, msgs) ->
-                (ix sid . receivingMsgs) %= (++ msgs)
+            (ix i . sendingMsgs) .= []
+            forM_ messages $ \(sid, msg) ->
+                (ix sid . receivingMsgs) %= (++ [msg])
         _ -> return ()
 
 runServers :: MockT (IM.IntMap MockConfig) ()
-runServers = serverKeys >>= mapM_ (\i -> runServer i run >> flushMessages i)
+runServers = serverKeys >>= (go IM.empty)
+  where
+    go marked keys = do
+        candidates <- fmap (take 1)
+                    . filterM hasEvent
+                    . filter (not . flip IM.member marked)
+                    $ keys
+        if not $ null candidates
+            then do
+                let sid = head candidates
+                runServer sid run
+                flushMessages sid
+                go (IM.insert sid () marked) keys
+            else return ()
+
+setupServers :: [Int] -> IM.IntMap MockConfig
+setupServers sids = foldl' addMockConfig IM.empty sids
+  where
+    addMockConfig map sid = IM.insert sid (newMockConfig sids sid) map

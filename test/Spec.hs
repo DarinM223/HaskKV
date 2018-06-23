@@ -5,6 +5,7 @@ import qualified ServerTest as Server
 import qualified SnapshotTest as Snapshot
 import qualified StoreTest as Store
 import qualified TempLogTest as TempLog
+import qualified RaftTest as Raft
 
 tests :: TestTree
 tests = testGroup "Tests"
@@ -13,6 +14,7 @@ tests = testGroup "Tests"
     , Log.tests
     , TempLog.tests
     , Snapshot.tests
+    , Raft.tests
     ]
 
 main = defaultMain tests

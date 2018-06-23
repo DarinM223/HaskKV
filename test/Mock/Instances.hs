@@ -3,10 +3,11 @@
 module Mock.Instances where
 
 import Control.Lens
-import Control.Monad.State
+import Control.Monad.State.Strict
 import Data.Maybe
 import Data.Monoid
 import Data.Binary
+import Debug.Trace
 import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Entry
@@ -34,14 +35,14 @@ data MockSnapshot = MockSnapshot
     { _file   :: String
     , _sIndex :: Int
     , _term   :: Int
-    }
+    } deriving (Show)
 makeFieldsNoPrefix ''MockSnapshot
 
 data MockSnapshotManager = MockSnapshotManager
     { _completed :: Maybe MockSnapshot
     , _partial   :: IM.IntMap MockSnapshot
     , _chunks    :: IM.IntMap String
-    }
+    } deriving (Show)
 makeFieldsNoPrefix ''MockSnapshotManager
 
 data MockConfig = MockConfig
@@ -50,15 +51,38 @@ data MockConfig = MockConfig
     , _tempLog         :: [E]
     , _snapshotManager :: MockSnapshotManager
     , _receivingMsgs   :: [M]
-    , _sendingMsgs     :: IM.IntMap [M]
+    , _sendingMsgs     :: [(Int, M)]
     , _myServerID      :: Int
     , _serverIDs       :: [Int]
     , _electionTimer   :: Bool
     , _heartbeatTimer  :: Bool
     , _appliedEntries  :: [E]
     , _files           :: M.Map (Int, Int) String
-    }
+    } deriving (Show)
 makeFieldsNoPrefix ''MockConfig
+
+newMockSnapshotManager :: MockSnapshotManager
+newMockSnapshotManager = MockSnapshotManager
+    { _completed = Nothing
+    , _partial   = IM.empty
+    , _chunks    = IM.empty
+    }
+
+newMockConfig :: [Int] -> Int -> MockConfig
+newMockConfig sids sid = MockConfig
+    { _raftState       = newRaftState sid
+    , _store           = emptyStoreData
+    , _tempLog         = []
+    , _snapshotManager = newMockSnapshotManager
+    , _receivingMsgs   = []
+    , _sendingMsgs     = []
+    , _myServerID      = sid
+    , _serverIDs       = sids
+    , _electionTimer   = False
+    , _heartbeatTimer  = False
+    , _appliedEntries  = []
+    , _files           = M.empty
+    }
 
 newtype MockT s a = MockT { unMockT :: State s a }
     deriving (Functor, Applicative, Monad)
@@ -174,7 +198,7 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
         return $ (,) <$> snapIndex <*> snapTerm
 
 instance ServerM M ServerEvent (State MockConfig) where
-    send sid msg = (sendingMsgs . ix sid) %= (++ [msg])
+    send sid msg = sendingMsgs %= (++ [(sid, msg)])
     broadcast msg = do
         sid <- use myServerID
         sids <- use serverIDs
