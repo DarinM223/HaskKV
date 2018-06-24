@@ -11,7 +11,6 @@ import HaskKV.Utils
 
 import qualified Data.Conduit.List as CL
 import qualified Data.IntMap as IM
-import qualified Data.STM.RollingQueue as RQ
 import qualified HaskKV.Timer as T
 import qualified HaskKV.Server as S
 
@@ -111,16 +110,16 @@ testInject = testCase "Inject takes priority" $ do
 sourceMessages l s
     = runConduit
     $ CL.sourceList l
-   .| sinkRollingQueue (S._messages s)
+   .| sinkTBQueue (S._messages s)
 
 buildClientMap = foldM addToMap
   where
     addToMap s i = do
-        rq <- RQ.newIO 100
-        return s { S._outgoing = IM.insert i rq . S._outgoing $ s }
+        bq <- newTBQueueIO 100
+        return s { S._outgoing = IM.insert i bq . S._outgoing $ s }
 
 sinkClients s =
-    forM (IM.assocs . S._outgoing $ s) $ \(_, rq) ->
-        atomically (RQ.isEmpty rq) >>= \case
+    forM (IM.assocs . S._outgoing $ s) $ \(_, bq) ->
+        atomically (isEmptyTBQueue bq) >>= \case
             True  -> return []
-            False -> runConduit $ sourceRQOne rq .| sinkList
+            False -> runConduit $ sourceTBQueueOne bq .| sinkList

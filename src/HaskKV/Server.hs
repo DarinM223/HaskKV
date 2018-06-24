@@ -17,7 +17,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Conduit.List as CL
 import qualified Data.IntMap as IM
-import qualified Data.STM.RollingQueue as RQ
 import qualified HaskKV.Timer as Timer
 
 class (Monad m) => ServerM msg e m | m -> msg e where
@@ -30,8 +29,8 @@ class (Monad m) => ServerM msg e m | m -> msg e where
 newtype Capacity = Capacity { unCapacity :: Int } deriving (Show, Eq)
 
 data ServerState msg = ServerState
-    { _messages         :: RQ.RollingQueue msg
-    , _outgoing         :: IM.IntMap (RQ.RollingQueue msg)
+    { _messages         :: TBQueue msg
+    , _outgoing         :: IM.IntMap (TBQueue msg)
     , _sid              :: Int
     , _electionTimer    :: Timer.Timer
     , _heartbeatTimer   :: Timer.Timer
@@ -48,7 +47,7 @@ newServerState :: Capacity
                -> Int
                -> IO (ServerState msg)
 newServerState backpressure electionTimeout heartbeatTimeout sid = do
-    messages <- RQ.newIO (unCapacity backpressure)
+    messages <- newTBQueueIO (unCapacity backpressure)
     electionTimer <- Timer.newIO
     heartbeatTimer <- Timer.newIO
 
@@ -80,17 +79,17 @@ runServer port host clients s = do
             $ appSource appData
            .| CL.mapFoldable (fmap thrd . decodeOrFail . BL.fromStrict)
            .| CL.iterM (liftIO . debugM "conduit" . ("Receiving: " ++) . show)
-           .| sinkRollingQueue (_messages s)
+           .| sinkTBQueue (_messages s)
 
     forM_ (IM.assocs clients) $ \(i, settings) ->
-        forM_ (IM.lookup i . _outgoing $ s) $ \rq ->
-            forkIO $ connectClient settings rq
+        forM_ (IM.lookup i . _outgoing $ s) $ \bq ->
+            forkIO $ connectClient settings bq
   where
     thrd t = let (_, _, a) = t in a
 
-    connectClient settings rq = do
+    connectClient settings bq = do
         let connect appData = putStrLn "Connected to server"
-                           >> connectStream rq appData
+                           >> connectStream bq appData
 
         debugM "conduit" $ "Connecting to host "
                         ++ show (clientHost settings)
@@ -100,11 +99,11 @@ runServer port host clients s = do
         catch (runTCPClient settings connect) $ \(_ :: SomeException) -> do
             putStrLn "Error connecting to server, retrying"
             threadDelay retryTimeout
-            connectClient settings rq
+            connectClient settings bq
 
-    connectStream rq appData
+    connectStream bq appData
         = runConduit
-        $ sourceRollingQueue rq
+        $ sourceTBQueue bq
        .| CL.iterM (liftIO . debugM "conduit" . ("Sending: " ++) . show)
        .| CL.map (B.concat . BL.toChunks . encode)
        .| appSink appData
@@ -134,12 +133,12 @@ instance
 
 sendImpl :: Int -> msg -> ServerState msg -> IO ()
 sendImpl i msg s = do
-    let rq = IM.lookup i . _outgoing $ s
-    mapM_ (atomically . flip RQ.write msg) rq
+    let bq = IM.lookup i . _outgoing $ s
+    mapM_ (atomically . flip writeTBQueue msg) bq
 
 broadcastImpl :: msg -> ServerState msg -> IO ()
 broadcastImpl msg ss = atomically
-                     . mapM_ ((`RQ.write` msg) . snd)
+                     . mapM_ ((`writeTBQueue` msg) . snd)
                      . filter ((/= _sid ss) . fst)
                      . IM.assocs
                      $ _outgoing ss
@@ -148,7 +147,7 @@ recvImpl :: ServerState msg -> IO (Either ServerEvent msg)
 recvImpl s = atomically $
     awaitElectionTimeout s
     `orElse` awaitHeartbeatTimeout s
-    `orElse` (Right . fst <$> RQ.read (_messages s))
+    `orElse` (Right <$> readTBQueue (_messages s))
   where
     awaitElectionTimeout
         = fmap (const (Left ElectionTimeout))

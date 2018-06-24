@@ -4,7 +4,6 @@ import Control.Lens
 import Control.Monad.State
 import Data.List
 import Data.Maybe
-import Debug.Trace
 import HaskKV.Raft
 import Mock.Instances
 

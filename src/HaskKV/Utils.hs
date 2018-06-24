@@ -5,7 +5,6 @@ import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Data.Conduit
 import qualified Data.Heap as H
-import qualified Data.STM.RollingQueue as RQ
 
 stateMVar :: (s -> (a, s)) -> MVar s -> IO a
 stateMVar f v = do
@@ -29,20 +28,20 @@ minHeapMaybe h
     | H.null h  = Nothing
     | otherwise = Just $ H.minimum h
 
-sourceRollingQueue :: (MonadIO m) => RQ.RollingQueue o -> ConduitM i o m b
-sourceRollingQueue q = go
+sourceTBQueue :: (MonadIO m) => TBQueue o -> ConduitM i o m b
+sourceTBQueue q = go
   where
     go = do
-        (e, _) <- liftIO $ atomically $ RQ.read q
+        e <- liftIO $ atomically $ readTBQueue q
         yield e
         go
 
-sinkRollingQueue :: (MonadIO m) => RQ.RollingQueue a -> ConduitM a o m ()
-sinkRollingQueue q =
-    awaitForever (liftIO . atomically . RQ.write q)
+sinkTBQueue :: (MonadIO m) => TBQueue a -> ConduitM a o m ()
+sinkTBQueue q =
+    awaitForever (liftIO . atomically . writeTBQueue q)
 
-sourceRQOne :: (MonadIO m) => RQ.RollingQueue o -> ConduitM i o m ()
-sourceRQOne q = do
-    (e, _) <- liftIO $ atomically $ RQ.read q
+sourceTBQueueOne :: (MonadIO m) => TBQueue o -> ConduitM i o m ()
+sourceTBQueueOne q = do
+    e <- liftIO $ atomically $ readTBQueue q
     yield e
     return ()

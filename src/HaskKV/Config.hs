@@ -1,16 +1,16 @@
 module HaskKV.Config where
 
+import Control.Concurrent.STM
+import Control.Monad
 import Data.Conduit.Network
 import Data.List
 import Data.Maybe
-import Control.Monad
 import HaskKV.Server
 import HaskKV.Timer
 import Text.Read
 
 import qualified Data.ByteString.Char8 as C
 import qualified Data.IntMap as IM
-import qualified Data.STM.RollingQueue as RQ
 
 data ServerData = ServerData
     { _id          :: Int
@@ -83,5 +83,5 @@ configToServerState sid config@Config{ _backpressure     = backpressure
     return initServerState { _outgoing = outgoing' }
   where
     insert backpressure outgoing ServerData{_id = sid} = do
-        rq <- RQ.newIO (unCapacity backpressure)
-        return $ IM.insert sid rq outgoing
+        bq <- newTBQueueIO (unCapacity backpressure)
+        return $ IM.insert sid bq outgoing

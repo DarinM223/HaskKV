@@ -39,7 +39,6 @@ dependencies:
 - network
 - network-simple
 - random
-- rolling-queue
 - servant
 - servant-server
 - stm

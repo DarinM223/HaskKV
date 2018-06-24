@@ -7,7 +7,6 @@ import Control.Monad.State.Strict
 import Data.Maybe
 import Data.Monoid
 import Data.Binary
-import Debug.Trace
 import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Entry
