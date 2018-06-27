@@ -173,24 +173,23 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
     readSnapshot _ = do
         snapData <- preuse (snapshotManager . completed . _Just . file)
         return . fmap (decode . CL.pack) $ snapData
-    readChunk amount sid = do
-        (i, t) <- snapshotInfo >>= \case
-            Just (i, t) -> pure (i, t)
-            _           -> error "Can't get index and term"
-        temp <- preuse (snapshotManager . chunks . ix sid)
-        when (isNothing temp || temp == Just "") $ do
-            file <- use (files . ix (i, t))
-            (snapshotManager . chunks) %= (IM.insert sid file)
-        prezoom (snapshotManager . chunks . ix sid) $ S.state $ \s ->
-            let (chunkData, remainder) = splitAt amount s
-                chunkType = if null remainder then EndChunk else FullChunk
-                chunk = SnapshotChunk { _data   = C.pack chunkData
-                                      , _type   = chunkType
-                                      , _offset = 0
-                                      , _index  = i
-                                      , _term   = t
-                                      }
-            in (chunk, remainder)
+    readChunk amount sid = snapshotInfo >>= \case
+        Just (i, t) -> do
+            temp <- preuse (snapshotManager . chunks . ix sid)
+            when (isNothing temp || temp == Just "") $ do
+                file <- use (files . ix (i, t))
+                (snapshotManager . chunks) %= (IM.insert sid file)
+            prezoom (snapshotManager . chunks . ix sid) $ S.state $ \s ->
+                let (chunkData, remainder) = splitAt amount s
+                    chunkType = if null remainder then EndChunk else FullChunk
+                    chunk = SnapshotChunk { _data   = C.pack chunkData
+                                          , _type   = chunkType
+                                          , _offset = 0
+                                          , _index  = i
+                                          , _term   = t
+                                          }
+                in (chunk, remainder)
+        _ -> return Nothing
     snapshotInfo = do
         snapIndex <- preuse (snapshotManager . completed . _Just . sIndex)
         snapTerm <- preuse (snapshotManager . completed . _Just . term)
