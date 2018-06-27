@@ -25,6 +25,7 @@ unitTests = testGroup "Unit tests"
     [ testElection
     , testSplitElection
     , testLeaderSendsAppendEntries
+    , testLeaderDecrementsMatch
     ]
 
 initLogEntries :: StoreValue Int -> [LogEntry Int (StoreValue Int)]
@@ -40,6 +41,22 @@ initLogEntries value = [entry1, entry2]
         { _term      = 0
         , _index     = 2
         , _data      = Delete (TID 0) 1
+        , _completed = Completed Nothing
+        }
+
+addedLogEntries :: StoreValue Int -> [LogEntry Int (StoreValue Int)]
+addedLogEntries value = [entry1, entry2]
+  where
+    entry1 = LogEntry
+        { _term      = 1
+        , _index     = 1
+        , _data      = Change (TID 0) 2 value
+        , _completed = Completed Nothing
+        }
+    entry2 = LogEntry
+        { _term      = 1
+        , _index     = 2
+        , _data      = Change (TID 0) 3 value
         , _completed = Completed Nothing
         }
 
@@ -118,18 +135,7 @@ testLeaderSendsAppendEntries =
     in testCase text $ do
         value <- newStoreValue 2 1 10
         let entries = initLogEntries value
-            entry1 = LogEntry
-                { _term      = 1
-                , _index     = 1
-                , _data      = Change (TID 0) 2 value
-                , _completed = Completed Nothing
-                }
-            entry2 = LogEntry
-                { _term      = 1
-                , _index     = 2
-                , _data      = Change (TID 0) 3 value
-                , _completed = Completed Nothing
-                }
+            added   = addedLogEntries value
             (result, _) = flip runMockT servers $ do
                 -- Add log entries to minority of servers
                 -- so that leader won't have these entries.
@@ -151,8 +157,7 @@ testLeaderSendsAppendEntries =
                 -- Add new log entries to leader
                 runServer 1 $ do
                     MockT $ do
-                        addTemporaryEntry entry1
-                        addTemporaryEntry entry2
+                        mapM_ addTemporaryEntry added
                         heartbeatTimer .= True
                     run
                 flushMessages 1
@@ -188,7 +193,7 @@ testLeaderSendsAppendEntries =
         let numUnique = length . nub . fmap show $ stores
         numUnique @?= 1
         let storeEntries = getField @"_entries" . _log . head $ stores
-        storeEntries @?= IM.fromList [(1, entry1), (2, entry2)]
+        storeEntries @?= IM.fromList (zip [1..] added)
         let nextIndex  = [(1, 1), (2, 3), (3, 3), (4, 3), (5, 3)]
             matchIndex = [(1, 2), (2, 2), (3, 2), (4, 2), (5, 2)]
         state @?= Just LeaderState
@@ -198,4 +203,47 @@ testLeaderSendsAppendEntries =
         commitIdx @?= Just 2
 
 testLeaderDecrementsMatch :: TestTree
-testLeaderDecrementsMatch = undefined
+testLeaderDecrementsMatch = testCase "Leader decements match on fail" $ do
+    let servers = setupServers [1, 2, 3, 4, 5]
+    value <- newStoreValue 2 1 10
+    let entries = initLogEntries value
+        (result, _) = flip runMockT servers $ do
+            runServer 1 $ MockT $ do
+                storeEntries entries
+                electionTimer .= True
+            runServer 3 $ storeEntries entries
+            runServer 4 $ storeEntries entries
+            replicateM_ 3 runServers
+
+            msgs <- MockT $ preuse $ ix 1 . receivingMsgs
+            replicateM_ 6 runServers
+            state1 <- MockT $ preuse $ ix 1 . raftState . stateType . _Leader
+
+            runServer 1 $ MockT $ heartbeatTimer .= True
+            replicateM_ 5 runServers
+            state2 <- MockT $ preuse $ ix 1 . raftState . stateType . _Leader
+
+            runServer 1 $ MockT $ heartbeatTimer .= True
+            replicateM_ 5 runServers
+            state3 <- MockT $ preuse $ ix 1 . raftState . stateType . _Leader
+
+            return (msgs, state1, state2, state3)
+        (Just msgs, s1, s2, s3) = result
+        failResp = AppendResponse { _term      = 1
+                                  , _success   = False
+                                  , _lastIndex = 0
+                                  }
+    elem (Response 2 failResp) msgs && elem (Response 5 failResp) msgs @?
+        "Servers 2 and 5 didn't respond with failure"
+    s1 @?= Just LeaderState
+        { _nextIndex  = IM.fromList [(1,3),(2,2),(3,3),(4,3),(5,2)]
+        , _matchIndex = IM.fromList [(1,0),(2,0),(3,2),(4,2),(5,0)]
+        }
+    s2 @?= Just LeaderState
+        { _nextIndex  = IM.fromList [(1,3),(2,1),(3,3),(4,3),(5,1)]
+        , _matchIndex = IM.fromList [(1,2),(2,0),(3,2),(4,2),(5,0)]
+        }
+    s3 @?= Just LeaderState
+        { _nextIndex  = IM.fromList [(1,3),(2,3),(3,3),(4,3),(5,3)]
+        , _matchIndex = IM.fromList [(1,2),(2,2),(3,2),(4,2),(5,2)]
+        }
