@@ -115,7 +115,6 @@ sendAppendEntries :: forall event e s m.
                      , LogM e m
                      , ServerM (RaftMessage e) event m
                      , SnapshotM s m
-                     , Entry e
                      )
                   => Int
                   -> Int
@@ -125,30 +124,29 @@ sendAppendEntries lastIndex commitIndex id = do
     nextIndexes <- preuse (stateType._Leader.nextIndex)
     case nextIndexes >>= IM.lookup id of
         Just nextIndex -> do
-            prevEntry <- loadEntry $ prevIndex nextIndex
+            let pi = prevIndex nextIndex
+            pt <- termFromIndex $ prevIndex nextIndex
             entries <- entryRange nextIndex lastIndex
-            if isNothing entries || isNothing prevEntry
-                then tryInstallSnapshot id commitIndex
-                else sendAppend id prevEntry (fromMaybe [] entries) commitIndex
-        Nothing -> sendAppend id (Nothing :: Maybe e) [] commitIndex
+            if isNothing entries || isNothing pt
+                then tryInstallSnapshot id pi pt commitIndex
+                else sendAppend id pi pt (fromMaybe [] entries) commitIndex
+        Nothing -> sendAppend id 0 Nothing [] commitIndex
   where
-    sendAppend id prevEntry entries commitIndex = do
+    sendAppend id prevIndex prevTerm entries commitIndex = do
         term <- use currTerm
         sid <- use serverID
-        let prevLogIdx  = maybe 0 entryIndex prevEntry
-            prevLogTerm = maybe 0 entryTerm prevEntry
         send id AppendEntries
             { _term        = term
             , _leaderId    = sid
-            , _prevLogIdx  = prevLogIdx
-            , _prevLogTerm = prevLogTerm
+            , _prevLogIdx  = prevIndex
+            , _prevLogTerm = fromMaybe 0 prevTerm
             , _entries     = entries
             , _commitIdx   = commitIndex
             }
-    tryInstallSnapshot id commitIndex =
+    tryInstallSnapshot id pi pt commitIndex =
         readChunk snapshotChunkSize id >>= \case
             Just chunk -> sendSnapshotChunk id chunk
-            Nothing    -> sendAppend id (Nothing :: Maybe e) [] commitIndex
+            Nothing    -> sendAppend id pi pt [] commitIndex
 
 sendSnapshotChunk :: (MonadState RaftState m, ServerM (RaftMessage e) event m)
                   => Int

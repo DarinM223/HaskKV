@@ -2,9 +2,12 @@ module RaftTest (tests) where
 
 import Control.Lens
 import Control.Monad
-import Debug.Trace
+import Data.List
+import Data.Maybe
+import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Entry
+import HaskKV.Log.InMem
 import HaskKV.Raft
 import HaskKV.Store
 import Mock
@@ -128,25 +131,24 @@ testLeaderSendsAppendEntries =
                 , _completed = Completed Nothing
                 }
             (result, _) = flip runMockT servers $ do
-                -- Add log entries to minority, hold election
-                -- so that majority wins.
+                -- Add log entries to minority of servers
+                -- so that leader won't have these entries.
                 runServer 2 $ storeEntries entries
                 runServer 3 $ storeEntries entries
                 runServer 1 $ MockT (electionTimer .= True)
                 replicateM_ 4 runServers
 
-                runServer 1 run
-                flushMessages 1
-
                 -- Check that the leader broadcasts the correct
                 -- AppendEntries messages
+                runServer 1 run
+                flushMessages 1
                 msgs <- forM [2, 3, 4, 5] $ \i -> do
                     msgs <- MockT $ preuse $ ix i . receivingMsgs
                     runServer i run
                     flushMessages i
                     return msgs
 
-                -- Add log entries to leader
+                -- Add new log entries to leader
                 runServer 1 $ do
                     MockT $ do
                         addTemporaryEntry entry1
@@ -155,22 +157,20 @@ testLeaderSendsAppendEntries =
                     run
                 flushMessages 1
 
-                state1 <- MockT $ preuse (ix 1 . raftState)
-                trace ("State: " ++ show state1) return ()
-
-                msgs' <- forM [2, 3, 4, 5] $ \i -> do
-                    msgs <- MockT $ preuse $ ix i . receivingMsgs
+                -- Check that leader replicates the entries
+                -- to the other servers.
+                --
+                -- The entries added at the beginning should
+                -- have been replaced.
+                stores <- forM [2, 3, 4, 5] $ \i -> do
                     runServer i run
                     flushMessages i
-                    -- TODO(DarinM223): print a trace of the state for each server.
-                    store' <- runServer i $ MockT $ preuse store
-                    trace ("Store: " ++ show store' ++ "\n\n") return ()
-                    return msgs
-                -- Check that leader broadcasts correct AppendEntries
-                -- Also check that servers 2 and 3 have removed
-                -- the existing log entries.
-                return (msgs, msgs')
-            (msgs, msgs') = result
+                    runServer i $ MockT $ use store
+                -- TODO(DarinM223): check that matchIndex and nextIndex
+                -- are updated and the commitIndex is bumped after
+                -- leader receives responses.
+                return (msgs, catMaybes stores)
+            (msgs, stores) = result
             blankAE = AppendEntries
                 { _term        = 1
                 , _leaderId    = 1
@@ -181,8 +181,10 @@ testLeaderSendsAppendEntries =
                 }
             expectedEntries = fmap (Just . (: [])) . replicate 4 $ blankAE
         msgs @?= expectedEntries
-        print msgs'
-        return ()
+        let numUnique = length . nub . fmap show $ stores
+        numUnique @?= 1
+        let storeEntries = getField @"_entries" . _log . head $ stores
+        storeEntries @?= IM.fromList [(1, entry1), (2, entry2)]
 
 testLeaderDecrementsMatch :: TestTree
 testLeaderDecrementsMatch = undefined
