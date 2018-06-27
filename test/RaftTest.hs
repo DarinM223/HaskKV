@@ -166,11 +166,15 @@ testLeaderSendsAppendEntries =
                     runServer i run
                     flushMessages i
                     runServer i $ MockT $ use store
-                -- TODO(DarinM223): check that matchIndex and nextIndex
-                -- are updated and the commitIndex is bumped after
-                -- leader receives responses.
-                return (msgs, catMaybes stores)
-            (msgs, stores) = result
+
+                -- Check that matchIndex, nextIndex, and commitIndex
+                -- are updated after leader receives responses.
+                replicateM_ 8 runServers
+                leaderState <- runServer 1 $ MockT $
+                    preuse (raftState . stateType . _Leader)
+                commitIdx <- runServer 1 $ MockT $ use (raftState . commitIndex)
+                return (msgs, catMaybes stores, join leaderState, commitIdx)
+            (msgs, stores, state, commitIdx) = result
             blankAE = AppendEntries
                 { _term        = 1
                 , _leaderId    = 1
@@ -185,6 +189,13 @@ testLeaderSendsAppendEntries =
         numUnique @?= 1
         let storeEntries = getField @"_entries" . _log . head $ stores
         storeEntries @?= IM.fromList [(1, entry1), (2, entry2)]
+        let nextIndex  = [(1, 1), (2, 3), (3, 3), (4, 3), (5, 3)]
+            matchIndex = [(1, 2), (2, 2), (3, 2), (4, 2), (5, 2)]
+        state @?= Just LeaderState
+            { _nextIndex  = IM.fromList nextIndex
+            , _matchIndex = IM.fromList matchIndex
+            }
+        commitIdx @?= Just 2
 
 testLeaderDecrementsMatch :: TestTree
 testLeaderDecrementsMatch = undefined
