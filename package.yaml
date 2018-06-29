@@ -39,6 +39,7 @@ dependencies:
 - network
 - network-simple
 - random
+- transformers
 - servant
 - servant-server
 - stm

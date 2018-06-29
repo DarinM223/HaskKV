@@ -2,6 +2,8 @@ module RaftTest (tests) where
 
 import Control.Lens
 import Control.Monad
+import Control.Monad.Trans
+import Control.Monad.Trans.Maybe
 import Data.List
 import Data.Maybe
 import Debug.Trace
@@ -10,6 +12,7 @@ import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
 import HaskKV.Raft
+import HaskKV.Snapshot
 import HaskKV.Store
 import Mock
 import Mock.Instances
@@ -274,8 +277,13 @@ testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
 
             runServer 1 $ do
                 takeSnapshot
+                runMaybeT $ do
+                    (i, t) <- lift snapshotInfo >>= MaybeT . return
+                    snap <- lift (readSnapshot i) >>= MaybeT . return
+                    lift $ loadSnapshot i t snap
                 MockT $ heartbeatTimer .= True
-            replicateM_ 9 runServers
+
+            replicateM_ 100 runServers
 
             state <- MockT $ preuse $ ix 1 . receivingMsgs
             return (state)
