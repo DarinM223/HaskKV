@@ -141,6 +141,8 @@ instance TakeSnapshotM (State MockConfig) where
         writeSnapshot 0 snapData lastIndex
         saveSnapshot lastIndex
         deleteRange firstIndex lastIndex
+        snap <- readSnapshot lastIndex
+        mapM_ (loadSnapshot lastIndex lastTerm) snap
 
 instance ApplyEntryM K V E (State MockConfig) where
     applyEntry entry@LogEntry{ _data = entryData } = do

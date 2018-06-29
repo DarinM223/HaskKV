@@ -168,8 +168,8 @@ instance
     , HasSnapshotManager r
     , MonadState RaftState m
     , Entry e
-    , Binary k
-    , Binary v
+    , KeyClass k
+    , ValueClass v
     ) => TakeSnapshotM (StoreT m) where
 
     takeSnapshot = do
@@ -240,7 +240,7 @@ loadSnapshotImpl :: (Ord k, Storable v)
 loadSnapshotImpl lastIndex lastTerm map (Store store) = atomically $
     modifyTVar' store (loadSnapshotStore lastIndex lastTerm map)
 
-takeSnapshotImpl :: (Binary k, Binary v, Entry e)
+takeSnapshotImpl :: (KeyClass k, ValueClass v, Entry e)
                  => Int
                  -> SnapshotManager
                  -> Store k v e
@@ -259,7 +259,12 @@ takeSnapshotImpl lastApplied manager store = do
         -- that takes in a lazy bytestring instead of a strict bytestring?
         writeSnapshotImpl 0 snapData lastApplied manager
         saveSnapshotImpl lastApplied manager
-        deleteRangeImpl firstIndex lastApplied store
+
+        snap <- readSnapshotImpl lastApplied manager
+        forM_ snap $ \snap ->
+            atomically $ modifyTVar' (unStore store)
+                $ loadSnapshotStore lastApplied lastTerm snap
+                . modifyLog (deleteRangeLog firstIndex lastApplied)
     return ()
 
 -- Pure store functions
@@ -330,12 +335,15 @@ loadSnapshotStore lastIncludedIndex lastIncludedTerm map store
     . modifyLog (\l -> l { _snapshotLastIndex = Just lastIncludedIndex
                          , _snapshotLastTerm  = Just lastIncludedTerm
                          })
-    . foldl' (\store (k, v) -> setKey k v store) store
+    . foldl' (\store (k, v) -> setKey k v store) clearedStore
     . M.assocs
     $ map
   where
-    modifyLog f store = store { _log = f (_log store) }
+    clearedStore = store { _map = M.empty, _heap = H.empty }
     truncateLog lastIncludedIndex log
         | lastIncludedIndex > _lowIdx log =
             deleteRangeLog (_lowIdx log) lastIncludedIndex log
         | otherwise = log
+
+modifyLog :: (Log e -> Log e) -> StoreData k v e -> StoreData k v e
+modifyLog f store = store { _log = f (_log store) }

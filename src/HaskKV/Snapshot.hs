@@ -177,8 +177,10 @@ readSnapshotImpl index manager =
     handle (\(_ :: SomeException) -> return Nothing) $ do
         snapshots <- readTVarIO $ _snapshots manager
         case _completed snapshots of
-            Just Snapshot{ _index = i, _file = file } | i == index ->
-                pure . Just . decode =<< BL.hGetContents file
+            Just Snapshot{ _index = i, _filepath = path } | i == index -> do
+                file <- openFile path ReadMode
+                contents <- BL.hGetContents file
+                return $ Just $ decode contents
             _ -> return Nothing
 
 hasChunkImpl :: Int -> SnapshotManager -> IO Bool

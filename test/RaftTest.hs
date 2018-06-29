@@ -2,8 +2,6 @@ module RaftTest (tests) where
 
 import Control.Lens
 import Control.Monad
-import Control.Monad.Trans
-import Control.Monad.Trans.Maybe
 import Data.List
 import Data.Maybe
 import GHC.Records
@@ -11,7 +9,6 @@ import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
 import HaskKV.Raft
-import HaskKV.Snapshot
 import HaskKV.Store
 import Mock
 import Mock.Instances
@@ -19,7 +16,6 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import qualified Data.IntMap as IM
-import qualified Data.Map as M
 
 tests :: TestTree
 tests = testGroup "Raft tests" [unitTests]
@@ -277,10 +273,6 @@ testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
 
             runServer 1 $ do
                 takeSnapshot
-                runMaybeT $ do
-                    (i, t) <- lift snapshotInfo >>= MaybeT . return
-                    snap <- lift (readSnapshot i) >>= MaybeT . return
-                    lift $ loadSnapshot i t snap
                 MockT $ heartbeatTimer .= True
             replicateM_ 15 runServers
 
@@ -292,13 +284,12 @@ testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
             msgs <- MockT $ preuse $ ix 1 . receivingMsgs
             return (store1, store5, msgs)
         (store1, store5, msgs) = result
-    storeKeys store1 @?= storeKeys store5
+    show store1 @?= show store5
     let numSnapResponses = length
                          . filter isSnapshotResponse
                          . fromMaybe []
                          $ msgs
     numSnapResponses @?= 0
   where
-    storeKeys = show . fmap (M.keys . _map)
     isSnapshotResponse (Response _ (InstallSnapshotResponse _)) = True
     isSnapshotResponse _                                        = False

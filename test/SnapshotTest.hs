@@ -2,6 +2,7 @@ module SnapshotTest (tests) where
 
 import Control.Concurrent.STM
 import Control.Monad
+import Data.Binary
 import Data.List
 import GHC.Records
 import HaskKV.Snapshot
@@ -10,7 +11,9 @@ import Test.Tasty.HUnit
 import System.Directory
 import System.FilePath
 
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C
+import qualified Data.ByteString.Lazy as BL
 
 openFolder :: FilePath -> IO FilePath
 openFolder path = createDirectory path >> return path
@@ -26,6 +29,7 @@ unitTests = testGroup "Unit tests"
     [ testCreateSnapshot
     , testWriteAndSave
     , testSaveRemovesOlderSnapshots
+    , testReadSnapshotMultipleTimes
     , testSnapshotLoading
     , testReadChunks
     ]
@@ -80,6 +84,21 @@ testSaveRemovesOlderSnapshots =
                 (@? "File doesn't exist")
             doesFileExist (path </> partialFilename 106 1) >>=
                 (@? "File doesn't exist")
+
+testReadSnapshotMultipleTimes :: TestTree
+testReadSnapshotMultipleTimes =
+    withResource (openFolder "test4") closeFolder $ \getPath ->
+        testCase "Can read snapshots multiple times" $ do
+            path <- getPath
+            manager <- newSnapshotManager $ Just path
+            createSnapshotImpl 101 1 manager
+            let text        = "Sample text" :: String
+                encodedData = B.concat . BL.toChunks . encode $ text
+            writeSnapshotImpl 0 encodedData 101 manager
+            saveSnapshotImpl 101 manager
+            snap <- readSnapshotImpl 101 manager :: IO (Maybe String)
+            snap' <- readSnapshotImpl 101 manager :: IO (Maybe String)
+            snap @?= snap'
 
 testSnapshotLoading :: TestTree
 testSnapshotLoading =
