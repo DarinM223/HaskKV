@@ -73,8 +73,8 @@ handleAppendEntries ae s
         leader .= Just (_leaderId ae)
         reset ElectionTimeout
 
-        prevLogTerm <- fromMaybe 0 <$> (termFromIndex $ _prevLogIdx ae)
-        if prevLogTerm == _prevLogTerm ae
+        prevLogTerm <- termFromIndex $ _prevLogIdx ae
+        if prevLogTerm == Just (_prevLogTerm ae)
             then do
                 lastLogIndex <- lastIndex
                 newEntries <- diffEntriesWithLog lastLogIndex

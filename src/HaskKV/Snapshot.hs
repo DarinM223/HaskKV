@@ -39,6 +39,7 @@ class (Binary s) => SnapshotM s m | m -> s where
     writeSnapshot  :: Int -> B.ByteString -> Int -> m ()
     saveSnapshot   :: Int -> m ()
     readSnapshot   :: Int -> m (Maybe s)
+    hasChunk       :: Int -> m Bool
     readChunk      :: Int -> Int -> m (Maybe SnapshotChunk)
     snapshotInfo   :: m (Maybe (Int, Int))
 
@@ -126,6 +127,7 @@ instance
                       =<< asks getSnapshotManager
     saveSnapshot i = liftIO . saveSnapshotImpl i =<< asks getSnapshotManager
     readSnapshot i = liftIO . readSnapshotImpl i =<< asks getSnapshotManager
+    hasChunk i = liftIO . hasChunkImpl i =<< asks getSnapshotManager
     readChunk a i = liftIO . readChunkImpl a i =<< asks getSnapshotManager
     snapshotInfo = liftIO . snapshotInfoImpl =<< asks getSnapshotManager
 
@@ -178,6 +180,13 @@ readSnapshotImpl index manager =
             Just Snapshot{ _index = i, _file = file } | i == index ->
                 pure . Just . decode =<< BL.hGetContents file
             _ -> return Nothing
+
+hasChunkImpl :: Int -> SnapshotManager -> IO Bool
+hasChunkImpl i manager = do
+    snapshots <- readTVarIO $ _snapshots manager
+    case IM.lookup i $ _chunks snapshots of
+        Just handle -> not <$> hIsEOF handle
+        Nothing     -> return False
 
 readChunkImpl :: Int -> Int -> SnapshotManager -> IO (Maybe SnapshotChunk)
 readChunkImpl amount sid manager = do

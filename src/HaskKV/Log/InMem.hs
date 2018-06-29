@@ -27,6 +27,7 @@ lastIndexLog l = case _snapshotLastIndex l of
 
 entryTermLog :: (Entry e) => Int -> Log e -> Maybe Int
 entryTermLog i log
+    | i <= 0 = Just 0
     | _snapshotLastIndex log == Just i = _snapshotLastTerm log
     | otherwise = fmap entryTerm . IM.lookup i . _entries $ log
 
