@@ -6,7 +6,6 @@ import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Data.List
 import Data.Maybe
-import Debug.Trace
 import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Entry
@@ -282,9 +281,8 @@ testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
                     snap <- lift (readSnapshot i) >>= MaybeT . return
                     lift $ loadSnapshot i t snap
                 MockT $ heartbeatTimer .= True
+            replicateM_ 15 runServers
 
-            replicateM_ 100 runServers
-
-            state <- MockT $ preuse $ ix 1 . receivingMsgs
+            state <- MockT $ preuse $ ix 5 . store
             return (state)
     print result

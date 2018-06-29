@@ -40,7 +40,7 @@ makeFieldsNoPrefix ''MockSnapshot
 data MockSnapshotManager = MockSnapshotManager
     { _completed :: Maybe MockSnapshot
     , _partial   :: IM.IntMap MockSnapshot
-    , _chunks    :: IM.IntMap String
+    , _chunks    :: IM.IntMap (String, Int)
     } deriving (Show)
 makeFieldsNoPrefix ''MockSnapshotManager
 
@@ -168,22 +168,27 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
     readSnapshot _ = do
         snapData <- preuse (snapshotManager . completed . _Just . file)
         return . fmap (decode . CL.pack) $ snapData
+    hasChunk sid =
+        preuse (snapshotManager . chunks . ix sid) >>= pure . \case
+            Just (s, _) | s == "" -> False
+            Nothing               -> False
+            _                     -> True
     readChunk amount sid = snapshotInfo >>= \case
         Just (i, t) -> do
             temp <- preuse (snapshotManager . chunks . ix sid)
-            when (isNothing temp || temp == Just "") $ do
+            when (isNothing temp || fmap fst temp == Just "") $ do
                 file' <- use (snapshotManager . completed . _Just . file)
-                (snapshotManager . chunks) %= (IM.insert sid file')
-            prezoom (snapshotManager . chunks . ix sid) $ S.state $ \s ->
+                (snapshotManager . chunks) %= (IM.insert sid (file', 0))
+            prezoom (snapshotManager . chunks . ix sid) $ S.state $ \(s, f) ->
                 let (chunkData, remainder) = splitAt amount s
                     chunkType = if null remainder then EndChunk else FullChunk
                     chunk = SnapshotChunk { _data   = C.pack chunkData
                                           , _type   = chunkType
-                                          , _offset = 0
+                                          , _offset = f
                                           , _index  = i
                                           , _term   = t
                                           }
-                in (chunk, remainder)
+                in (chunk, (remainder, f + 1))
         _ -> return Nothing
     snapshotInfo = do
         snapIndex <- preuse (snapshotManager . completed . _Just . sIndex)

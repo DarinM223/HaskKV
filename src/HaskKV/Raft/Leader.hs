@@ -71,8 +71,11 @@ handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
 handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
     | term < _currTerm s = return ()
     | term > _currTerm s = transitionToFollower msg
-    | otherwise =
-        readChunk snapshotChunkSize sender >>= mapM_ (sendSnapshotChunk sender)
+    | otherwise = do
+        hasRemaining <- hasChunk sender
+        when hasRemaining $ do
+            chunk <- readChunk snapshotChunkSize sender
+            mapM_ (sendSnapshotChunk sender) chunk
 
 handleLeaderResponse _ _ _ = return ()
 
