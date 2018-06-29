@@ -56,7 +56,6 @@ data MockConfig = MockConfig
     , _electionTimer   :: Bool
     , _heartbeatTimer  :: Bool
     , _appliedEntries  :: [E]
-    , _files           :: M.Map (Int, Int) String
     } deriving (Show)
 makeFieldsNoPrefix ''MockConfig
 
@@ -80,7 +79,6 @@ newMockConfig sids sid = MockConfig
     , _electionTimer   = False
     , _heartbeatTimer  = False
     , _appliedEntries  = []
-    , _files           = M.empty
     }
 
 newtype MockT s a = MockT { unMockT :: State s a }
@@ -131,9 +129,9 @@ instance LoadSnapshotM (M.Map K V) (State MockConfig) where
 
 instance TakeSnapshotM (State MockConfig) where
     takeSnapshot = do
+        lastIndex <- use (raftState . lastApplied)
         storeData <- gets _store
         let firstIndex = _lowIdx $ _log storeData
-            lastIndex  = _highIdx $ _log storeData
             lastTerm   = entryTerm . fromJust
                        . IM.lookup lastIndex
                        . getField @"_entries" . _log
@@ -156,19 +154,16 @@ prezoom l m = getFirst <$> zoom l (First . Just <$> m)
 
 instance SnapshotM (M.Map K V) (State MockConfig) where
     createSnapshot i t = do
-        file <- preuse (files . ix (i, t))
-        forM_ file $ \file -> do
-            let snapshot = MockSnapshot { _file   = file
-                                        , _sIndex = i
-                                        , _term   = t
-                                        }
-            (snapshotManager . partial) %= (IM.insert i snapshot)
+        let snapshot = MockSnapshot { _file = "", _sIndex = i, _term = t }
+        (snapshotManager . partial) %= (IM.insert i snapshot)
     writeSnapshot _ snapData i =
         (snapshotManager . partial . ix i . file) %= (++ (C.unpack snapData))
     saveSnapshot i = do
         snap <- fromJust <$> preuse (snapshotManager . partial . ix i)
-        (snapshotManager . completed . _Just) %= \s ->
-            if getField @"_sIndex" s < i then snap else s
+        (snapshotManager . completed) %= \case
+            Just s | getField @"_sIndex" s < i -> Just snap
+            Nothing                            -> Just snap
+            s                                  -> s
         (snapshotManager . partial) %= IM.filter ((> i) . getField @"_sIndex")
     readSnapshot _ = do
         snapData <- preuse (snapshotManager . completed . _Just . file)
@@ -177,8 +172,8 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
         Just (i, t) -> do
             temp <- preuse (snapshotManager . chunks . ix sid)
             when (isNothing temp || temp == Just "") $ do
-                file <- use (files . ix (i, t))
-                (snapshotManager . chunks) %= (IM.insert sid file)
+                file' <- use (snapshotManager . completed . _Just . file)
+                (snapshotManager . chunks) %= (IM.insert sid file')
             prezoom (snapshotManager . chunks . ix sid) $ S.state $ \s ->
                 let (chunkData, remainder) = splitAt amount s
                     chunkType = if null remainder then EndChunk else FullChunk

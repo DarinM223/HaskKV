@@ -4,6 +4,7 @@ import Control.Lens
 import Control.Monad
 import Data.List
 import Data.Maybe
+import Debug.Trace
 import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Entry
@@ -26,6 +27,7 @@ unitTests = testGroup "Unit tests"
     , testSplitElection
     , testLeaderSendsAppendEntries
     , testLeaderDecrementsMatch
+    , testLeaderSendsSnapshot
     ]
 
 initLogEntries :: StoreValue Int -> [LogEntry Int (StoreValue Int)]
@@ -247,3 +249,34 @@ testLeaderDecrementsMatch = testCase "Leader decements match on fail" $ do
         { _nextIndex  = IM.fromList [(1,3),(2,3),(3,3),(4,3),(5,3)]
         , _matchIndex = IM.fromList [(1,2),(2,2),(3,2),(4,2),(5,2)]
         }
+
+testLeaderSendsSnapshot :: TestTree
+testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
+    let servers = setupServers [1, 2, 3, 4, 5]
+    value <- newStoreValue 2 1 10
+    let entries = addedLogEntries value
+        (result, _) = flip runMockT servers $ do
+            runServer 1 $ MockT $ do
+                storeEntries entries
+                electionTimer .= True
+            mapM_ (flip runServer (storeEntries entries)) [2, 3, 4]
+            replicateM_ 5 runServers
+
+            runServer 1 $ do
+                MockT $ heartbeatTimer .= True
+                run
+            flushMessages 1
+            forM_ [2, 3, 4] $ \i -> do
+                runServer i run
+                flushMessages i
+            dropMessage 5
+            replicateM_ 7 runServers
+
+            runServer 1 $ do
+                takeSnapshot
+                MockT $ heartbeatTimer .= True
+            replicateM_ 9 runServers
+
+            state <- MockT $ preuse $ ix 1 . receivingMsgs
+            return (state)
+    print result

@@ -5,6 +5,7 @@ module HaskKV.Store where
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad.Reader
+import Control.Monad.State
 import Data.Aeson hiding (encode)
 import Data.Binary
 import Data.Binary.Orphans ()
@@ -15,8 +16,9 @@ import GHC.Generics
 import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
-import HaskKV.Utils
+import HaskKV.Raft.State hiding (Time)
 import HaskKV.Snapshot
+import HaskKV.Utils
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -129,6 +131,9 @@ checkAndSet attempts k f
 newtype StoreT m a = StoreT { unStoreT :: m a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
+instance MonadTrans StoreT where
+    lift = StoreT
+
 type StoreClass k v e r m = (MonadIO m, MonadReader r m, HasStore k v e r)
 
 instance (StoreClass k v e r m, KeyClass k, ValueClass v) =>
@@ -161,6 +166,7 @@ instance (StoreClass k v e r m, KeyClass k, ValueClass v) =>
 instance
     ( StoreClass k v e r m
     , HasSnapshotManager r
+    , MonadState RaftState m
     , Entry e
     , Binary k
     , Binary v
@@ -169,7 +175,8 @@ instance
     takeSnapshot = do
         store <- asks getStore
         manager <- asks getSnapshotManager
-        liftIO $ takeSnapshotImpl manager store
+        lastApplied <- lift $ gets _lastApplied
+        liftIO $ takeSnapshotImpl lastApplied manager store
 
 getValueImpl :: (Ord k) => k -> Store k v e -> IO (Maybe v)
 getValueImpl k = fmap (getKey k) . readTVarIO . unStore
@@ -234,25 +241,25 @@ loadSnapshotImpl lastIndex lastTerm map (Store store) = atomically $
     modifyTVar' store (loadSnapshotStore lastIndex lastTerm map)
 
 takeSnapshotImpl :: (Binary k, Binary v, Entry e)
-                 => SnapshotManager
+                 => Int
+                 -> SnapshotManager
                  -> Store k v e
                  -> IO ()
-takeSnapshotImpl manager store = do
+takeSnapshotImpl lastApplied manager store = do
     storeData <- readTVarIO $ unStore store
     let firstIndex = _lowIdx $ _log storeData
-        lastIndex  = _highIdx $ _log storeData
         lastTerm   = entryTerm . fromJust
-                   . IM.lookup lastIndex
+                   . IM.lookup lastApplied
                    . _entries . _log
                    $ storeData
     forkIO $ do
-        createSnapshotImpl lastIndex lastTerm manager
+        createSnapshotImpl lastApplied lastTerm manager
         let snapData = B.concat . BL.toChunks . encode . _map $ storeData
         -- FIXME(DarinM223): maybe write a version of writeSnapshotImpl
         -- that takes in a lazy bytestring instead of a strict bytestring?
-        writeSnapshotImpl 0 snapData lastIndex manager
-        saveSnapshotImpl lastIndex manager
-        deleteRangeImpl firstIndex lastIndex store
+        writeSnapshotImpl 0 snapData lastApplied manager
+        saveSnapshotImpl lastApplied manager
+        deleteRangeImpl firstIndex lastApplied store
     return ()
 
 -- Pure store functions
