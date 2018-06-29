@@ -73,9 +73,13 @@ handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
     | term > _currTerm s = transitionToFollower msg
     | otherwise = do
         hasRemaining <- hasChunk sender
-        when hasRemaining $ do
-            chunk <- readChunk snapshotChunkSize sender
-            mapM_ (sendSnapshotChunk sender) chunk
+        if hasRemaining
+            then do
+                chunk <- readChunk snapshotChunkSize sender
+                mapM_ (sendSnapshotChunk sender) chunk
+            else snapshotInfo >>= \info -> forM_ info $ \(i, _) -> do
+                stateType._Leader.matchIndex %= IM.adjust (max i) sender
+                stateType._Leader.nextIndex %= IM.adjust (max (i + 1)) sender
 
 handleLeaderResponse _ _ _ = return ()
 

@@ -19,6 +19,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import qualified Data.IntMap as IM
+import qualified Data.Map as M
 
 tests :: TestTree
 tests = testGroup "Raft tests" [unitTests]
@@ -207,7 +208,7 @@ testLeaderSendsAppendEntries =
         commitIdx @?= Just 2
 
 testLeaderDecrementsMatch :: TestTree
-testLeaderDecrementsMatch = testCase "Leader decements match on fail" $ do
+testLeaderDecrementsMatch = testCase "Leader decrements match on fail" $ do
     let servers = setupServers [1, 2, 3, 4, 5]
     value <- newStoreValue 2 1 10
     let entries = initLogEntries value
@@ -283,6 +284,21 @@ testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
                 MockT $ heartbeatTimer .= True
             replicateM_ 15 runServers
 
-            state <- MockT $ preuse $ ix 5 . store
-            return (state)
-    print result
+            store1 <- MockT $ preuse $ ix 1 . store
+            store5 <- MockT $ preuse $ ix 5 . store
+
+            runServer 1 $ MockT $ heartbeatTimer .= True
+            runServers
+            msgs <- MockT $ preuse $ ix 1 . receivingMsgs
+            return (store1, store5, msgs)
+        (store1, store5, msgs) = result
+    storeKeys store1 @?= storeKeys store5
+    let numSnapResponses = length
+                         . filter isSnapshotResponse
+                         . fromMaybe []
+                         $ msgs
+    numSnapResponses @?= 0
+  where
+    storeKeys = show . fmap (M.keys . _map)
+    isSnapshotResponse (Response _ (InstallSnapshotResponse _)) = True
+    isSnapshotResponse _                                        = False
