@@ -6,6 +6,7 @@ import Data.Binary
 import Data.List
 import GHC.Records
 import HaskKV.Snapshot
+import HaskKV.Types
 import Test.Tasty
 import Test.Tasty.HUnit
 import System.Directory
@@ -139,21 +140,24 @@ testReadChunks =
             createSnapshotImpl 101 1 manager
             writeSnapshotImpl 0 (C.pack snapData) 101 manager
             saveSnapshotImpl 101 manager
-            let sids = [1, 2, 3, 4]
-            mapM_ (\sid -> createSnapshotImpl sid 1 manager) sids
+
+            let sids = [1, 2, 3, 4] :: [SID]
+            mapM_ (\sid -> createSnapshotImpl (sidToIdx sid) 1 manager) sids
             readLoop sids manager
             closeSnapshotManager manager
-            files <- mapM (readFile . (path </>) . flip partialFilename 1) sids
+            files <- mapM (readSID path) sids
             length (nub files) @?= 1
             head files @?= snapData
   where
+    sidToIdx = LogIndex . unSID
+    readSID path = readFile . (path </>) . flip partialFilename 1 . sidToIdx
     readLoop [] _ = return ()
     readLoop (sid:sids) manager = do
         chunk <- readChunkImpl 9 sid manager
         forM_ chunk $ \c ->
             writeSnapshotImpl (getField @"_offset" c)
                               (_data c)
-                              sid
+                              (sidToIdx sid)
                               manager
         case _type <$> chunk of
             Just FullChunk -> readLoop (sids ++ [sid]) manager

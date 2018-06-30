@@ -1,11 +1,12 @@
 module HaskKV.Log.Utils where
 
 import HaskKV.Log
+import HaskKV.Types
 
-type Index      = Int
-type StartIndex = Int
-type EndIndex   = Int
-type LastIndex  = Int
+type Index      = LogIndex
+type StartIndex = Index
+type EndIndex   = Index
+type LastIndex  = Index
 
 -- | Returns the previous log index.
 prevIndex :: Index -> Index

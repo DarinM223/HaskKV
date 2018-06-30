@@ -9,4 +9,4 @@ import HaskKV.Raft as M
 import HaskKV.Server as M
 import HaskKV.Snapshot as M
 import HaskKV.Store as M (emptyStore, StoreValue)
-import HaskKV.Timer as M (Timeout (..))
+import HaskKV.Types as M

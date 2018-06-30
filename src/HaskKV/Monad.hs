@@ -17,6 +17,7 @@ import HaskKV.Raft.State
 import HaskKV.Server
 import HaskKV.Snapshot
 import HaskKV.Store
+import HaskKV.Types
 
 data AppConfig msg k v e = AppConfig
     { _store       :: Store k v e
@@ -100,4 +101,4 @@ runAppTConfig m config = flip runReaderT config
                        . unAppT
                        $ m
   where
-    emptyState = newRaftState 0
+    emptyState = newRaftState (SID 0)

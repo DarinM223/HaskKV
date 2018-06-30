@@ -2,49 +2,50 @@ module HaskKV.Raft.Message where
 
 import Data.Binary
 import GHC.Generics
+import HaskKV.Types
 
 import qualified Data.ByteString as B
 
 data RaftResponse
     = AppendResponse
-        { _term      :: Int
+        { _term      :: LogTerm
         , _success   :: Bool
-        , _lastIndex :: Int
+        , _lastIndex :: LogIndex
         }
     | VoteResponse
-        { _term    :: Int
+        { _term    :: LogTerm
         , _success :: Bool
         }
     | InstallSnapshotResponse
-        { _term :: Int
+        { _term :: LogTerm
         }
     deriving (Show, Eq, Generic)
 
 data RaftMessage e
     = RequestVote
-        { _candidateID :: Int
-        , _term        :: Int
-        , _lastLogIdx  :: Int
-        , _lastLogTerm :: Int
+        { _candidateID :: SID
+        , _term        :: LogTerm
+        , _lastLogIdx  :: LogIndex
+        , _lastLogTerm :: LogTerm
         }
     | AppendEntries
-        { _term        :: Int
-        , _leaderId    :: Int
-        , _prevLogIdx  :: Int
-        , _prevLogTerm :: Int
+        { _term        :: LogTerm
+        , _leaderId    :: SID
+        , _prevLogIdx  :: LogIndex
+        , _prevLogTerm :: LogTerm
         , _entries     :: [e]
-        , _commitIdx   :: Int
+        , _commitIdx   :: LogIndex
         }
     | InstallSnapshot
-        { _term              :: Int
-        , _leaderId          :: Int
-        , _lastIncludedIndex :: Int
-        , _lastIncludedTerm  :: Int
-        , _offset            :: Int
+        { _term              :: LogTerm
+        , _leaderId          :: SID
+        , _lastIncludedIndex :: LogIndex
+        , _lastIncludedTerm  :: LogTerm
+        , _offset            :: FilePos
         , _data              :: B.ByteString
         , _done              :: Bool
         }
-    | Response Int RaftResponse
+    | Response SID RaftResponse
     deriving (Show, Eq, Generic)
 
 instance Binary RaftResponse

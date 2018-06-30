@@ -10,6 +10,7 @@ import Data.Maybe (fromJust)
 import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Entry
+import HaskKV.Types
 
 import qualified HaskKV.Timer as Timer
 
@@ -49,8 +50,8 @@ temporaryEntriesImpl (TempLog var) = do
     putMVar var []
     return entries
 
-applyTimeout :: Timer.Timeout
-applyTimeout = Timer.Timeout 5000000
+applyTimeout :: Timeout
+applyTimeout = 5000000
 
 -- | Stores entry in the log and then blocks until log entry is committed.
 waitApplyEntry :: (HasField "_completed" e Completed) => e -> TempLog e -> IO ()

@@ -16,6 +16,7 @@ import HaskKV.Raft.Debug
 import HaskKV.Server
 import HaskKV.Snapshot hiding (HasSnapshotManager)
 import HaskKV.Store hiding (HasStore)
+import HaskKV.Types
 
 import qualified Control.Monad.State as S
 import qualified Data.ByteString as B
@@ -32,15 +33,15 @@ type M = RaftMessage E
 
 data MockSnapshot = MockSnapshot
     { _file   :: String
-    , _sIndex :: Int
-    , _term   :: Int
+    , _sIndex :: LogIndex
+    , _term   :: LogTerm
     } deriving (Show)
 makeFieldsNoPrefix ''MockSnapshot
 
 data MockSnapshotManager = MockSnapshotManager
     { _completed :: Maybe MockSnapshot
     , _partial   :: IM.IntMap MockSnapshot
-    , _chunks    :: IM.IntMap (String, Int)
+    , _chunks    :: IM.IntMap (String, FilePos)
     } deriving (Show)
 makeFieldsNoPrefix ''MockSnapshotManager
 
@@ -50,9 +51,9 @@ data MockConfig = MockConfig
     , _tempLog         :: [E]
     , _snapshotManager :: MockSnapshotManager
     , _receivingMsgs   :: [M]
-    , _sendingMsgs     :: [(Int, M)]
-    , _myServerID      :: Int
-    , _serverIDs       :: [Int]
+    , _sendingMsgs     :: [(SID, M)]
+    , _myServerID      :: SID
+    , _serverIDs       :: [SID]
     , _electionTimer   :: Bool
     , _heartbeatTimer  :: Bool
     , _appliedEntries  :: [E]
@@ -66,7 +67,7 @@ newMockSnapshotManager = MockSnapshotManager
     , _chunks    = IM.empty
     }
 
-newMockConfig :: [Int] -> Int -> MockConfig
+newMockConfig :: [SID] -> SID -> MockConfig
 newMockConfig sids sid = MockConfig
     { _raftState       = newRaftState sid
     , _store           = emptyStoreData
@@ -112,7 +113,9 @@ instance TempLogM E (State MockConfig) where
 instance LogM E (State MockConfig) where
     firstIndex = _lowIdx . _log <$> gets _store
     lastIndex = lastIndexLog . _log <$> gets _store
-    loadEntry k = IM.lookup k . getField @"_entries" . _log <$> gets _store
+    loadEntry (LogIndex k) = IM.lookup k
+                           . getField @"_entries" . _log
+                         <$> gets _store
     termFromIndex i = entryTermLog i . _log <$> gets _store
     storeEntries es = store %= (\s -> s { _log = storeEntriesLog es (_log s) })
     deleteRange a b = store %= (\s -> s { _log = deleteRangeLog a b (_log s) })
@@ -133,7 +136,7 @@ instance TakeSnapshotM (State MockConfig) where
         storeData <- gets _store
         let firstIndex = _lowIdx $ _log storeData
             lastTerm   = entryTerm . fromJust
-                       . IM.lookup lastIndex
+                       . IM.lookup (unLogIndex lastIndex)
                        . getField @"_entries" . _log
                        $ storeData
         createSnapshot lastIndex lastTerm
@@ -157,11 +160,12 @@ prezoom l m = getFirst <$> zoom l (First . Just <$> m)
 instance SnapshotM (M.Map K V) (State MockConfig) where
     createSnapshot i t = do
         let snapshot = MockSnapshot { _file = "", _sIndex = i, _term = t }
-        (snapshotManager . partial) %= (IM.insert i snapshot)
-    writeSnapshot _ snapData i =
+        (snapshotManager . partial) %= (IM.insert (unLogIndex i) snapshot)
+    writeSnapshot _ snapData (LogIndex i) =
         (snapshotManager . partial . ix i . file) %= (++ (C.unpack snapData))
     saveSnapshot i = do
-        snap <- fromJust <$> preuse (snapshotManager . partial . ix i)
+        let i' = unLogIndex i
+        snap <- fromJust <$> preuse (snapshotManager . partial . ix i')
         (snapshotManager . completed) %= \case
             Just s | getField @"_sIndex" s < i -> Just snap
             Nothing                            -> Just snap
@@ -170,12 +174,12 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
     readSnapshot _ = do
         snapData <- preuse (snapshotManager . completed . _Just . file)
         return . fmap (decode . CL.pack) $ snapData
-    hasChunk sid =
+    hasChunk (SID sid) =
         preuse (snapshotManager . chunks . ix sid) >>= pure . \case
             Just (s, _) | s == "" -> False
             Nothing               -> False
             _                     -> True
-    readChunk amount sid = snapshotInfo >>= \case
+    readChunk amount (SID sid) = snapshotInfo >>= \case
         Just (i, t) -> do
             temp <- preuse (snapshotManager . chunks . ix sid)
             when (isNothing temp || fmap fst temp == Just "") $ do

@@ -8,10 +8,11 @@ import HaskKV.Log
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Server
+import HaskKV.Types
 
 import qualified Data.IntMap as IM
 
-transitionToFollower :: (MonadState RaftState m, HasField "_term" msg Int)
+transitionToFollower :: (MonadState RaftState m, HasField "_term" msg LogTerm)
                      => msg
                      -> m ()
 transitionToFollower msg = do
@@ -21,7 +22,7 @@ transitionToFollower msg = do
 transitionToLeader :: ( LogM e m
                       , MonadState RaftState m
                       , ServerM (RaftMessage e) ServerEvent m
-                      , HasField "_term" msg Int
+                      , HasField "_term" msg LogTerm
                       )
                    => msg
                    -> m ()
@@ -41,7 +42,7 @@ transitionToLeader msg = do
         , _commitIdx   = 0
         }
 
-    ids <- serverIds
+    ids <- fmap unSID <$> serverIds
     let initNextIndex = lastIndex' + 1
         nextIndexes   = IM.fromList . fmap (, initNextIndex) $ ids
         matchIndexes  = IM.fromList . fmap (, 0) $ ids
@@ -78,12 +79,12 @@ startElection = do
         , _lastLogTerm = lastTerm
         }
 
-setCurrTerm :: (MonadState RaftState m) => Int -> m ()
+setCurrTerm :: (MonadState RaftState m) => LogTerm -> m ()
 setCurrTerm term = do
     currTerm .= term
     votedFor .= Nothing
 
-updateCurrTerm :: (MonadState RaftState m) => (Int -> Int) -> m ()
+updateCurrTerm :: (MonadState RaftState m) => (LogTerm -> LogTerm) -> m ()
 updateCurrTerm f = do
     currTerm %= f
     votedFor .= Nothing

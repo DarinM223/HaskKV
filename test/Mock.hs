@@ -5,6 +5,7 @@ import Control.Monad.State
 import Data.List
 import Data.Maybe
 import HaskKV.Raft
+import HaskKV.Types
 import Mock.Instances
 
 import qualified Data.IntMap as IM
@@ -42,7 +43,7 @@ flushMessages i =
         Just s -> MockT $ do
             let messages = _sendingMsgs s
             (ix i . sendingMsgs) .= []
-            forM_ messages $ \(sid, msg) ->
+            forM_ messages $ \((SID sid), msg) ->
                 (ix sid . receivingMsgs) %= (++ [msg])
         _ -> return ()
 
@@ -62,7 +63,7 @@ runServers = serverKeys >>= (go IM.empty)
                 go (IM.insert sid () marked) keys
             else return ()
 
-setupServers :: [Int] -> IM.IntMap MockConfig
+setupServers :: [SID] -> IM.IntMap MockConfig
 setupServers sids = foldl' addMockConfig IM.empty sids
   where
-    addMockConfig map sid = IM.insert sid (newMockConfig sids sid) map
+    addMockConfig map sid = IM.insert (unSID sid) (newMockConfig sids sid) map

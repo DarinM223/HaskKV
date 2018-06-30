@@ -10,6 +10,7 @@ import Data.Binary
 import Data.Conduit
 import Data.Conduit.Network
 import Data.Streaming.Network.Internal
+import HaskKV.Types
 import HaskKV.Utils
 import System.Log.Logger
 
@@ -20,13 +21,11 @@ import qualified Data.IntMap as IM
 import qualified HaskKV.Timer as Timer
 
 class (Monad m) => ServerM msg e m | m -> msg e where
-    send      :: Int -> msg -> m ()
+    send      :: SID -> msg -> m ()
     broadcast :: msg -> m ()
     recv      :: m (Either e msg)
     reset     :: e -> m ()
-    serverIds :: m [Int]
-
-newtype Capacity = Capacity { unCapacity :: Int } deriving (Show, Eq)
+    serverIds :: m [SID]
 
 data ServerState msg = ServerState
     { _messages         :: TBQueue msg
@@ -34,18 +33,14 @@ data ServerState msg = ServerState
     , _sid              :: Int
     , _electionTimer    :: Timer.Timer
     , _heartbeatTimer   :: Timer.Timer
-    , _electionTimeout  :: Timer.Timeout
-    , _heartbeatTimeout :: Timer.Timeout
+    , _electionTimeout  :: Timeout
+    , _heartbeatTimeout :: Timeout
     }
 
 class HasServerState msg r | r -> msg where
     getServerState :: r -> ServerState msg
 
-newServerState :: Capacity
-               -> Timer.Timeout
-               -> Timer.Timeout
-               -> Int
-               -> IO (ServerState msg)
+newServerState :: Capacity -> Timeout -> Timeout -> Int -> IO (ServerState msg)
 newServerState backpressure electionTimeout heartbeatTimeout sid = do
     messages <- newTBQueueIO (unCapacity backpressure)
     electionTimer <- Timer.newIO
@@ -113,8 +108,8 @@ data ServerEvent = ElectionTimeout
                  deriving (Show, Eq)
 
 inject :: ServerEvent -> ServerState msg -> IO ()
-inject HeartbeatTimeout s = Timer.reset (_heartbeatTimer s) (Timer.Timeout 0)
-inject ElectionTimeout s  = Timer.reset (_electionTimer s) (Timer.Timeout 0)
+inject HeartbeatTimeout s = Timer.reset (_heartbeatTimer s) 0
+inject ElectionTimeout s  = Timer.reset (_electionTimer s) 0
 
 newtype ServerT m a = ServerT { unServerT :: m a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
@@ -131,8 +126,8 @@ instance
     reset e = liftIO . resetImpl e =<< asks getServerState
     serverIds = serverIdsImpl <$> asks getServerState
 
-sendImpl :: Int -> msg -> ServerState msg -> IO ()
-sendImpl i msg s = do
+sendImpl :: SID -> msg -> ServerState msg -> IO ()
+sendImpl (SID i) msg s = do
     let bq = IM.lookup i . _outgoing $ s
     mapM_ (atomically . flip writeTBQueue msg) bq
 
@@ -165,5 +160,5 @@ resetImpl ElectionTimeout s = do
     timeout <- Timer.randTimeout $ _electionTimeout s
     Timer.reset (_electionTimer s) timeout
 
-serverIdsImpl :: ServerState msg -> [Int]
-serverIdsImpl = IM.keys . _outgoing
+serverIdsImpl :: ServerState msg -> [SID]
+serverIdsImpl = fmap SID . IM.keys . _outgoing

@@ -4,14 +4,15 @@ module HaskKV.Raft.State where
 
 import Control.Lens
 import Data.Time
+import HaskKV.Types
 
 import qualified Data.IntMap as IM
 
 type Time = UTCTime
 
 data LeaderState = LeaderState
-    { _nextIndex  :: IM.IntMap Int
-    , _matchIndex :: IM.IntMap Int
+    { _nextIndex  :: IM.IntMap LogIndex
+    , _matchIndex :: IM.IntMap LogIndex
     } deriving (Show, Eq)
 makeFieldsNoPrefix ''LeaderState
 
@@ -24,16 +25,16 @@ makePrisms ''StateType
 
 data RaftState = RaftState
     { _stateType   :: StateType
-    , _currTerm    :: Int
-    , _votedFor    :: Maybe Int
-    , _leader      :: Maybe Int
-    , _commitIndex :: Int
-    , _lastApplied :: Int
-    , _serverID    :: Int
+    , _currTerm    :: LogTerm
+    , _votedFor    :: Maybe SID
+    , _leader      :: Maybe SID
+    , _commitIndex :: LogIndex
+    , _lastApplied :: LogIndex
+    , _serverID    :: SID
     } deriving (Show, Eq)
 makeFieldsNoPrefix ''RaftState
 
-newRaftState :: Int -> RaftState
+newRaftState :: SID -> RaftState
 newRaftState sid = RaftState
     { _stateType   = Follower
     , _currTerm    = 0

@@ -37,13 +37,13 @@ handleArgs (path:sid:_) = do
     let sid'       = read sid :: Int
         initConfig = Config
             { _backpressure     = Capacity 100
-            , _electionTimeout  = Timeout (2000000 :: Int)
-            , _heartbeatTimeout = Timeout (1000000 :: Int)
+            , _electionTimeout  = 2000000
+            , _heartbeatTimeout = 1000000
             , _serverData       = []
             }
     config <- readConfig initConfig path
     serverState <- configToServerState sid' config
-    let raftState   = newRaftState sid'
+    let raftState   = newRaftState (SID sid')
         raftPort    = configRaftPort sid' config
         apiPort     = configAPIPort sid' config
         settings    = configToSettings config

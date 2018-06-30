@@ -6,7 +6,7 @@ import Data.Conduit.Network
 import Data.List
 import Data.Maybe
 import HaskKV.Server
-import HaskKV.Timer
+import HaskKV.Types
 import Text.Read
 
 import qualified Data.ByteString.Char8 as C
