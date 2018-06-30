@@ -24,7 +24,7 @@ instance Eq Completed where
     (==) _ _ = True
 
 data LogEntry k v = LogEntry
-    { _term      :: Int
+    { _term      :: LogTerm
     , _index     :: LogIndex
     , _data      :: LogEntryData k v
     , _completed :: Completed

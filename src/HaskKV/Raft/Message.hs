@@ -8,39 +8,39 @@ import qualified Data.ByteString as B
 
 data RaftResponse
     = AppendResponse
-        { _term      :: Int
+        { _term      :: LogTerm
         , _success   :: Bool
         , _lastIndex :: LogIndex
         }
     | VoteResponse
-        { _term    :: Int
+        { _term    :: LogTerm
         , _success :: Bool
         }
     | InstallSnapshotResponse
-        { _term :: Int
+        { _term :: LogTerm
         }
     deriving (Show, Eq, Generic)
 
 data RaftMessage e
     = RequestVote
         { _candidateID :: SID
-        , _term        :: Int
+        , _term        :: LogTerm
         , _lastLogIdx  :: LogIndex
-        , _lastLogTerm :: Int
+        , _lastLogTerm :: LogTerm
         }
     | AppendEntries
-        { _term        :: Int
+        { _term        :: LogTerm
         , _leaderId    :: SID
         , _prevLogIdx  :: LogIndex
-        , _prevLogTerm :: Int
+        , _prevLogTerm :: LogTerm
         , _entries     :: [e]
         , _commitIdx   :: LogIndex
         }
     | InstallSnapshot
-        { _term              :: Int
+        { _term              :: LogTerm
         , _leaderId          :: SID
         , _lastIncludedIndex :: LogIndex
-        , _lastIncludedTerm  :: Int
+        , _lastIncludedTerm  :: LogTerm
         , _offset            :: Int
         , _data              :: B.ByteString
         , _done              :: Bool

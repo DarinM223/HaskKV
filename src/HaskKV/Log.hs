@@ -5,9 +5,9 @@ import HaskKV.Types
 
 class (Binary l, Show l) => Entry l where
     entryIndex    :: l -> LogIndex
-    entryTerm     :: l -> Int
+    entryTerm     :: l -> LogTerm
     setEntryIndex :: LogIndex -> l -> l
-    setEntryTerm  :: Int -> l -> l
+    setEntryTerm  :: LogTerm -> l -> l
 
 class (Monad m) => LogM e m | m -> e where
     -- | Returns the first index written.
@@ -20,7 +20,7 @@ class (Monad m) => LogM e m | m -> e where
     loadEntry :: LogIndex -> m (Maybe e)
 
     -- | Gets the term of the entry for the given index.
-    termFromIndex :: LogIndex -> m (Maybe Int)
+    termFromIndex :: LogIndex -> m (Maybe LogTerm)
 
     -- | Stores multiple log entries.
     storeEntries :: [e] -> m ()

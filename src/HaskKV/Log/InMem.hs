@@ -10,7 +10,7 @@ data Log e = Log
     , _highIdx           :: LogIndex
     , _lowIdx            :: LogIndex
     , _snapshotLastIndex :: Maybe LogIndex
-    , _snapshotLastTerm  :: Maybe Int
+    , _snapshotLastTerm  :: Maybe LogTerm
     } deriving (Show)
 
 emptyLog :: Log e
@@ -26,7 +26,7 @@ lastIndexLog l = case _snapshotLastIndex l of
     Just index | index > _highIdx l -> index
     _                               -> _highIdx l
 
-entryTermLog :: (Entry e) => LogIndex -> Log e -> Maybe Int
+entryTermLog :: (Entry e) => LogIndex -> Log e -> Maybe LogTerm
 entryTermLog i log
     | i <= 0 = Just 0
     | _snapshotLastIndex log == Just i = _snapshotLastTerm log

@@ -58,7 +58,7 @@ class (Monad s, KeyClass k, ValueClass v) => StorageM k v s | s -> k v where
     cleanupExpired :: Time -> s ()
 
 class (Binary s) => LoadSnapshotM s m | m -> s where
-    loadSnapshot :: LogIndex -> Int -> s -> m ()
+    loadSnapshot :: LogIndex -> LogTerm -> s -> m ()
 
 class TakeSnapshotM m where
     takeSnapshot :: m ()
@@ -211,7 +211,7 @@ loadEntryImpl :: LogIndex -> Store k v e -> IO (Maybe e)
 loadEntryImpl (LogIndex k) =
     fmap (IM.lookup k . _entries . _log) . readTVarIO . unStore
 
-termFromIndexImpl :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe Int)
+termFromIndexImpl :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe LogTerm)
 termFromIndexImpl i = fmap (entryTermLog i . _log) . readTVarIO . unStore
 
 storeEntriesImpl :: (Entry e) => [e] -> Store k v e -> IO ()
@@ -235,7 +235,7 @@ applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do
 
 loadSnapshotImpl :: (Ord k, Storable v)
                  => LogIndex
-                 -> Int
+                 -> LogTerm
                  -> M.Map k v
                  -> Store k v e
                  -> IO ()
@@ -328,7 +328,7 @@ cleanupStore curr s = case minHeapMaybe (_heap s) of
 
 loadSnapshotStore :: (Ord k, Storable v)
                   => LogIndex
-                  -> Int
+                  -> LogTerm
                   -> M.Map k v
                   -> StoreData k v e
                   -> StoreData k v e

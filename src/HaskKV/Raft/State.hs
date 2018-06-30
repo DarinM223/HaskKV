@@ -25,7 +25,7 @@ makePrisms ''StateType
 
 data RaftState = RaftState
     { _stateType   :: StateType
-    , _currTerm    :: Int
+    , _currTerm    :: LogTerm
     , _votedFor    :: Maybe SID
     , _leader      :: Maybe SID
     , _commitIndex :: LogIndex

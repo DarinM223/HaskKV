@@ -32,22 +32,22 @@ data SnapshotChunk = SnapshotChunk
     , _type   :: SnapshotChunkType
     , _offset :: Int
     , _index  :: LogIndex
-    , _term   :: Int
+    , _term   :: LogTerm
     } deriving (Show, Eq)
 
 class (Binary s) => SnapshotM s m | m -> s where
-    createSnapshot :: LogIndex -> Int -> m ()
+    createSnapshot :: LogIndex -> LogTerm -> m ()
     writeSnapshot  :: Int -> B.ByteString -> LogIndex -> m ()
     saveSnapshot   :: LogIndex -> m ()
     readSnapshot   :: LogIndex -> m (Maybe s)
     hasChunk       :: SID -> m Bool
     readChunk      :: Int -> SID -> m (Maybe SnapshotChunk)
-    snapshotInfo   :: m (Maybe (LogIndex, Int))
+    snapshotInfo   :: m (Maybe (LogIndex, LogTerm))
 
 data Snapshot = Snapshot
     { _file     :: Handle
     , _index    :: LogIndex
-    , _term     :: Int
+    , _term     :: LogTerm
     , _filepath :: FilePath
     , _offset   :: Int
     } deriving (Show, Eq)
@@ -132,7 +132,7 @@ instance
     readChunk a i = liftIO . readChunkImpl a i =<< asks getSnapshotManager
     snapshotInfo = liftIO . snapshotInfoImpl =<< asks getSnapshotManager
 
-createSnapshotImpl :: LogIndex -> Int -> SnapshotManager -> IO ()
+createSnapshotImpl :: LogIndex -> LogTerm -> SnapshotManager -> IO ()
 createSnapshotImpl index term manager = do
     handle <- openFile filename WriteMode
     atomically $ modifyTVar (_snapshots manager) $ \s ->
@@ -268,17 +268,17 @@ saveSnapshotImpl index manager = do
         Snapshot{ _index = i } | i > index -> pure True
         _                                  -> pure False
 
-snapshotInfoImpl :: SnapshotManager -> IO (Maybe (LogIndex, Int))
+snapshotInfoImpl :: SnapshotManager -> IO (Maybe (LogIndex, LogTerm))
 snapshotInfoImpl manager = do
     snapshots <- readTVarIO $ _snapshots manager
     let index = getField @"_index" <$> _completed snapshots
         term  = getField @"_term" <$> _completed snapshots
     return $ (,) <$> index <*> term
 
-partialFilename :: LogIndex -> Int -> String
+partialFilename :: LogIndex -> LogTerm -> String
 partialFilename i t = (show i) ++ "_" ++ (show t) ++ ".partial.snap"
 
-completedFilename :: LogIndex -> Int -> String
+completedFilename :: LogIndex -> LogTerm -> String
 completedFilename i t = (show i) ++ "_" ++ (show t) ++ ".completed.snap"
 
 fileBase :: FilePath -> String
@@ -296,9 +296,9 @@ fileExt = go ""
 getPos :: HandlePosn -> Int
 getPos (HandlePosn _ pos) = fromIntegral pos
 
-splitFilename :: String -> Maybe (LogIndex, Int)
+splitFilename :: String -> Maybe (LogIndex, LogTerm)
 splitFilename s = (,) <$> index <*> term
   where
     i = findIndex (== '_') s
     index = fmap LogIndex . readMaybe =<< flip take s <$> i
-    term = readMaybe =<< flip drop s . (+ 1) <$> i
+    term = fmap LogTerm . readMaybe =<< flip drop s . (+ 1) <$> i
