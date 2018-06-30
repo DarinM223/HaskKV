@@ -27,26 +27,20 @@ class (Monad m) => ServerM msg e m | m -> msg e where
     reset     :: e -> m ()
     serverIds :: m [SID]
 
-newtype Capacity = Capacity { unCapacity :: Int } deriving (Show, Eq)
-
 data ServerState msg = ServerState
     { _messages         :: TBQueue msg
     , _outgoing         :: IM.IntMap (TBQueue msg)
     , _sid              :: Int
     , _electionTimer    :: Timer.Timer
     , _heartbeatTimer   :: Timer.Timer
-    , _electionTimeout  :: Timer.Timeout
-    , _heartbeatTimeout :: Timer.Timeout
+    , _electionTimeout  :: Timeout
+    , _heartbeatTimeout :: Timeout
     }
 
 class HasServerState msg r | r -> msg where
     getServerState :: r -> ServerState msg
 
-newServerState :: Capacity
-               -> Timer.Timeout
-               -> Timer.Timeout
-               -> Int
-               -> IO (ServerState msg)
+newServerState :: Capacity -> Timeout -> Timeout -> Int -> IO (ServerState msg)
 newServerState backpressure electionTimeout heartbeatTimeout sid = do
     messages <- newTBQueueIO (unCapacity backpressure)
     electionTimer <- Timer.newIO
@@ -114,8 +108,8 @@ data ServerEvent = ElectionTimeout
                  deriving (Show, Eq)
 
 inject :: ServerEvent -> ServerState msg -> IO ()
-inject HeartbeatTimeout s = Timer.reset (_heartbeatTimer s) (Timer.Timeout 0)
-inject ElectionTimeout s  = Timer.reset (_electionTimer s) (Timer.Timeout 0)
+inject HeartbeatTimeout s = Timer.reset (_heartbeatTimer s) 0
+inject ElectionTimeout s  = Timer.reset (_electionTimer s) 0
 
 newtype ServerT m a = ServerT { unServerT :: m a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)

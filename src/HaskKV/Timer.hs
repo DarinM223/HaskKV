@@ -5,9 +5,8 @@ module HaskKV.Timer where
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
+import HaskKV.Types
 import System.Random
-
-newtype Timeout = Timeout { unTimeout :: Int } deriving (Show, Eq)
 
 timeoutRange :: Timeout -> (Int, Int)
 timeoutRange (Timeout timeout) = (timeout, 2 * timeout - 1)
