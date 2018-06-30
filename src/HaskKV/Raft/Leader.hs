@@ -95,7 +95,7 @@ handleLeaderResponse _ _ _ = return ()
 quorumIndex :: ( MonadState RaftState m
                , ServerM msg event m
                )
-            => m Int
+            => m LogIndex
 quorumIndex = do
     matchIndexes <- maybe [] IM.elems <$> preuse (stateType._Leader.matchIndex)
     let sorted = sortBy (flip compare) matchIndexes
@@ -132,8 +132,8 @@ sendAppendEntries :: forall event e s m.
                      , ServerM (RaftMessage e) event m
                      , SnapshotM s m
                      )
-                  => Int
-                  -> Int
+                  => LogIndex
+                  -> LogIndex
                   -> SID
                   -> m ()
 sendAppendEntries lastIndex commitIndex id = do

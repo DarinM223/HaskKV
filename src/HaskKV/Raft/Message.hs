@@ -10,7 +10,7 @@ data RaftResponse
     = AppendResponse
         { _term      :: Int
         , _success   :: Bool
-        , _lastIndex :: Int
+        , _lastIndex :: LogIndex
         }
     | VoteResponse
         { _term    :: Int
@@ -25,21 +25,21 @@ data RaftMessage e
     = RequestVote
         { _candidateID :: SID
         , _term        :: Int
-        , _lastLogIdx  :: Int
+        , _lastLogIdx  :: LogIndex
         , _lastLogTerm :: Int
         }
     | AppendEntries
         { _term        :: Int
         , _leaderId    :: SID
-        , _prevLogIdx  :: Int
+        , _prevLogIdx  :: LogIndex
         , _prevLogTerm :: Int
         , _entries     :: [e]
-        , _commitIdx   :: Int
+        , _commitIdx   :: LogIndex
         }
     | InstallSnapshot
         { _term              :: Int
         , _leaderId          :: SID
-        , _lastIncludedIndex :: Int
+        , _lastIncludedIndex :: LogIndex
         , _lastIncludedTerm  :: Int
         , _offset            :: Int
         , _data              :: B.ByteString

@@ -11,8 +11,8 @@ import qualified Data.IntMap as IM
 type Time = UTCTime
 
 data LeaderState = LeaderState
-    { _nextIndex  :: IM.IntMap Int
-    , _matchIndex :: IM.IntMap Int
+    { _nextIndex  :: IM.IntMap LogIndex
+    , _matchIndex :: IM.IntMap LogIndex
     } deriving (Show, Eq)
 makeFieldsNoPrefix ''LeaderState
 
@@ -28,8 +28,8 @@ data RaftState = RaftState
     , _currTerm    :: Int
     , _votedFor    :: Maybe SID
     , _leader      :: Maybe SID
-    , _commitIndex :: Int
-    , _lastApplied :: Int
+    , _commitIndex :: LogIndex
+    , _lastApplied :: LogIndex
     , _serverID    :: SID
     } deriving (Show, Eq)
 makeFieldsNoPrefix ''RaftState

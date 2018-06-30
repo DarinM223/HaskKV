@@ -5,6 +5,7 @@ import Data.Binary
 import Data.Binary.Put
 import GHC.Generics
 import HaskKV.Log
+import HaskKV.Types
 
 import qualified Data.Binary.Builder as B
 
@@ -24,7 +25,7 @@ instance Eq Completed where
 
 data LogEntry k v = LogEntry
     { _term      :: Int
-    , _index     :: Int
+    , _index     :: LogIndex
     , _data      :: LogEntryData k v
     , _completed :: Completed
     } deriving (Show, Eq, Generic)

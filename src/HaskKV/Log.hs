@@ -1,31 +1,32 @@
 module HaskKV.Log where
 
 import Data.Binary
+import HaskKV.Types
 
 class (Binary l, Show l) => Entry l where
-    entryIndex    :: l -> Int
+    entryIndex    :: l -> LogIndex
     entryTerm     :: l -> Int
-    setEntryIndex :: Int -> l -> l
+    setEntryIndex :: LogIndex -> l -> l
     setEntryTerm  :: Int -> l -> l
 
 class (Monad m) => LogM e m | m -> e where
     -- | Returns the first index written.
-    firstIndex :: m Int
+    firstIndex :: m LogIndex
 
     -- | Returns the last index written.
-    lastIndex :: m Int
+    lastIndex :: m LogIndex
 
     -- | Gets a log entry at the specified index.
-    loadEntry :: Int -> m (Maybe e)
+    loadEntry :: LogIndex -> m (Maybe e)
 
     -- | Gets the term of the entry for the given index.
-    termFromIndex :: Int -> m (Maybe Int)
+    termFromIndex :: LogIndex -> m (Maybe Int)
 
     -- | Stores multiple log entries.
     storeEntries :: [e] -> m ()
 
     -- | Deletes entries in an inclusive range.
-    deleteRange :: Int -> Int -> m ()
+    deleteRange :: LogIndex -> LogIndex -> m ()
 
 -- | Stores log entries that haven't been
 -- stored in the actual log yet.

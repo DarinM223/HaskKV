@@ -31,22 +31,22 @@ data SnapshotChunk = SnapshotChunk
     { _data   :: B.ByteString
     , _type   :: SnapshotChunkType
     , _offset :: Int
-    , _index  :: Int
+    , _index  :: LogIndex
     , _term   :: Int
     } deriving (Show, Eq)
 
 class (Binary s) => SnapshotM s m | m -> s where
-    createSnapshot :: Int -> Int -> m ()
-    writeSnapshot  :: Int -> B.ByteString -> Int -> m ()
-    saveSnapshot   :: Int -> m ()
-    readSnapshot   :: Int -> m (Maybe s)
+    createSnapshot :: LogIndex -> Int -> m ()
+    writeSnapshot  :: Int -> B.ByteString -> LogIndex -> m ()
+    saveSnapshot   :: LogIndex -> m ()
+    readSnapshot   :: LogIndex -> m (Maybe s)
     hasChunk       :: SID -> m Bool
     readChunk      :: Int -> SID -> m (Maybe SnapshotChunk)
-    snapshotInfo   :: m (Maybe (Int, Int))
+    snapshotInfo   :: m (Maybe (LogIndex, Int))
 
 data Snapshot = Snapshot
     { _file     :: Handle
-    , _index    :: Int
+    , _index    :: LogIndex
     , _term     :: Int
     , _filepath :: FilePath
     , _offset   :: Int
@@ -132,7 +132,7 @@ instance
     readChunk a i = liftIO . readChunkImpl a i =<< asks getSnapshotManager
     snapshotInfo = liftIO . snapshotInfoImpl =<< asks getSnapshotManager
 
-createSnapshotImpl :: Int -> Int -> SnapshotManager -> IO ()
+createSnapshotImpl :: LogIndex -> Int -> SnapshotManager -> IO ()
 createSnapshotImpl index term manager = do
     handle <- openFile filename WriteMode
     atomically $ modifyTVar (_snapshots manager) $ \s ->
@@ -147,7 +147,7 @@ createSnapshotImpl index term manager = do
   where
     filename = _directoryPath manager </> partialFilename index term
 
-writeSnapshotImpl :: Int -> B.ByteString -> Int -> SnapshotManager -> IO ()
+writeSnapshotImpl :: Int -> B.ByteString -> LogIndex -> SnapshotManager -> IO ()
 writeSnapshotImpl offset snapData index manager = do
     snapshots <- readTVarIO $ _snapshots manager
     partial' <- mapM (putAndUpdate offset snapData index) (_partial snapshots)
@@ -173,7 +173,7 @@ writeSnapshotImpl offset snapData index manager = do
             offset <- getPos <$> hGetPosn (_file snap)
             return (snap { _offset = offset } :: Snapshot)
 
-readSnapshotImpl :: (Binary s) => Int -> SnapshotManager -> IO (Maybe s)
+readSnapshotImpl :: (Binary s) => LogIndex -> SnapshotManager -> IO (Maybe s)
 readSnapshotImpl index manager =
     handle (\(_ :: SomeException) -> return Nothing) $ do
         snapshots <- readTVarIO $ _snapshots manager
@@ -225,7 +225,7 @@ readChunkImpl amount (SID sid) manager = do
             return $ Just chunk
         _ -> return Nothing
 
-saveSnapshotImpl :: Int -> SnapshotManager -> IO ()
+saveSnapshotImpl :: LogIndex -> SnapshotManager -> IO ()
 saveSnapshotImpl index manager = do
     snapshots <- readTVarIO $ _snapshots manager
     let snap = find ((== index) . getField @"_index") . _partial $ snapshots
@@ -268,17 +268,17 @@ saveSnapshotImpl index manager = do
         Snapshot{ _index = i } | i > index -> pure True
         _                                  -> pure False
 
-snapshotInfoImpl :: SnapshotManager -> IO (Maybe (Int, Int))
+snapshotInfoImpl :: SnapshotManager -> IO (Maybe (LogIndex, Int))
 snapshotInfoImpl manager = do
     snapshots <- readTVarIO $ _snapshots manager
     let index = getField @"_index" <$> _completed snapshots
         term  = getField @"_term" <$> _completed snapshots
     return $ (,) <$> index <*> term
 
-partialFilename :: Int -> Int -> String
+partialFilename :: LogIndex -> Int -> String
 partialFilename i t = (show i) ++ "_" ++ (show t) ++ ".partial.snap"
 
-completedFilename :: Int -> Int -> String
+completedFilename :: LogIndex -> Int -> String
 completedFilename i t = (show i) ++ "_" ++ (show t) ++ ".completed.snap"
 
 fileBase :: FilePath -> String
@@ -296,9 +296,9 @@ fileExt = go ""
 getPos :: HandlePosn -> Int
 getPos (HandlePosn _ pos) = fromIntegral pos
 
-splitFilename :: String -> Maybe (Int, Int)
+splitFilename :: String -> Maybe (LogIndex, Int)
 splitFilename s = (,) <$> index <*> term
   where
     i = findIndex (== '_') s
-    index = readMaybe =<< flip take s <$> i
+    index = fmap LogIndex . readMaybe =<< flip take s <$> i
     term = readMaybe =<< flip drop s . (+ 1) <$> i

@@ -18,6 +18,7 @@ import HaskKV.Log.Entry
 import HaskKV.Log.InMem
 import HaskKV.Raft.State hiding (Time)
 import HaskKV.Snapshot
+import HaskKV.Types
 import HaskKV.Utils
 
 import qualified Data.ByteString as B
@@ -57,7 +58,7 @@ class (Monad s, KeyClass k, ValueClass v) => StorageM k v s | s -> k v where
     cleanupExpired :: Time -> s ()
 
 class (Binary s) => LoadSnapshotM s m | m -> s where
-    loadSnapshot :: Int -> Int -> s -> m ()
+    loadSnapshot :: LogIndex -> Int -> s -> m ()
 
 class TakeSnapshotM m where
     takeSnapshot :: m ()
@@ -200,16 +201,17 @@ cleanupExpiredImpl :: (Show k, Ord k, Storable v)
                    -> IO ()
 cleanupExpiredImpl t = modifyTVarIO (cleanupStore t) . unStore
 
-firstIndexImpl :: Store k v e -> IO Int
+firstIndexImpl :: Store k v e -> IO LogIndex
 firstIndexImpl = fmap (_lowIdx . _log) . readTVarIO . unStore
 
-lastIndexImpl :: Store k v e -> IO Int
+lastIndexImpl :: Store k v e -> IO LogIndex
 lastIndexImpl = fmap (lastIndexLog . _log) . readTVarIO . unStore
 
-loadEntryImpl :: Int -> Store k v e -> IO (Maybe e)
-loadEntryImpl k = fmap (IM.lookup k . _entries . _log) . readTVarIO . unStore
+loadEntryImpl :: LogIndex -> Store k v e -> IO (Maybe e)
+loadEntryImpl (LogIndex k) =
+    fmap (IM.lookup k . _entries . _log) . readTVarIO . unStore
 
-termFromIndexImpl :: (Entry e) => Int -> Store k v e -> IO (Maybe Int)
+termFromIndexImpl :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe Int)
 termFromIndexImpl i = fmap (entryTermLog i . _log) . readTVarIO . unStore
 
 storeEntriesImpl :: (Entry e) => [e] -> Store k v e -> IO ()
@@ -217,7 +219,7 @@ storeEntriesImpl es
     = modifyTVarIO (\s -> s { _log = storeEntriesLog es (_log s) })
     . unStore
 
-deleteRangeImpl :: Int -> Int -> Store k v e -> IO ()
+deleteRangeImpl :: LogIndex -> LogIndex -> Store k v e -> IO ()
 deleteRangeImpl a b
     = modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
     . unStore
@@ -232,7 +234,7 @@ applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do
     applyStore _              = return ()
 
 loadSnapshotImpl :: (Ord k, Storable v)
-                 => Int
+                 => LogIndex
                  -> Int
                  -> M.Map k v
                  -> Store k v e
@@ -241,7 +243,7 @@ loadSnapshotImpl lastIndex lastTerm map (Store store) = atomically $
     modifyTVar' store (loadSnapshotStore lastIndex lastTerm map)
 
 takeSnapshotImpl :: (KeyClass k, ValueClass v, Entry e)
-                 => Int
+                 => LogIndex
                  -> SnapshotManager
                  -> Store k v e
                  -> IO ()
@@ -249,7 +251,7 @@ takeSnapshotImpl lastApplied manager store = do
     storeData <- readTVarIO $ unStore store
     let firstIndex = _lowIdx $ _log storeData
         lastTerm   = entryTerm . fromJust
-                   . IM.lookup lastApplied
+                   . IM.lookup (unLogIndex lastApplied)
                    . _entries . _log
                    $ storeData
     forkIO $ do
@@ -325,7 +327,7 @@ cleanupStore curr s = case minHeapMaybe (_heap s) of
     diff a b = realToFrac (diffUTCTime a b)
 
 loadSnapshotStore :: (Ord k, Storable v)
-                  => Int
+                  => LogIndex
                   -> Int
                   -> M.Map k v
                   -> StoreData k v e
