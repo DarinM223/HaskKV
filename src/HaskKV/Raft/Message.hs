@@ -2,6 +2,7 @@ module HaskKV.Raft.Message where
 
 import Data.Binary
 import GHC.Generics
+import HaskKV.Types
 
 import qualified Data.ByteString as B
 
@@ -22,14 +23,14 @@ data RaftResponse
 
 data RaftMessage e
     = RequestVote
-        { _candidateID :: Int
+        { _candidateID :: SID
         , _term        :: Int
         , _lastLogIdx  :: Int
         , _lastLogTerm :: Int
         }
     | AppendEntries
         { _term        :: Int
-        , _leaderId    :: Int
+        , _leaderId    :: SID
         , _prevLogIdx  :: Int
         , _prevLogTerm :: Int
         , _entries     :: [e]
@@ -37,14 +38,14 @@ data RaftMessage e
         }
     | InstallSnapshot
         { _term              :: Int
-        , _leaderId          :: Int
+        , _leaderId          :: SID
         , _lastIncludedIndex :: Int
         , _lastIncludedTerm  :: Int
         , _offset            :: Int
         , _data              :: B.ByteString
         , _done              :: Bool
         }
-    | Response Int RaftResponse
+    | Response SID RaftResponse
     deriving (Show, Eq, Generic)
 
 instance Binary RaftResponse

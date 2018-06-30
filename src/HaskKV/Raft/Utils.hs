@@ -8,6 +8,7 @@ import HaskKV.Log
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Server
+import HaskKV.Types
 
 import qualified Data.IntMap as IM
 
@@ -41,7 +42,7 @@ transitionToLeader msg = do
         , _commitIdx   = 0
         }
 
-    ids <- serverIds
+    ids <- fmap unSID <$> serverIds
     let initNextIndex = lastIndex' + 1
         nextIndexes   = IM.fromList . fmap (, initNextIndex) $ ids
         matchIndexes  = IM.fromList . fmap (, 0) $ ids

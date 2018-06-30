@@ -10,6 +10,7 @@ import Data.Binary
 import Data.Conduit
 import Data.Conduit.Network
 import Data.Streaming.Network.Internal
+import HaskKV.Types
 import HaskKV.Utils
 import System.Log.Logger
 
@@ -20,11 +21,11 @@ import qualified Data.IntMap as IM
 import qualified HaskKV.Timer as Timer
 
 class (Monad m) => ServerM msg e m | m -> msg e where
-    send      :: Int -> msg -> m ()
+    send      :: SID -> msg -> m ()
     broadcast :: msg -> m ()
     recv      :: m (Either e msg)
     reset     :: e -> m ()
-    serverIds :: m [Int]
+    serverIds :: m [SID]
 
 newtype Capacity = Capacity { unCapacity :: Int } deriving (Show, Eq)
 
@@ -131,8 +132,8 @@ instance
     reset e = liftIO . resetImpl e =<< asks getServerState
     serverIds = serverIdsImpl <$> asks getServerState
 
-sendImpl :: Int -> msg -> ServerState msg -> IO ()
-sendImpl i msg s = do
+sendImpl :: SID -> msg -> ServerState msg -> IO ()
+sendImpl (SID i) msg s = do
     let bq = IM.lookup i . _outgoing $ s
     mapM_ (atomically . flip writeTBQueue msg) bq
 
@@ -165,5 +166,5 @@ resetImpl ElectionTimeout s = do
     timeout <- Timer.randTimeout $ _electionTimeout s
     Timer.reset (_electionTimer s) timeout
 
-serverIdsImpl :: ServerState msg -> [Int]
-serverIdsImpl = IM.keys . _outgoing
+serverIdsImpl :: ServerState msg -> [SID]
+serverIdsImpl = fmap SID . IM.keys . _outgoing

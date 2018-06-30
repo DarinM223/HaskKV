@@ -13,6 +13,7 @@ import Data.List
 import Data.Maybe
 import GHC.IO.Handle
 import GHC.Records
+import HaskKV.Types
 import System.Directory
 import System.FilePath
 import System.IO
@@ -39,8 +40,8 @@ class (Binary s) => SnapshotM s m | m -> s where
     writeSnapshot  :: Int -> B.ByteString -> Int -> m ()
     saveSnapshot   :: Int -> m ()
     readSnapshot   :: Int -> m (Maybe s)
-    hasChunk       :: Int -> m Bool
-    readChunk      :: Int -> Int -> m (Maybe SnapshotChunk)
+    hasChunk       :: SID -> m Bool
+    readChunk      :: Int -> SID -> m (Maybe SnapshotChunk)
     snapshotInfo   :: m (Maybe (Int, Int))
 
 data Snapshot = Snapshot
@@ -183,15 +184,15 @@ readSnapshotImpl index manager =
                 return $ Just $ decode contents
             _ -> return Nothing
 
-hasChunkImpl :: Int -> SnapshotManager -> IO Bool
-hasChunkImpl i manager = do
+hasChunkImpl :: SID -> SnapshotManager -> IO Bool
+hasChunkImpl (SID i) manager = do
     snapshots <- readTVarIO $ _snapshots manager
     case IM.lookup i $ _chunks snapshots of
         Just handle -> not <$> hIsEOF handle
         Nothing     -> return False
 
-readChunkImpl :: Int -> Int -> SnapshotManager -> IO (Maybe SnapshotChunk)
-readChunkImpl amount sid manager = do
+readChunkImpl :: Int -> SID -> SnapshotManager -> IO (Maybe SnapshotChunk)
+readChunkImpl amount (SID sid) manager = do
     snapshots <- readTVarIO $ _snapshots manager
     case _completed snapshots of
         Just snap@Snapshot{ _filepath = filepath } -> do

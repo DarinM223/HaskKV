@@ -43,7 +43,7 @@ handleArgs (path:sid:_) = do
             }
     config <- readConfig initConfig path
     serverState <- configToServerState sid' config
-    let raftState   = newRaftState sid'
+    let raftState   = newRaftState (SID sid')
         raftPort    = configRaftPort sid' config
         apiPort     = configAPIPort sid' config
         settings    = configToSettings config

@@ -14,6 +14,7 @@ import HaskKV.Raft.State
 import HaskKV.Raft.Utils
 import HaskKV.Server
 import HaskKV.Snapshot
+import HaskKV.Types
 
 import qualified Data.IntMap as IM
 
@@ -37,7 +38,7 @@ runLeader = recv >>= \case
 
         -- Update the highest replicated index for our server.
         lastIndex' <- lastIndex
-        stateType._Leader.matchIndex %= IM.insert serverID' lastIndex'
+        stateType._Leader.matchIndex %= IM.insert (unSID serverID') lastIndex'
         ids <- serverIds
         let otherServerIds = filter (/= serverID') ids
         debug "Sending AppendEntries"
@@ -47,7 +48,16 @@ runLeader = recv >>= \case
     Right InstallSnapshot{}      -> return ()
     Right (Response sender resp) -> get >>= handleLeaderResponse sender resp
 
-handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
+handleLeaderResponse :: ( DebugM m
+                        , MonadState RaftState m
+                        , ServerM (RaftMessage e) event m
+                        , SnapshotM s m
+                        )
+                     => SID
+                     -> RaftResponse
+                     -> RaftState
+                     -> m ()
+handleLeaderResponse (SID sender) msg@(AppendResponse term success lastIndex) s
     | term < _currTerm s = return ()
     | term > _currTerm s = transitionToFollower msg
     | not success = do
@@ -67,7 +77,6 @@ handleLeaderResponse sender msg@(AppendResponse term success lastIndex) s
         when (n > _commitIndex s) $ do
             debug $ "Updating commit index to " ++ show n
             commitIndex .= n
-
 handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
     | term < _currTerm s = return ()
     | term > _currTerm s = transitionToFollower msg
@@ -78,9 +87,9 @@ handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
                 chunk <- readChunk snapshotChunkSize sender
                 mapM_ (sendSnapshotChunk sender) chunk
             else snapshotInfo >>= \info -> forM_ info $ \(i, _) -> do
-                stateType._Leader.matchIndex %= IM.adjust (max i) sender
-                stateType._Leader.nextIndex %= IM.adjust (max (i + 1)) sender
-
+                let sid = unSID sender
+                stateType._Leader.matchIndex %= IM.adjust (max i) sid
+                stateType._Leader.nextIndex %= IM.adjust (max (i + 1)) sid
 handleLeaderResponse _ _ _ = return ()
 
 quorumIndex :: ( MonadState RaftState m
@@ -125,11 +134,11 @@ sendAppendEntries :: forall event e s m.
                      )
                   => Int
                   -> Int
-                  -> Int
+                  -> SID
                   -> m ()
 sendAppendEntries lastIndex commitIndex id = do
     nextIndexes <- preuse (stateType._Leader.nextIndex)
-    case nextIndexes >>= IM.lookup id of
+    case nextIndexes >>= IM.lookup (unSID id) of
         Just nextIndex -> do
             let pi = prevIndex nextIndex
             pt <- termFromIndex $ prevIndex nextIndex
@@ -156,7 +165,7 @@ sendAppendEntries lastIndex commitIndex id = do
             Nothing    -> sendAppend id pi pt [] commitIndex
 
 sendSnapshotChunk :: (MonadState RaftState m, ServerM (RaftMessage e) event m)
-                  => Int
+                  => SID
                   -> SnapshotChunk
                   -> m ()
 sendSnapshotChunk id chunk = do
