@@ -30,14 +30,14 @@ data SnapshotChunkType = FullChunk | EndChunk deriving (Show, Eq)
 data SnapshotChunk = SnapshotChunk
     { _data   :: B.ByteString
     , _type   :: SnapshotChunkType
-    , _offset :: Int
+    , _offset :: FilePos
     , _index  :: LogIndex
     , _term   :: LogTerm
     } deriving (Show, Eq)
 
 class (Binary s) => SnapshotM s m | m -> s where
     createSnapshot :: LogIndex -> LogTerm -> m ()
-    writeSnapshot  :: Int -> B.ByteString -> LogIndex -> m ()
+    writeSnapshot  :: FilePos -> B.ByteString -> LogIndex -> m ()
     saveSnapshot   :: LogIndex -> m ()
     readSnapshot   :: LogIndex -> m (Maybe s)
     hasChunk       :: SID -> m Bool
@@ -49,7 +49,7 @@ data Snapshot = Snapshot
     , _index    :: LogIndex
     , _term     :: LogTerm
     , _filepath :: FilePath
-    , _offset   :: Int
+    , _offset   :: FilePos
     } deriving (Show, Eq)
 
 instance Ord Snapshot where
@@ -147,7 +147,11 @@ createSnapshotImpl index term manager = do
   where
     filename = _directoryPath manager </> partialFilename index term
 
-writeSnapshotImpl :: Int -> B.ByteString -> LogIndex -> SnapshotManager -> IO ()
+writeSnapshotImpl :: FilePos
+                  -> B.ByteString
+                  -> LogIndex
+                  -> SnapshotManager
+                  -> IO ()
 writeSnapshotImpl offset snapData index manager = do
     snapshots <- readTVarIO $ _snapshots manager
     partial' <- mapM (putAndUpdate offset snapData index) (_partial snapshots)
@@ -293,8 +297,8 @@ fileExt = go ""
         (_, "")           -> fullExt
         (incomplete, ext) -> go (ext ++ fullExt) incomplete
 
-getPos :: HandlePosn -> Int
-getPos (HandlePosn _ pos) = fromIntegral pos
+getPos :: HandlePosn -> FilePos
+getPos (HandlePosn _ pos) = FilePos $ fromIntegral pos
 
 splitFilename :: String -> Maybe (LogIndex, LogTerm)
 splitFilename s = (,) <$> index <*> term

@@ -41,7 +41,7 @@ data RaftMessage e
         , _leaderId          :: SID
         , _lastIncludedIndex :: LogIndex
         , _lastIncludedTerm  :: LogTerm
-        , _offset            :: Int
+        , _offset            :: FilePos
         , _data              :: B.ByteString
         , _done              :: Bool
         }
