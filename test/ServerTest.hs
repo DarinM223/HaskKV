@@ -5,26 +5,26 @@ import Control.Concurrent (threadDelay, forkIO)
 import Control.Concurrent.STM
 import Control.Monad
 import Data.ByteString
-import Test.Tasty
+import Test.Tasty hiding (Timeout)
 import Test.Tasty.HUnit
 import HaskKV.Utils
+import HaskKV.Types
 
 import qualified Data.Conduit.List as CL
 import qualified Data.IntMap as IM
-import qualified HaskKV.Timer as T
 import qualified HaskKV.Server as S
 
 tests :: TestTree
 tests = testGroup "Server tests" [unitTests]
 
-backpressure :: S.Capacity
-backpressure = S.Capacity 100
+backpressure :: Capacity
+backpressure = Capacity 100
 
-timeout :: T.Timeout
-timeout = T.Timeout 100
+timeout :: Timeout
+timeout = 100
 
-longer :: T.Timeout
-longer = T.Timeout 1000
+longer :: Timeout
+longer = 1000
 
 unitTests :: TestTree
 unitTests = testGroup "Unit tests"
@@ -68,8 +68,8 @@ testResetElection :: TestTree
 testResetElection = testCase "Resets election timer" $ do
     state <- S.newServerState
         backpressure
-        (T.Timeout 500000)
-        (T.Timeout 600000)
+        500000
+        600000
         1 :: IO (S.ServerState ByteString)
     forkIO $ do
         threadDelay 400000
@@ -83,8 +83,8 @@ testResetHearbeat :: TestTree
 testResetHearbeat = testCase "Resets heartbeat timer" $ do
     state <- S.newServerState
         backpressure
-        (T.Timeout 600000)
-        (T.Timeout 500000)
+        600000
+        500000
         1 :: IO (S.ServerState ByteString)
     forkIO $ do
         threadDelay 400000
@@ -98,8 +98,8 @@ testInject :: TestTree
 testInject = testCase "Inject takes priority" $ do
     state <- S.newServerState
         backpressure
-        (T.Timeout 5000)
-        (T.Timeout 10000)
+        5000
+        10000
         1 :: IO (S.ServerState ByteString)
     S.inject S.HeartbeatTimeout state
     msg1 <- S.recvImpl state

@@ -89,23 +89,24 @@ loadSnapshots path = do
     partial <- mapM (toPartial . (path </>)) . filter isPartial $ files
     completed <- mapM (toCompleted . (path </>)) . filter isCompleted $ files
     newTVarIO Snapshots
-        { _completed = listToMaybe completed
-        , _partial   = partial
+        { _completed = listToMaybe $ catMaybes completed
+        , _partial   = catMaybes partial
         , _chunks    = IM.empty
         }
   where
-    toSnapshot mode path = do
-        let Just (index, term) = splitFilename . fileBase $ path
-        handle <- openFile path mode
-        fileSize <- hFileSize handle
-        let offset = if fileSize > 0 then fromIntegral fileSize else 0
-        return Snapshot
-            { _file     = handle
-            , _index    = index
-            , _term     = term
-            , _filepath = path
-            , _offset   = offset
-            }
+    toSnapshot mode path = case fileSnapInfo (fileBase path) of
+        Just (index, term) -> do
+            handle <- openFile path mode
+            fileSize <- hFileSize handle
+            let offset = if fileSize > 0 then fromIntegral fileSize else 0
+            return $ Just Snapshot
+                { _file     = handle
+                , _index    = index
+                , _term     = term
+                , _filepath = path
+                , _offset   = offset
+                }
+        Nothing -> return Nothing
     toPartial = toSnapshot AppendMode
     toCompleted = toSnapshot ReadMode
 
@@ -300,8 +301,8 @@ fileExt = go ""
 getPos :: HandlePosn -> FilePos
 getPos (HandlePosn _ pos) = FilePos $ fromIntegral pos
 
-splitFilename :: String -> Maybe (LogIndex, LogTerm)
-splitFilename s = (,) <$> index <*> term
+fileSnapInfo :: String -> Maybe (LogIndex, LogTerm)
+fileSnapInfo s = (,) <$> index <*> term
   where
     i = findIndex (== '_') s
     index = fmap LogIndex . readMaybe =<< flip take s <$> i
