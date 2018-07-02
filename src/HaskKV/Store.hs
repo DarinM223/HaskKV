@@ -135,44 +135,46 @@ newtype StoreT m a = StoreT { unStoreT :: m a }
 instance MonadTrans StoreT where
     lift = StoreT
 
-type StoreClass k v e r m = (MonadIO m, MonadReader r m, HasStore k v e r)
+type StoreClass k v e r m =
+    ( MonadIO m
+    , MonadReader r m
+    , HasStore k v e r
+    , HasSnapshotManager r
+    , MonadState RaftState m
+    , KeyClass k
+    , ValueClass v
+    , Entry e
+    )
 
-instance (StoreClass k v e r m, KeyClass k, ValueClass v) =>
-    StorageM k v (StoreT m) where
-
+instance (StoreClass k v e r m) => StorageM k v (StoreT m) where
     getValue k = liftIO . getValueImpl k =<< asks getStore
     setValue k v = liftIO . setValueImpl k v =<< asks getStore
     replaceValue k v = liftIO . replaceValueImpl k v =<< asks getStore
     deleteValue k = liftIO . deleteValueImpl k =<< asks getStore
     cleanupExpired t = liftIO . cleanupExpiredImpl t =<< asks getStore
 
-instance (StoreClass k v e r m, Entry e) => LogM e (StoreT m) where
+instance (StoreClass k v e r m) => LogM e (StoreT m) where
     firstIndex = liftIO . firstIndexImpl =<< asks getStore
     lastIndex = liftIO . lastIndexImpl =<< asks getStore
     loadEntry k = liftIO . loadEntryImpl k =<< asks getStore
     termFromIndex i = liftIO . termFromIndexImpl i =<< asks getStore
-    storeEntries es = liftIO . storeEntriesImpl es =<< asks getStore
     deleteRange a b = liftIO . deleteRangeImpl a b =<< asks getStore
+    storeEntries es = do
+        manager <- asks getSnapshotManager
+        sid <- lift $ gets _serverID
+        lastApplied <- lift $ gets _lastApplied
+        store <- asks getStore
+        liftIO $ storeEntriesImpl sid lastApplied manager es store
 
-instance (StoreClass k v (LogEntry k v) r m, KeyClass k, ValueClass v) =>
+instance (StoreClass k v (LogEntry k v) r m) =>
     ApplyEntryM k v (LogEntry k v) (StoreT m) where
 
     applyEntry = applyEntryImpl
 
-instance (StoreClass k v e r m, KeyClass k, ValueClass v) =>
-    LoadSnapshotM (M.Map k v) (StoreT m) where
-
+instance (StoreClass k v e r m) => LoadSnapshotM (M.Map k v) (StoreT m) where
     loadSnapshot i t map = liftIO . loadSnapshotImpl i t map =<< asks getStore
 
-instance
-    ( StoreClass k v e r m
-    , HasSnapshotManager r
-    , MonadState RaftState m
-    , Entry e
-    , KeyClass k
-    , ValueClass v
-    ) => TakeSnapshotM (StoreT m) where
-
+instance (StoreClass k v e r m) => TakeSnapshotM (StoreT m) where
     takeSnapshot = do
         store <- asks getStore
         manager <- asks getSnapshotManager
@@ -214,15 +216,24 @@ loadEntryImpl (LogIndex k) =
 termFromIndexImpl :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe LogTerm)
 termFromIndexImpl i = fmap (entryTermLog i . _log) . readTVarIO . unStore
 
-storeEntriesImpl :: (Entry e) => [e] -> Store k v e -> IO ()
-storeEntriesImpl es
-    = modifyTVarIO (\s -> s { _log = storeEntriesLog es (_log s) })
-    . unStore
+storeEntriesImpl :: (Entry e, KeyClass k, ValueClass v)
+                 => SID
+                 -> LogIndex
+                 -> SnapshotManager
+                 -> [e]
+                 -> Store k v e
+                 -> IO ()
+storeEntriesImpl sid lastApplied manager es store = do
+    modifyTVarIO (modifyLog (storeEntriesLog es)) . unStore $ store
+    log <- fmap _log . readTVarIO . unStore $ store
+    -- TODO(DarinM223): fill these values in
+    let lastSnapshotSize = undefined
+    size <- persistLog sid log
+    when (size > lastSnapshotSize * 4) $ do
+        takeSnapshotImpl lastApplied manager store
 
 deleteRangeImpl :: LogIndex -> LogIndex -> Store k v e -> IO ()
-deleteRangeImpl a b
-    = modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
-    . unStore
+deleteRangeImpl a b = modifyTVarIO (modifyLog (deleteRangeLog a b)) . unStore
 
 applyEntryImpl :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
 applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do

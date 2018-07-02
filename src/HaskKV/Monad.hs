@@ -63,15 +63,16 @@ instance (Binary k, Binary v) =>
 
 $(deriveVia [t| forall msg k v e. ServerM msg ServerEvent (AppT msg k v e)
                             `Via` ServerT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v) =>
+$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v, Entry e) =>
                 StorageM k v (AppT msg k v e)
           `Via` StoreT (AppT msg k v e) |])
 $(deriveVia [t| forall msg k v. (KeyClass k, ValueClass v) =>
                 ApplyEntryM k v (LogEntry k v) (AppT msg k v (LogEntry k v))
           `Via` StoreT (AppT msg k v (LogEntry k v)) |])
-$(deriveVia [t| forall msg k v e. (Entry e) => LogM e (AppT msg k v e)
-                                         `Via` StoreT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v) =>
+$(deriveVia [t| forall msg k v e. (Entry e, KeyClass k, ValueClass v) =>
+                LogM e (AppT msg k v e)
+          `Via` StoreT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v, Entry e) =>
                 LoadSnapshotM (SnapshotType k v) (AppT msg k v e)
           `Via` StoreT (AppT msg k v e) |])
 $(deriveVia [t| forall msg k v e. (Entry e, KeyClass k, ValueClass v) =>

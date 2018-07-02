@@ -54,3 +54,7 @@ storeEntriesLog es l = foldl' addEntry l es
         entries' = IM.insert (unLogIndex index) e (_entries l)
         lowIndex = if _lowIdx l == 0 then index else _lowIdx l
         highIndex = if index > _highIdx l then index else _highIdx l
+
+-- | Persists the log to disk and returns the size of the persisted file.
+persistLog :: SID -> Log e -> IO Int
+persistLog = undefined
