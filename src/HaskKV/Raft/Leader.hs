@@ -86,7 +86,7 @@ handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
             then do
                 chunk <- readChunk snapshotChunkSize sender
                 mapM_ (sendSnapshotChunk sender) chunk
-            else snapshotInfo >>= \info -> forM_ info $ \(i, _) -> do
+            else snapshotInfo >>= \info -> forM_ info $ \(i, _, _) -> do
                 let sid = unSID sender
                 stateType._Leader.matchIndex %= IM.adjust (max i) sid
                 stateType._Leader.nextIndex %= IM.adjust (max (i + 1)) sid

@@ -4,6 +4,8 @@ import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad
+import Control.Monad.Trans
+import Control.Monad.Trans.Maybe
 import Data.Binary
 import HaskKV
 import HaskKV.Store
@@ -58,11 +60,10 @@ handleArgs (path:sid:_) = do
         storeEntries initEntries
         mapM_ applyEntry initEntries
 
-        info <- snapshotInfo
-        snapshot <- maybe (pure Nothing) (readSnapshot . fst) info
-        case (info, snapshot) of
-            (Just (index, term), Just snap) -> loadSnapshot index term snap
-            _                               -> return ()
+        runMaybeT $ do
+            (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
+            snapshot <- lift (readSnapshot index) >>= MaybeT . pure
+            lift $ loadSnapshot index term snapshot
 
     -- Run Raft server and handler.
     mapM_ (\p -> runServer p "*" settings serverState) raftPort

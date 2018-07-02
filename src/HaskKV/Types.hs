@@ -14,5 +14,6 @@ instance Show LogTerm where
 
 newtype SID = SID { unSID :: Int } deriving (Show, Eq, Num, Binary)
 newtype FilePos = FilePos { unFilePos :: Int } deriving (Show, Eq, Num, Binary)
+newtype FileSize = FileSize { unFileSize :: Int } deriving (Show, Eq, Num, Ord)
 newtype Timeout = Timeout { unTimeout :: Int } deriving (Show, Eq, Num)
 newtype Capacity = Capacity { unCapacity :: Int } deriving (Show, Eq)

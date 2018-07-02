@@ -226,11 +226,11 @@ storeEntriesImpl :: (Entry e, KeyClass k, ValueClass v)
 storeEntriesImpl sid lastApplied manager es store = do
     modifyTVarIO (modifyLog (storeEntriesLog es)) . unStore $ store
     log <- fmap _log . readTVarIO . unStore $ store
-    -- TODO(DarinM223): fill these values in
-    let lastSnapshotSize = undefined
-    size <- persistLog sid log
-    when (size > lastSnapshotSize * 4) $ do
-        takeSnapshotImpl lastApplied manager store
+    logSize <- persistLog sid log
+    snapshotInfoImpl manager >>= \case
+        Just (_, _, snapSize) | logSize > snapSize * 4 ->
+            takeSnapshotImpl lastApplied manager store
+        _ -> return ()
 
 deleteRangeImpl :: LogIndex -> LogIndex -> Store k v e -> IO ()
 deleteRangeImpl a b = modifyTVarIO (modifyLog (deleteRangeLog a b)) . unStore

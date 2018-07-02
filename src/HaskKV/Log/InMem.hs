@@ -56,5 +56,5 @@ storeEntriesLog es l = foldl' addEntry l es
         highIndex = if index > _highIdx l then index else _highIdx l
 
 -- | Persists the log to disk and returns the size of the persisted file.
-persistLog :: SID -> Log e -> IO Int
+persistLog :: SID -> Log e -> IO FileSize
 persistLog = undefined
