@@ -180,7 +180,7 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
             Nothing               -> False
             _                     -> True
     readChunk amount (SID sid) = snapshotInfo >>= \case
-        Just (i, t) -> do
+        Just (i, t, _) -> do
             temp <- preuse (snapshotManager . chunks . ix sid)
             when (isNothing temp || fmap fst temp == Just "") $ do
                 file' <- use (snapshotManager . completed . _Just . file)
@@ -199,7 +199,9 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
     snapshotInfo = do
         snapIndex <- preuse (snapshotManager . completed . _Just . sIndex)
         snapTerm <- preuse (snapshotManager . completed . _Just . term)
-        return $ (,) <$> snapIndex <*> snapTerm
+        file <- preuse (snapshotManager . completed . _Just . file)
+        let snapSize = fmap (fromIntegral . length) file
+        return $ (,,) <$> snapIndex <*> snapTerm <*> snapSize
 
 instance ServerM M ServerEvent (State MockConfig) where
     send sid msg = sendingMsgs %= (++ [(sid, msg)])

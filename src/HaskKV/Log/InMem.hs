@@ -1,8 +1,13 @@
 module HaskKV.Log.InMem where
 
+import Data.Binary
 import Data.List
+import GHC.Generics
 import HaskKV.Log
 import HaskKV.Types
+import System.IO
+
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.IntMap as IM
 
 data Log e = Log
@@ -11,7 +16,9 @@ data Log e = Log
     , _lowIdx            :: LogIndex
     , _snapshotLastIndex :: Maybe LogIndex
     , _snapshotLastTerm  :: Maybe LogTerm
-    } deriving (Show)
+    } deriving (Show, Generic)
+
+instance (Binary e) => Binary (Log e)
 
 emptyLog :: Log e
 emptyLog = Log { _entries           = IM.empty
@@ -56,5 +63,10 @@ storeEntriesLog es l = foldl' addEntry l es
         highIndex = if index > _highIdx l then index else _highIdx l
 
 -- | Persists the log to disk and returns the size of the persisted file.
-persistLog :: SID -> Log e -> IO FileSize
-persistLog = undefined
+persistLog :: (Binary e) => SID -> Log e -> IO FileSize
+persistLog (SID sid) log =
+    let filename = show sid ++ ".init" in
+    withFile filename ReadMode $ \file -> do
+        BL.hPut file $ encode log
+        hFlush file
+        FileSize . fromIntegral <$> hFileSize file
