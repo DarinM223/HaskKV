@@ -10,6 +10,7 @@ import HaskKV.Log.Entry
 import HaskKV.Log.InMem
 import HaskKV.Raft
 import HaskKV.Store
+import HaskKV.Types
 import Mock
 import Mock.Instances
 import Test.Tasty
@@ -191,7 +192,7 @@ testLeaderSendsAppendEntries =
                 }
             expectedEntries = fmap (Just . (: [])) . replicate 4 $ blankAE
         msgs @?= expectedEntries
-        let numUnique = length . nub . fmap show $ stores
+        let numUnique = length . nub . fmap (show . removeSID) $ stores
         numUnique @?= 1
         let storeEntries = getField @"_entries" . _log . head $ stores
         storeEntries @?= IM.fromList (zip [1..] added)
@@ -284,7 +285,7 @@ testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
             msgs <- MockT $ preuse $ ix 1 . receivingMsgs
             return (store1, store5, msgs)
         (store1, store5, msgs) = result
-    show store1 @?= show store5
+    fmap (show . removeSID) store1 @?= fmap (show . removeSID) store5
     let numSnapResponses = length
                          . filter isSnapshotResponse
                          . fromMaybe []
@@ -293,3 +294,6 @@ testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
   where
     isSnapshotResponse (Response _ (InstallSnapshotResponse _)) = True
     isSnapshotResponse _                                        = False
+
+removeSID :: StoreData k v e -> StoreData k v e
+removeSID store = store { _sid = SID 0 }

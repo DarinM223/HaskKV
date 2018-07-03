@@ -9,6 +9,7 @@ import Data.Binary
 import Data.Binary.Orphans ()
 import Data.Deriving.Via
 import Data.Map (Map)
+import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp
@@ -39,7 +40,7 @@ instance HasSnapshotManager (AppConfig msg k v e) where
 newAppConfig :: Maybe FilePath -> ServerState msg -> IO (AppConfig msg k v e)
 newAppConfig snapshotDirectory serverState = do
     isLeader <- newTVarIO False
-    store <- emptyStore
+    store <- newStore $ getField @"_sid" serverState
     tempLog <- newTempLog
     snapManager <- newSnapshotManager snapshotDirectory
     return AppConfig

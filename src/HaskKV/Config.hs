@@ -13,7 +13,7 @@ import qualified Data.ByteString.Char8 as C
 import qualified Data.IntMap as IM
 
 data ServerData = ServerData
-    { _id          :: Int
+    { _id          :: SID
     , _host        :: String
     , _raftPort    :: Int
     , _apiPort     :: Int
@@ -40,24 +40,25 @@ parseConfig c = setData c
 
     setData c d = c { _serverData = d }
 
-    attrsToServerData [id, host, raftPort, apiPort, dir] = ServerData
-                                                       <$> readMaybe id
-                                                       <*> pure host
-                                                       <*> readMaybe raftPort
-                                                       <*> readMaybe apiPort
-                                                       <*> pure dir
+    attrsToServerData [id, host, raftPort, apiPort, dir]
+        = ServerData
+      <$> fmap SID (readMaybe id)
+      <*> pure host
+      <*> readMaybe raftPort
+      <*> readMaybe apiPort
+      <*> pure dir
     attrsToServerData _ = error "Invalid attributes"
 
 readConfig :: Config -> FilePath -> IO Config
 readConfig c = fmap (parseConfig c . lines) . readFile
 
-configRaftPort :: Int -> Config -> Maybe Int
+configRaftPort :: SID -> Config -> Maybe Int
 configRaftPort sid = fmap _raftPort . find ((== sid) . _id) . _serverData
 
-configAPIPort :: Int -> Config -> Maybe Int
+configAPIPort :: SID -> Config -> Maybe Int
 configAPIPort sid = fmap _apiPort . find ((== sid) . _id) . _serverData
 
-configSnapshotDirectory :: Int ->  Config -> Maybe FilePath
+configSnapshotDirectory :: SID -> Config -> Maybe FilePath
 configSnapshotDirectory sid = fmap _snapshotDir
                             . find ((== sid) . _id)
                             . _serverData
@@ -69,9 +70,9 @@ configToSettings = foldl' insert IM.empty . _serverData
                               , _raftPort = port
                               , _host     = host
                               } =
-        IM.insert sid (clientSettings port $ C.pack host) settings
+        IM.insert (unSID sid) (clientSettings port $ C.pack host) settings
 
-configToServerState :: Int -> Config -> IO (ServerState msg)
+configToServerState :: SID -> Config -> IO (ServerState msg)
 configToServerState sid config@Config{ _backpressure     = backpressure
                                      , _electionTimeout  = eTimeout
                                      , _heartbeatTimeout = hTimeout
@@ -84,4 +85,4 @@ configToServerState sid config@Config{ _backpressure     = backpressure
   where
     insert backpressure outgoing ServerData{_id = sid} = do
         bq <- newTBQueueIO (unCapacity backpressure)
-        return $ IM.insert sid bq outgoing
+        return $ IM.insert (unSID sid) bq outgoing

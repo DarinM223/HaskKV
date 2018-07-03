@@ -8,5 +8,5 @@ import HaskKV.Monad as M
 import HaskKV.Raft as M
 import HaskKV.Server as M
 import HaskKV.Snapshot as M
-import HaskKV.Store as M (emptyStore, StoreValue)
+import HaskKV.Store as M (newStore, StoreValue)
 import HaskKV.Types as M

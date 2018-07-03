@@ -70,7 +70,7 @@ newMockSnapshotManager = MockSnapshotManager
 newMockConfig :: [SID] -> SID -> MockConfig
 newMockConfig sids sid = MockConfig
     { _raftState       = newRaftState sid
-    , _store           = emptyStoreData
+    , _store           = newStoreData sid
     , _tempLog         = []
     , _snapshotManager = newMockSnapshotManager
     , _receivingMsgs   = []

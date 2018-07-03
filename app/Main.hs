@@ -36,7 +36,7 @@ handleArgs (path:sid:_) = do
     updateGlobalLogger sid (addHandler h)
     updateGlobalLogger "conduit" (addHandler h)
 
-    let sid'       = read sid :: Int
+    let sid'       = SID $ read sid
         initConfig = Config
             { _backpressure     = Capacity 100
             , _electionTimeout  = 2000000
@@ -45,7 +45,7 @@ handleArgs (path:sid:_) = do
             }
     config <- readConfig initConfig path
     serverState <- configToServerState sid' config
-    let raftState   = newRaftState (SID sid')
+    let raftState   = newRaftState sid'
         raftPort    = configRaftPort sid' config
         apiPort     = configAPIPort sid' config
         settings    = configToSettings config

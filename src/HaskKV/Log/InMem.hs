@@ -64,9 +64,15 @@ storeEntriesLog es l = foldl' addEntry l es
 
 -- | Persists the log to disk and returns the size of the persisted file.
 persistLog :: (Binary e) => SID -> Log e -> IO FileSize
-persistLog (SID sid) log =
-    let filename = show sid ++ ".init" in
-    withFile filename ReadMode $ \file -> do
+persistLog sid log =
+    withFile (logFilename sid) WriteMode $ \file -> do
         BL.hPut file $ encode log
         hFlush file
         FileSize . fromIntegral <$> hFileSize file
+
+-- | Loads the log from disk.
+loadLog :: (Binary e) => SID -> IO (Maybe (Log e))
+loadLog sid = undefined
+
+logFilename :: SID -> FilePath
+logFilename (SID sid) = show sid ++ ".init"
