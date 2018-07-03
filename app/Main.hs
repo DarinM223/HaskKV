@@ -2,11 +2,8 @@ module Main where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
-import Control.Exception
-import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
-import Data.Binary
 import HaskKV
 import HaskKV.Store
 import Servant.Server (serve)
@@ -31,7 +28,7 @@ handleArgs :: [String] -> IO ()
 handleArgs (path:sid:_) = do
     updateGlobalLogger sid (setLevel DEBUG)
     updateGlobalLogger "conduit" (setLevel DEBUG)
-    h <- fileHandler (sid ++ ".log") DEBUG >>= \lh -> return $
+    h <- fileHandler (sid ++ ".out") DEBUG >>= \lh -> return $
         setFormatter lh (simpleLogFormatter "[$time : $loggername : $prio] $msg")
     updateGlobalLogger sid (addHandler h)
     updateGlobalLogger "conduit" (addHandler h)
@@ -45,21 +42,19 @@ handleArgs (path:sid:_) = do
             }
     config <- readConfig initConfig path
     serverState <- configToServerState sid' config
+    -- TODO(DarinM223): load persistent Raft state
     let raftState   = newRaftState sid'
         raftPort    = configRaftPort sid' config
         apiPort     = configAPIPort sid' config
         settings    = configToSettings config
         snapshotDir = configSnapshotDirectory sid' config
-    appConfig <- newAppConfig snapshotDir serverState :: IO MyConfig
+    initLog <- loadLog sid'
+    case initLog of
+        Just log -> debugM "conduit" $ "Loading log: " ++ show log
+        _        -> return ()
+    appConfig <- newAppConfig snapshotDir initLog serverState :: IO MyConfig
 
-    -- Add init entries to log and store.
-    initEntries <- readEntries $ sid ++ ".init"
-    unless (null initEntries) $
-        debugM "conduit" $ "Loading init entries: " ++ show initEntries
     flip runAppTConfig appConfig $ do
-        storeEntries initEntries
-        mapM_ applyEntry initEntries
-
         runMaybeT $ do
             (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
             snapshot <- lift (readSnapshot index) >>= MaybeT . pure
@@ -86,16 +81,3 @@ handleArgs _ = do
     putStrLn "Invalid arguments passed"
     putStrLn "Arguments are:"
     putStrLn "[config path] [server id]"
-
-readEntries :: (Binary k, Binary v)
-            => FilePath
-            -> IO [LogEntry k v]
-readEntries = handle (\(_ :: SomeException) -> return [])
-            . fmap (either (const []) id)
-            . decodeFileOrFail
-
-writeEntries :: (Binary k, Binary v)
-             => FilePath
-             -> [LogEntry k v]
-             -> IO ()
-writeEntries = encodeFile

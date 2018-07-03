@@ -16,7 +16,7 @@ tests = testGroup "Store tests" [unitTests]
 createStore :: IO (Store Int
                          (StoreValue String)
                          (LogEntry Int (StoreValue String)))
-createStore = newStore (SID 0)
+createStore = newStore (SID 0) Nothing
 
 unitTests :: TestTree
 unitTests = testGroup "UnitTests"

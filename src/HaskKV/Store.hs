@@ -109,27 +109,16 @@ newStoreValue seconds version val = do
   where
     diff = fromRational . toRational . secondsToDiffTime $ seconds
 
-newStore :: SID -> IO (Store k v e)
-newStore sid = fmap Store . newTVarIO . newStoreData $ sid
+newStore :: SID -> Maybe (Log e) -> IO (Store k v e)
+newStore sid log = fmap Store . newTVarIO $ newStoreData sid log
 
-newStoreData :: SID -> StoreData k v e
-newStoreData sid = StoreData { _map         = M.empty
-                             , _heap        = H.empty
-                             , _log         = emptyLog
-                             , _tempEntries = []
-                             , _sid         = sid
-                             }
-
-checkAndSet :: (StorageM k v m) => Int -> k -> (v -> v) -> m Bool
-checkAndSet attempts k f
-    | attempts == 0 = return False
-    | otherwise = do
-        maybeV <- getValue k
-        result <- mapM (replaceValue k) . fmap f $ maybeV
-        case result of
-            Just (Just _) -> return True
-            Just Nothing  -> checkAndSet (attempts - 1) k f
-            _             -> return False
+newStoreData :: SID -> Maybe (Log e) -> StoreData k v e
+newStoreData sid log = StoreData { _map         = M.empty
+                                 , _heap        = H.empty
+                                 , _log         = fromMaybe emptyLog log
+                                 , _tempEntries = []
+                                 , _sid         = sid
+                                 }
 
 newtype StoreT m a = StoreT { unStoreT :: m a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)

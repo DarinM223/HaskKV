@@ -12,6 +12,7 @@ import Data.Map (Map)
 import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Entry
+import HaskKV.Log.InMem
 import HaskKV.Log.Temp
 import HaskKV.Raft.Debug
 import HaskKV.Raft.State
@@ -37,10 +38,13 @@ instance HasTempLog e (AppConfig msg k v e) where
 instance HasSnapshotManager (AppConfig msg k v e) where
     getSnapshotManager = _snapManager
 
-newAppConfig :: Maybe FilePath -> ServerState msg -> IO (AppConfig msg k v e)
-newAppConfig snapshotDirectory serverState = do
+newAppConfig :: Maybe FilePath
+             -> Maybe (Log e)
+             -> ServerState msg
+             -> IO (AppConfig msg k v e)
+newAppConfig snapshotDirectory initLog serverState = do
     isLeader <- newTVarIO False
-    store <- newStore $ getField @"_sid" serverState
+    store <- newStore (getField @"_sid" serverState) initLog
     tempLog <- newTempLog
     snapManager <- newSnapshotManager snapshotDirectory
     return AppConfig

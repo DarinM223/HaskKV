@@ -2,3 +2,4 @@
 haskv.cabal
 *~
 *.log
+*.out

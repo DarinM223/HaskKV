@@ -1,5 +1,6 @@
 module HaskKV.Log.InMem where
 
+import Control.Exception
 import Data.Binary
 import Data.List
 import GHC.Generics
@@ -72,7 +73,10 @@ persistLog sid log =
 
 -- | Loads the log from disk.
 loadLog :: (Binary e) => SID -> IO (Maybe (Log e))
-loadLog sid = undefined
+loadLog = handle (\(_ :: SomeException) -> pure Nothing)
+        . fmap (either (const Nothing) Just)
+        . decodeFileOrFail
+        . logFilename
 
 logFilename :: SID -> FilePath
-logFilename (SID sid) = show sid ++ ".init"
+logFilename (SID sid) = show sid ++ ".log"
