@@ -158,13 +158,16 @@ instance (StoreClass k v e r m) => LogM e (StoreT m) where
     lastIndex = liftIO . lastIndexImpl =<< asks getStore
     loadEntry k = liftIO . loadEntryImpl k =<< asks getStore
     termFromIndex i = liftIO . termFromIndexImpl i =<< asks getStore
-    deleteRange a b = liftIO . deleteRangeImpl a b =<< asks getStore
+    deleteRange a b = do
+        sid <- lift $ gets _serverID
+        store <- asks getStore
+        liftIO $ deleteRangeImpl a b sid store
     storeEntries es = do
         manager <- asks getSnapshotManager
         sid <- lift $ gets _serverID
         lastApplied <- lift $ gets _lastApplied
         store <- asks getStore
-        liftIO $ storeEntriesImpl sid lastApplied manager es store
+        liftIO $ storeEntriesImpl es sid lastApplied manager store
 
 instance (StoreClass k v (LogEntry k v) r m) =>
     ApplyEntryM k v (LogEntry k v) (StoreT m) where
@@ -217,23 +220,38 @@ termFromIndexImpl :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe LogTerm)
 termFromIndexImpl i = fmap (entryTermLog i . _log) . readTVarIO . unStore
 
 storeEntriesImpl :: (Entry e, KeyClass k, ValueClass v)
-                 => SID
+                 => [e]
+                 -> SID
                  -> LogIndex
                  -> SnapshotManager
-                 -> [e]
                  -> Store k v e
                  -> IO ()
-storeEntriesImpl sid lastApplied manager es store = do
-    modifyTVarIO (modifyLog (storeEntriesLog es)) . unStore $ store
-    log <- fmap _log . readTVarIO . unStore $ store
-    logSize <- persistLog sid log
+storeEntriesImpl es sid lastApplied manager store = do
+    logSize <- persistAfter (storeEntriesLog es) sid store
     snapshotInfoImpl manager >>= \case
         Just (_, _, snapSize) | logSize > snapSize * 4 ->
             takeSnapshotImpl lastApplied manager store
         _ -> return ()
 
-deleteRangeImpl :: LogIndex -> LogIndex -> Store k v e -> IO ()
-deleteRangeImpl a b = modifyTVarIO (modifyLog (deleteRangeLog a b)) . unStore
+deleteRangeImpl :: (Binary e)
+                => LogIndex
+                -> LogIndex
+                -> SID
+                -> Store k v e
+                -> IO ()
+deleteRangeImpl a b = fmap void . persistAfter (deleteRangeLog a b)
+
+-- | Updates the log with the given function and writes the log to disk.
+persistAfter :: (Binary e)
+             => (Log e -> Log e)
+             -> SID
+             -> Store k v e
+             -> IO FileSize
+persistAfter f sid (Store store) = do
+    log <- atomically $ do
+        modifyTVar store (modifyLog f)
+        _log <$> readTVar store
+    persistLog sid log
 
 applyEntryImpl :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
 applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do
