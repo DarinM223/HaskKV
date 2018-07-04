@@ -19,6 +19,7 @@ runFollower :: ( DebugM m
                , StorageM k v m
                , SnapshotM s m
                , LoadSnapshotM s m
+               , PersistM m
                , Entry e
                )
             => m ()

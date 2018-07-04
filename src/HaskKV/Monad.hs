@@ -90,6 +90,8 @@ $(deriveVia [t| forall msg k v e. (Binary k, Binary v) =>
           `Via` SnapshotT (AppT msg k v e) |])
 $(deriveVia [t| forall msg k v e. DebugM (AppT msg k v e)
                             `Via` PrintDebugT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v e. PersistM (AppT msg k v e)
+                            `Via` PersistT (AppT msg k v e) |])
 
 runAppT :: AppT msg k v e a
         -> AppConfig msg k v e

@@ -12,12 +12,16 @@ import HaskKV.Types
 
 import qualified Data.IntMap as IM
 
-transitionToFollower :: (MonadState RaftState m, HasField "_term" msg LogTerm)
+transitionToFollower :: ( MonadState RaftState m
+                        , HasField "_term" msg LogTerm
+                        , PersistM m
+                        )
                      => msg
                      -> m ()
 transitionToFollower msg = do
     stateType .= Follower
     setCurrTerm $ getField @"_term" msg
+    get >>= persist
 
 transitionToLeader :: ( LogM e m
                       , MonadState RaftState m
@@ -60,6 +64,7 @@ quorumSize = do
 startElection :: ( MonadState RaftState m
                  , LogM e m
                  , ServerM (RaftMessage e) event m
+                 , PersistM m
                  )
               => m ()
 startElection = do
@@ -67,6 +72,7 @@ startElection = do
     stateType .= Candidate 1
     updateCurrTerm (+ 1)
     votedFor .= Just sid
+    get >>= persist
 
     lastIndex' <- lastIndex
     lastTerm <- fromMaybe 0 <$> termFromIndex lastIndex'

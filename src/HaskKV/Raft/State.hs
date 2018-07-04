@@ -1,14 +1,18 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 module HaskKV.Raft.State where
 
 import Control.Lens
+import Control.Monad
+import Control.Monad.IO.Class
 import Data.Binary
 import Data.Maybe
 import Data.Time
 import GHC.Generics
 import GHC.Records
 import HaskKV.Types
+import HaskKV.Utils
 
 import qualified Data.IntMap as IM
 
@@ -64,3 +68,14 @@ newRaftState sid s = RaftState
     , _lastApplied = 0
     , _serverID    = sid
     }
+
+class PersistM m where
+    persist :: RaftState -> m ()
+
+newtype PersistT m a = PersistT { unPersistT :: m a }
+    deriving (Functor, Applicative, Monad, MonadIO)
+
+instance (MonadIO m) => PersistM (PersistT m) where
+    persist state = void <$> liftIO $ persistBinary persistentStateFilename
+                                                    (_serverID state)
+                                                    (newPersistentState state)

@@ -103,6 +103,9 @@ instance MonadState RaftState (MockT MockConfig) where
 instance DebugM (MockT MockConfig) where
     debug _ = return ()
 
+instance PersistM (MockT MockConfig) where
+    persist _ = return ()
+
 instance TempLogM E (State MockConfig) where
     addTemporaryEntry e = tempLog %= (++ [e])
     temporaryEntries = do

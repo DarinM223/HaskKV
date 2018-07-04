@@ -24,6 +24,7 @@ runLeader :: ( DebugM m
              , TempLogM e m
              , ServerM (RaftMessage e) ServerEvent m
              , SnapshotM s m
+             , PersistM m
              , Entry e
              )
           => m ()
@@ -52,6 +53,7 @@ handleLeaderResponse :: ( DebugM m
                         , MonadState RaftState m
                         , ServerM (RaftMessage e) event m
                         , SnapshotM s m
+                        , PersistM m
                         )
                      => SID
                      -> RaftResponse

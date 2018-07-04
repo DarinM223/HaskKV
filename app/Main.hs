@@ -54,11 +54,10 @@ handleArgs (path:sid:_) = do
         _        -> return ()
     appConfig <- newAppConfig snapshotDir initLog serverState :: IO MyConfig
 
-    flip runAppTConfig appConfig $ do
-        runMaybeT $ do
-            (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
-            snapshot <- lift (readSnapshot index) >>= MaybeT . pure
-            lift $ loadSnapshot index term snapshot
+    flip runAppTConfig appConfig $ runMaybeT $ do
+        (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
+        snapshot <- lift (readSnapshot index) >>= MaybeT . pure
+        lift $ loadSnapshot index term snapshot
 
     -- Run Raft server and handler.
     mapM_ (\p -> runServer p "*" settings serverState) raftPort
@@ -69,9 +68,6 @@ handleArgs (path:sid:_) = do
   where
     raftLoop appConfig raftState = do
         (_, s') <- runAppT run appConfig raftState
-        persistBinary persistentStateFilename
-                      (_serverID s')
-                      (newPersistentState s')
         case (_stateType raftState, _stateType s') of
             (Leader _, Leader _) -> return ()
             (Leader _, _) ->

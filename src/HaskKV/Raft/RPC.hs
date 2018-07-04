@@ -18,6 +18,7 @@ handleRequestVote :: ( DebugM m
                      , ServerM (RaftMessage e) ServerEvent m
                      , MonadState RaftState m
                      , LogM e m
+                     , PersistM m
                      , Entry e
                      )
                   => RaftMessage e
@@ -37,8 +38,9 @@ handleRequestVote rv s
         if isValid
             then do
                 debug $ "Sending vote to " ++ show (_candidateID rv)
-                send (_candidateID rv) $ successResponse s
                 votedFor .= Just (_candidateID rv)
+                get >>= persist
+                send (_candidateID rv) $ successResponse s
                 reset ElectionTimeout
             else
                 fail rv s
@@ -60,6 +62,7 @@ handleAppendEntries :: ( DebugM m
                        , ServerM (RaftMessage e) ServerEvent m
                        , MonadState RaftState m
                        , LogM e m
+                       , PersistM m
                        , Entry e
                        )
                     => RaftMessage e
