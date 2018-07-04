@@ -7,6 +7,7 @@ import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Monad.Except
 import Data.Proxy
+import GHC.Records
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
 import HaskKV.Monad
@@ -46,7 +47,7 @@ server config = get config :<|> set config :<|> delete config
 
 checkLeader :: AppConfig msg k v e -> Handler r -> Handler r
 checkLeader config handler =
-    (liftIO . readTVarIO . _isLeader) config >>= \case
+    (liftIO . isLeader . _state) config >>= \case
         True  -> handler
         False -> throwError err404
 
@@ -62,5 +63,5 @@ applyEntryData config entryData = liftIO $ do
             , _completed = completed
             }
     f <- async $ waitApplyEntry entry (_tempLog config)
-    inject HeartbeatTimeout (_serverState config)
+    inject HeartbeatTimeout $ getField @"_serverState" config
     wait f

@@ -1,9 +1,10 @@
 module Main where
 
 import Control.Concurrent (forkIO)
-import Control.Concurrent.STM
+import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
+import GHC.Records
 import HaskKV
 import HaskKV.Store
 import Servant.Server (serve)
@@ -33,49 +34,35 @@ handleArgs (path:sid:_) = do
     updateGlobalLogger sid (addHandler h)
     updateGlobalLogger "conduit" (addHandler h)
 
-    let sid'       = SID $ read sid
-        initConfig = Config
+    let sid'   = SID $ read sid
+        config = Config
             { _backpressure     = Capacity 100
             , _electionTimeout  = 2000000
             , _heartbeatTimeout = 1000000
             , _serverData       = []
             }
-    config <- readConfig initConfig path
-    serverState <- configToServerState sid' config
-    persistentState <- loadBinary persistentStateFilename sid'
-    let raftState   = newRaftState sid' persistentState
-        raftPort    = configRaftPort sid' config
-        apiPort     = configAPIPort sid' config
-        settings    = configToSettings config
-        snapshotDir = configSnapshotDirectory sid' config
-    initLog <- loadBinary logFilename sid'
-    case initLog of
-        Just log -> debugM "conduit" $ "Loading log: " ++ show log
-        _        -> return ()
-    appConfig <- newAppConfig snapshotDir initLog serverState :: IO MyConfig
-
-    flip runAppTConfig appConfig $ runMaybeT $ do
+    config <- readConfig config path
+    let raftPort = configRaftPort sid' config
+        apiPort  = configAPIPort sid' config
+        settings = configToSettings config
+    initAppConfig <- InitAppConfig
+                 <$> loadBinary logFilename sid'
+                 <*> loadBinary persistentStateFilename sid'
+                 <*> configToServerState sid' config
+                 <*> pure (configSnapshotDirectory sid' config)
+    appConfig <- newAppConfig initAppConfig :: IO MyConfig
+    flip runAppT appConfig $ runMaybeT $ do
         (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
         snapshot <- lift (readSnapshot index) >>= MaybeT . pure
         lift $ loadSnapshot index term snapshot
 
     -- Run Raft server and handler.
+    let serverState = getField @"_serverState" appConfig
     mapM_ (\p -> runServer p "*" settings serverState) raftPort
-    forkIO $ raftLoop appConfig raftState
+    forkIO $ forever $ runAppT run appConfig
 
     -- Run API server.
     mapM_ (\p -> Warp.run p (serve api (server appConfig))) apiPort
-  where
-    raftLoop appConfig raftState = do
-        (_, s') <- runAppT run appConfig raftState
-        case (_stateType raftState, _stateType s') of
-            (Leader _, Leader _) -> return ()
-            (Leader _, _) ->
-                atomically $ writeTVar (_isLeader appConfig) False
-            (_, Leader _) ->
-                atomically $ writeTVar (_isLeader appConfig) True
-            (_, _) -> return ()
-        raftLoop appConfig s'
 handleArgs _ = do
     putStrLn "Invalid arguments passed"
     putStrLn "Arguments are:"
