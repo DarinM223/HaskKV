@@ -30,7 +30,7 @@ class (Monad m) => ServerM msg e m | m -> msg e where
 data ServerState msg = ServerState
     { _messages         :: TBQueue msg
     , _outgoing         :: IM.IntMap (TBQueue msg)
-    , _sid              :: Int
+    , _sid              :: SID
     , _electionTimer    :: Timer.Timer
     , _heartbeatTimer   :: Timer.Timer
     , _electionTimeout  :: Timeout
@@ -40,7 +40,7 @@ data ServerState msg = ServerState
 class HasServerState msg r | r -> msg where
     getServerState :: r -> ServerState msg
 
-newServerState :: Capacity -> Timeout -> Timeout -> Int -> IO (ServerState msg)
+newServerState :: Capacity -> Timeout -> Timeout -> SID -> IO (ServerState msg)
 newServerState backpressure electionTimeout heartbeatTimeout sid = do
     messages <- newTBQueueIO (unCapacity backpressure)
     electionTimer <- Timer.newIO
@@ -134,7 +134,7 @@ sendImpl (SID i) msg s = do
 broadcastImpl :: msg -> ServerState msg -> IO ()
 broadcastImpl msg ss = atomically
                      . mapM_ ((`writeTBQueue` msg) . snd)
-                     . filter ((/= _sid ss) . fst)
+                     . filter ((/= _sid ss) . SID . fst)
                      . IM.assocs
                      $ _outgoing ss
 

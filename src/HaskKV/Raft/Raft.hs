@@ -21,6 +21,7 @@ run :: ( DebugM m
        , Entry e
        , SnapshotM s m
        , LoadSnapshotM s m
+       , PersistM m
        )
     => m ()
 run = do

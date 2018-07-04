@@ -2,9 +2,8 @@ module Main where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
-import Control.Exception
-import Control.Monad
-import Data.Binary
+import Control.Monad.Trans
+import Control.Monad.Trans.Maybe
 import HaskKV
 import HaskKV.Store
 import Servant.Server (serve)
@@ -29,12 +28,12 @@ handleArgs :: [String] -> IO ()
 handleArgs (path:sid:_) = do
     updateGlobalLogger sid (setLevel DEBUG)
     updateGlobalLogger "conduit" (setLevel DEBUG)
-    h <- fileHandler (sid ++ ".log") DEBUG >>= \lh -> return $
+    h <- fileHandler (sid ++ ".out") DEBUG >>= \lh -> return $
         setFormatter lh (simpleLogFormatter "[$time : $loggername : $prio] $msg")
     updateGlobalLogger sid (addHandler h)
     updateGlobalLogger "conduit" (addHandler h)
 
-    let sid'       = read sid :: Int
+    let sid'       = SID $ read sid
         initConfig = Config
             { _backpressure     = Capacity 100
             , _electionTimeout  = 2000000
@@ -43,26 +42,22 @@ handleArgs (path:sid:_) = do
             }
     config <- readConfig initConfig path
     serverState <- configToServerState sid' config
-    let raftState   = newRaftState (SID sid')
+    persistentState <- loadBinary persistentStateFilename sid'
+    let raftState   = newRaftState sid' persistentState
         raftPort    = configRaftPort sid' config
         apiPort     = configAPIPort sid' config
         settings    = configToSettings config
         snapshotDir = configSnapshotDirectory sid' config
-    appConfig <- newAppConfig snapshotDir serverState :: IO MyConfig
+    initLog <- loadBinary logFilename sid'
+    case initLog of
+        Just log -> debugM "conduit" $ "Loading log: " ++ show log
+        _        -> return ()
+    appConfig <- newAppConfig snapshotDir initLog serverState :: IO MyConfig
 
-    -- Add init entries to log and store.
-    initEntries <- readEntries $ sid ++ ".init"
-    unless (null initEntries) $
-        debugM "conduit" $ "Loading init entries: " ++ show initEntries
-    flip runAppTConfig appConfig $ do
-        storeEntries initEntries
-        mapM_ applyEntry initEntries
-
-        info <- snapshotInfo
-        snapshot <- maybe (pure Nothing) (readSnapshot . fst) info
-        case (info, snapshot) of
-            (Just (index, term), Just snap) -> loadSnapshot index term snap
-            _                               -> return ()
+    flip runAppTConfig appConfig $ runMaybeT $ do
+        (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
+        snapshot <- lift (readSnapshot index) >>= MaybeT . pure
+        lift $ loadSnapshot index term snapshot
 
     -- Run Raft server and handler.
     mapM_ (\p -> runServer p "*" settings serverState) raftPort
@@ -85,16 +80,3 @@ handleArgs _ = do
     putStrLn "Invalid arguments passed"
     putStrLn "Arguments are:"
     putStrLn "[config path] [server id]"
-
-readEntries :: (Binary k, Binary v)
-            => FilePath
-            -> IO [LogEntry k v]
-readEntries = handle (\(_ :: SomeException) -> return [])
-            . fmap (either (const []) id)
-            . decodeFileOrFail
-
-writeEntries :: (Binary k, Binary v)
-             => FilePath
-             -> [LogEntry k v]
-             -> IO ()
-writeEntries = encodeFile

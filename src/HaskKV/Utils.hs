@@ -2,8 +2,14 @@ module HaskKV.Utils where
 
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
+import Control.Exception
 import Control.Monad.IO.Class
+import Data.Binary
 import Data.Conduit
+import HaskKV.Types
+import System.IO
+
+import qualified Data.ByteString.Lazy as BL
 import qualified Data.Heap as H
 
 stateMVar :: (s -> (a, s)) -> MVar s -> IO a
@@ -45,3 +51,16 @@ sourceTBQueueOne q = do
     e <- liftIO $ atomically $ readTBQueue q
     yield e
     return ()
+
+persistBinary :: (Binary b) => (SID -> FilePath) -> SID -> b -> IO FileSize
+persistBinary filename sid binary =
+    withFile (filename sid) WriteMode $ \file -> do
+        BL.hPut file $ encode binary
+        hFlush file
+        FileSize . fromIntegral <$> hFileSize file
+
+loadBinary :: (Binary b) => (SID -> FilePath) -> SID -> IO (Maybe b)
+loadBinary filename = handle (\(_ :: SomeException) -> pure Nothing)
+                    . fmap (either (const Nothing) Just)
+                    . decodeFileOrFail
+                    . filename

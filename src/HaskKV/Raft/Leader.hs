@@ -24,6 +24,7 @@ runLeader :: ( DebugM m
              , TempLogM e m
              , ServerM (RaftMessage e) ServerEvent m
              , SnapshotM s m
+             , PersistM m
              , Entry e
              )
           => m ()
@@ -52,14 +53,15 @@ handleLeaderResponse :: ( DebugM m
                         , MonadState RaftState m
                         , ServerM (RaftMessage e) event m
                         , SnapshotM s m
+                        , PersistM m
                         )
                      => SID
                      -> RaftResponse
                      -> RaftState
                      -> m ()
 handleLeaderResponse (SID sender) msg@(AppendResponse term success lastIndex) s
-    | term < _currTerm s = return ()
-    | term > _currTerm s = transitionToFollower msg
+    | term < getField @"_currTerm" s = return ()
+    | term > getField @"_currTerm" s = transitionToFollower msg
     | not success = do
         debug $ "Decrementing next index for server " ++ show sender
         stateType._Leader.nextIndex %= IM.adjust prevIndex sender
@@ -78,15 +80,15 @@ handleLeaderResponse (SID sender) msg@(AppendResponse term success lastIndex) s
             debug $ "Updating commit index to " ++ show n
             commitIndex .= n
 handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
-    | term < _currTerm s = return ()
-    | term > _currTerm s = transitionToFollower msg
+    | term < getField @"_currTerm" s = return ()
+    | term > getField @"_currTerm" s = transitionToFollower msg
     | otherwise = do
         hasRemaining <- hasChunk sender
         if hasRemaining
             then do
                 chunk <- readChunk snapshotChunkSize sender
                 mapM_ (sendSnapshotChunk sender) chunk
-            else snapshotInfo >>= \info -> forM_ info $ \(i, _) -> do
+            else snapshotInfo >>= \info -> forM_ info $ \(i, _, _) -> do
                 let sid = unSID sender
                 stateType._Leader.matchIndex %= IM.adjust (max i) sid
                 stateType._Leader.nextIndex %= IM.adjust (max (i + 1)) sid

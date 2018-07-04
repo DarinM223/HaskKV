@@ -9,8 +9,10 @@ import Data.Binary
 import Data.Binary.Orphans ()
 import Data.Deriving.Via
 import Data.Map (Map)
+import GHC.Records
 import HaskKV.Log
 import HaskKV.Log.Entry
+import HaskKV.Log.InMem
 import HaskKV.Log.Temp
 import HaskKV.Raft.Debug
 import HaskKV.Raft.State
@@ -36,10 +38,13 @@ instance HasTempLog e (AppConfig msg k v e) where
 instance HasSnapshotManager (AppConfig msg k v e) where
     getSnapshotManager = _snapManager
 
-newAppConfig :: Maybe FilePath -> ServerState msg -> IO (AppConfig msg k v e)
-newAppConfig snapshotDirectory serverState = do
+newAppConfig :: Maybe FilePath
+             -> Maybe (Log e)
+             -> ServerState msg
+             -> IO (AppConfig msg k v e)
+newAppConfig snapshotDirectory initLog serverState = do
     isLeader <- newTVarIO False
-    store <- emptyStore
+    store <- newStore (getField @"_sid" serverState) initLog
     tempLog <- newTempLog
     snapManager <- newSnapshotManager snapshotDirectory
     return AppConfig
@@ -63,15 +68,16 @@ instance (Binary k, Binary v) =>
 
 $(deriveVia [t| forall msg k v e. ServerM msg ServerEvent (AppT msg k v e)
                             `Via` ServerT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v) =>
+$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v, Entry e) =>
                 StorageM k v (AppT msg k v e)
           `Via` StoreT (AppT msg k v e) |])
 $(deriveVia [t| forall msg k v. (KeyClass k, ValueClass v) =>
                 ApplyEntryM k v (LogEntry k v) (AppT msg k v (LogEntry k v))
           `Via` StoreT (AppT msg k v (LogEntry k v)) |])
-$(deriveVia [t| forall msg k v e. (Entry e) => LogM e (AppT msg k v e)
-                                         `Via` StoreT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v) =>
+$(deriveVia [t| forall msg k v e. (Entry e, KeyClass k, ValueClass v) =>
+                LogM e (AppT msg k v e)
+          `Via` StoreT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v, Entry e) =>
                 LoadSnapshotM (SnapshotType k v) (AppT msg k v e)
           `Via` StoreT (AppT msg k v e) |])
 $(deriveVia [t| forall msg k v e. (Entry e, KeyClass k, ValueClass v) =>
@@ -84,6 +90,8 @@ $(deriveVia [t| forall msg k v e. (Binary k, Binary v) =>
           `Via` SnapshotT (AppT msg k v e) |])
 $(deriveVia [t| forall msg k v e. DebugM (AppT msg k v e)
                             `Via` PrintDebugT (AppT msg k v e) |])
+$(deriveVia [t| forall msg k v e. PersistM (AppT msg k v e)
+                            `Via` PersistT (AppT msg k v e) |])
 
 runAppT :: AppT msg k v e a
         -> AppConfig msg k v e
@@ -101,4 +109,4 @@ runAppTConfig m config = flip runReaderT config
                        . unAppT
                        $ m
   where
-    emptyState = newRaftState (SID 0)
+    emptyState = newRaftState (SID 0) Nothing

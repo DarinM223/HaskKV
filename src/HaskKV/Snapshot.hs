@@ -42,7 +42,7 @@ class (Binary s) => SnapshotM s m | m -> s where
     readSnapshot   :: LogIndex -> m (Maybe s)
     hasChunk       :: SID -> m Bool
     readChunk      :: Int -> SID -> m (Maybe SnapshotChunk)
-    snapshotInfo   :: m (Maybe (LogIndex, LogTerm))
+    snapshotInfo   :: m (Maybe (LogIndex, LogTerm, FileSize))
 
 data Snapshot = Snapshot
     { _file     :: Handle
@@ -183,10 +183,8 @@ readSnapshotImpl index manager =
     handle (\(_ :: SomeException) -> return Nothing) $ do
         snapshots <- readTVarIO $ _snapshots manager
         case _completed snapshots of
-            Just Snapshot{ _index = i, _filepath = path } | i == index -> do
-                file <- openFile path ReadMode
-                contents <- BL.hGetContents file
-                return $ Just $ decode contents
+            Just Snapshot{ _index = i, _filepath = path } | i == index ->
+                Just . decode <$> BL.readFile path
             _ -> return Nothing
 
 hasChunkImpl :: SID -> SnapshotManager -> IO Bool
@@ -273,12 +271,15 @@ saveSnapshotImpl index manager = do
         Snapshot{ _index = i } | i > index -> pure True
         _                                  -> pure False
 
-snapshotInfoImpl :: SnapshotManager -> IO (Maybe (LogIndex, LogTerm))
+snapshotInfoImpl :: SnapshotManager -> IO (Maybe (LogIndex, LogTerm, FileSize))
 snapshotInfoImpl manager = do
     snapshots <- readTVarIO $ _snapshots manager
+    size <- maybe (pure Nothing)
+                  (fmap (Just . fromIntegral) . hFileSize . _file)
+          $ _completed snapshots
     let index = getField @"_index" <$> _completed snapshots
         term  = getField @"_term" <$> _completed snapshots
-    return $ (,) <$> index <*> term
+    return $ (,,) <$> index <*> term <*> size
 
 partialFilename :: LogIndex -> LogTerm -> String
 partialFilename i t = (show i) ++ "_" ++ (show t) ++ ".partial.snap"

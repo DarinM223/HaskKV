@@ -1,8 +1,11 @@
 module HaskKV.Log.InMem where
 
+import Data.Binary
 import Data.List
+import GHC.Generics
 import HaskKV.Log
 import HaskKV.Types
+
 import qualified Data.IntMap as IM
 
 data Log e = Log
@@ -11,7 +14,9 @@ data Log e = Log
     , _lowIdx            :: LogIndex
     , _snapshotLastIndex :: Maybe LogIndex
     , _snapshotLastTerm  :: Maybe LogTerm
-    } deriving (Show)
+    } deriving (Show, Generic)
+
+instance (Binary e) => Binary (Log e)
 
 emptyLog :: Log e
 emptyLog = Log { _entries           = IM.empty
@@ -54,3 +59,6 @@ storeEntriesLog es l = foldl' addEntry l es
         entries' = IM.insert (unLogIndex index) e (_entries l)
         lowIndex = if _lowIdx l == 0 then index else _lowIdx l
         highIndex = if index > _highIdx l then index else _highIdx l
+
+logFilename :: SID -> FilePath
+logFilename (SID sid) = show sid ++ ".log"

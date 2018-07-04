@@ -92,6 +92,7 @@ data StoreData k v e = StoreData
     , _heap        :: H.Heap (HeapVal k)
     , _log         :: Log e
     , _tempEntries :: [e]
+    , _sid         :: SID
     } deriving (Show)
 
 newtype Store k v e = Store { unStore :: TVar (StoreData k v e) }
@@ -108,26 +109,16 @@ newStoreValue seconds version val = do
   where
     diff = fromRational . toRational . secondsToDiffTime $ seconds
 
-emptyStore :: IO (Store k v e)
-emptyStore = Store <$> newTVarIO emptyStoreData
+newStore :: SID -> Maybe (Log e) -> IO (Store k v e)
+newStore sid log = fmap Store . newTVarIO $ newStoreData sid log
 
-emptyStoreData :: StoreData k v e
-emptyStoreData = StoreData { _map         = M.empty
-                           , _heap        = H.empty
-                           , _log         = emptyLog
-                           , _tempEntries = []
-                           }
-
-checkAndSet :: (StorageM k v m) => Int -> k -> (v -> v) -> m Bool
-checkAndSet attempts k f
-    | attempts == 0 = return False
-    | otherwise = do
-        maybeV <- getValue k
-        result <- mapM (replaceValue k) . fmap f $ maybeV
-        case result of
-            Just (Just _) -> return True
-            Just Nothing  -> checkAndSet (attempts - 1) k f
-            _             -> return False
+newStoreData :: SID -> Maybe (Log e) -> StoreData k v e
+newStoreData sid log = StoreData { _map         = M.empty
+                                 , _heap        = H.empty
+                                 , _log         = fromMaybe emptyLog log
+                                 , _tempEntries = []
+                                 , _sid         = sid
+                                 }
 
 newtype StoreT m a = StoreT { unStoreT :: m a }
     deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
@@ -135,44 +126,47 @@ newtype StoreT m a = StoreT { unStoreT :: m a }
 instance MonadTrans StoreT where
     lift = StoreT
 
-type StoreClass k v e r m = (MonadIO m, MonadReader r m, HasStore k v e r)
+type StoreClass k v e r m =
+    ( MonadIO m
+    , MonadReader r m
+    , HasStore k v e r
+    , HasSnapshotManager r
+    , MonadState RaftState m
+    , KeyClass k
+    , ValueClass v
+    , Entry e
+    )
 
-instance (StoreClass k v e r m, KeyClass k, ValueClass v) =>
-    StorageM k v (StoreT m) where
-
+instance (StoreClass k v e r m) => StorageM k v (StoreT m) where
     getValue k = liftIO . getValueImpl k =<< asks getStore
     setValue k v = liftIO . setValueImpl k v =<< asks getStore
     replaceValue k v = liftIO . replaceValueImpl k v =<< asks getStore
     deleteValue k = liftIO . deleteValueImpl k =<< asks getStore
     cleanupExpired t = liftIO . cleanupExpiredImpl t =<< asks getStore
 
-instance (StoreClass k v e r m, Entry e) => LogM e (StoreT m) where
+instance (StoreClass k v e r m) => LogM e (StoreT m) where
     firstIndex = liftIO . firstIndexImpl =<< asks getStore
     lastIndex = liftIO . lastIndexImpl =<< asks getStore
     loadEntry k = liftIO . loadEntryImpl k =<< asks getStore
     termFromIndex i = liftIO . termFromIndexImpl i =<< asks getStore
-    storeEntries es = liftIO . storeEntriesImpl es =<< asks getStore
-    deleteRange a b = liftIO . deleteRangeImpl a b =<< asks getStore
+    deleteRange a b = do
+        store <- asks getStore
+        liftIO $ deleteRangeImpl a b store
+    storeEntries es = do
+        manager <- asks getSnapshotManager
+        lastApplied <- lift $ gets _lastApplied
+        store <- asks getStore
+        liftIO $ storeEntriesImpl es lastApplied manager store
 
-instance (StoreClass k v (LogEntry k v) r m, KeyClass k, ValueClass v) =>
+instance (StoreClass k v (LogEntry k v) r m) =>
     ApplyEntryM k v (LogEntry k v) (StoreT m) where
 
     applyEntry = applyEntryImpl
 
-instance (StoreClass k v e r m, KeyClass k, ValueClass v) =>
-    LoadSnapshotM (M.Map k v) (StoreT m) where
-
+instance (StoreClass k v e r m) => LoadSnapshotM (M.Map k v) (StoreT m) where
     loadSnapshot i t map = liftIO . loadSnapshotImpl i t map =<< asks getStore
 
-instance
-    ( StoreClass k v e r m
-    , HasSnapshotManager r
-    , MonadState RaftState m
-    , Entry e
-    , KeyClass k
-    , ValueClass v
-    ) => TakeSnapshotM (StoreT m) where
-
+instance (StoreClass k v e r m) => TakeSnapshotM (StoreT m) where
     takeSnapshot = do
         store <- asks getStore
         manager <- asks getSnapshotManager
@@ -214,15 +208,27 @@ loadEntryImpl (LogIndex k) =
 termFromIndexImpl :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe LogTerm)
 termFromIndexImpl i = fmap (entryTermLog i . _log) . readTVarIO . unStore
 
-storeEntriesImpl :: (Entry e) => [e] -> Store k v e -> IO ()
-storeEntriesImpl es
-    = modifyTVarIO (\s -> s { _log = storeEntriesLog es (_log s) })
-    . unStore
+storeEntriesImpl :: (Entry e, KeyClass k, ValueClass v)
+                 => [e]
+                 -> LogIndex
+                 -> SnapshotManager
+                 -> Store k v e
+                 -> IO ()
+storeEntriesImpl es lastApplied manager store = do
+    logSize <- persistAfter (modifyLog (storeEntriesLog es)) store
+    snapshotInfoImpl manager >>= \case
+        Just (_, _, snapSize) | logSize > snapSize * 4 ->
+            takeSnapshotImpl lastApplied manager store
+        _ -> return ()
 
-deleteRangeImpl :: LogIndex -> LogIndex -> Store k v e -> IO ()
-deleteRangeImpl a b
-    = modifyTVarIO (\s -> s { _log = deleteRangeLog a b (_log s) })
-    . unStore
+deleteRangeImpl :: (Binary e)
+                => LogIndex
+                -> LogIndex
+                -> Store k v e
+                -> IO ()
+deleteRangeImpl a b store = do
+    persistAfter (modifyLog (deleteRangeLog a b)) store
+    return ()
 
 applyEntryImpl :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
 applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do
@@ -264,10 +270,22 @@ takeSnapshotImpl lastApplied manager store = do
 
         snap <- readSnapshotImpl lastApplied manager
         forM_ snap $ \snap ->
-            atomically $ modifyTVar' (unStore store)
-                $ loadSnapshotStore lastApplied lastTerm snap
-                . modifyLog (deleteRangeLog firstIndex lastApplied)
+              flip persistAfter store
+            $ loadSnapshotStore lastApplied lastTerm snap
+            . modifyLog (deleteRangeLog firstIndex lastApplied)
     return ()
+
+-- | Updates the store with the given function and writes the log to disk.
+persistAfter :: (Binary e)
+             => (StoreData k v e -> StoreData k v e)
+             -> Store k v e
+             -> IO FileSize
+persistAfter f (Store store) = do
+    (sid, log) <- atomically $ do
+        modifyTVar store f
+        s <- readTVar store
+        return (_sid s, _log s)
+    persistBinary logFilename sid log
 
 -- Pure store functions
 

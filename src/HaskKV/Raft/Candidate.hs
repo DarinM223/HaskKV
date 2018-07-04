@@ -3,6 +3,7 @@ module HaskKV.Raft.Candidate where
 import Control.Lens
 import Control.Monad.State
 import Data.Maybe
+import GHC.Records
 import HaskKV.Log
 import HaskKV.Raft.Debug
 import HaskKV.Raft.Message
@@ -20,6 +21,7 @@ runCandidate :: ( DebugM m
                 , StorageM k v m
                 , SnapshotM s m
                 , LoadSnapshotM s m
+                , PersistM m
                 , Entry e
                 )
              => m ()
@@ -35,7 +37,7 @@ runCandidate = recv >>= \case
     Right (Response _ resp)    -> get >>= handleCandidateResponse resp
 
 handleCandidateResponse msg@(VoteResponse term success) s
-    | term > _currTerm s = do
+    | term > getField @"_currTerm" s = do
         debug "Transitioning to follower"
         transitionToFollower msg
     | success = do

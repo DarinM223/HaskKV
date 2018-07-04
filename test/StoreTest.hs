@@ -6,8 +6,9 @@ import Data.Time
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import HaskKV.Store
 import HaskKV.Log.Entry
+import HaskKV.Store
+import HaskKV.Types
 
 tests :: TestTree
 tests = testGroup "Store tests" [unitTests]
@@ -15,7 +16,7 @@ tests = testGroup "Store tests" [unitTests]
 createStore :: IO (Store Int
                          (StoreValue String)
                          (LogEntry Int (StoreValue String)))
-createStore = emptyStore
+createStore = newStore (SID 0) Nothing
 
 unitTests :: TestTree
 unitTests = testGroup "UnitTests"

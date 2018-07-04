@@ -69,8 +69,8 @@ newMockSnapshotManager = MockSnapshotManager
 
 newMockConfig :: [SID] -> SID -> MockConfig
 newMockConfig sids sid = MockConfig
-    { _raftState       = newRaftState sid
-    , _store           = emptyStoreData
+    { _raftState       = newRaftState sid Nothing
+    , _store           = newStoreData sid Nothing
     , _tempLog         = []
     , _snapshotManager = newMockSnapshotManager
     , _receivingMsgs   = []
@@ -102,6 +102,9 @@ instance MonadState RaftState (MockT MockConfig) where
 
 instance DebugM (MockT MockConfig) where
     debug _ = return ()
+
+instance PersistM (MockT MockConfig) where
+    persist _ = return ()
 
 instance TempLogM E (State MockConfig) where
     addTemporaryEntry e = tempLog %= (++ [e])
@@ -180,7 +183,7 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
             Nothing               -> False
             _                     -> True
     readChunk amount (SID sid) = snapshotInfo >>= \case
-        Just (i, t) -> do
+        Just (i, t, _) -> do
             temp <- preuse (snapshotManager . chunks . ix sid)
             when (isNothing temp || fmap fst temp == Just "") $ do
                 file' <- use (snapshotManager . completed . _Just . file)
@@ -199,7 +202,9 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
     snapshotInfo = do
         snapIndex <- preuse (snapshotManager . completed . _Just . sIndex)
         snapTerm <- preuse (snapshotManager . completed . _Just . term)
-        return $ (,) <$> snapIndex <*> snapTerm
+        file <- preuse (snapshotManager . completed . _Just . file)
+        let snapSize = fmap (fromIntegral . length) file
+        return $ (,,) <$> snapIndex <*> snapTerm <*> snapSize
 
 instance ServerM M ServerEvent (State MockConfig) where
     send sid msg = sendingMsgs %= (++ [(sid, msg)])
