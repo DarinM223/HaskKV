@@ -1,6 +1,7 @@
 module HaskKV.Raft.Follower where
 
 import Control.Monad.State
+import GHC.Records
 import HaskKV.Log
 import HaskKV.Raft.Debug
 import HaskKV.Raft.Message
@@ -33,7 +34,7 @@ runFollower = recv >>= \case
     Right (Response _ resp)    -> get >>= handleFollowerResponse resp
 
 handleFollowerResponse msg@(VoteResponse term _) s
-    | term > _currTerm s = transitionToFollower msg
-    | otherwise          = return ()
+    | term > getField @"_currTerm" s = transitionToFollower msg
+    | otherwise                      = return ()
 
 handleFollowerResponse _ _ = return ()

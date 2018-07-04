@@ -24,9 +24,9 @@ handleRequestVote :: ( DebugM m
                   -> RaftState
                   -> m ()
 handleRequestVote rv s
-    | existingLeader rv s                = fail rv s
-    | getField @"_term" rv < _currTerm s = fail rv s
-    | getField @"_term" rv > _currTerm s = do
+    | existingLeader rv s                            = fail rv s
+    | getField @"_term" rv < getField @"_currTerm" s = fail rv s
+    | getField @"_term" rv > getField @"_currTerm" s = do
         debug "Transitioning to follower"
         transitionToFollower rv
         get >>= handleRequestVote rv
@@ -44,12 +44,15 @@ handleRequestVote rv s
                 fail rv s
     | otherwise = fail rv s
   where
-    successResponse s = Response (_serverID s) $ VoteResponse (_currTerm s) True
-    failResponse s = Response (_serverID s) $ VoteResponse (_currTerm s) False
+    successResponse s = Response (_serverID s)
+                      $ VoteResponse (getField @"_currTerm" s) True
+    failResponse s = Response (_serverID s)
+                   $ VoteResponse (getField @"_currTerm" s) False
 
     existingLeader rv s = _leader s /= Nothing
                        && _leader s /= Just (_candidateID rv)
-    canVote cid s = _votedFor s == Nothing || _votedFor s == Just cid
+    canVote cid s = getField @"_votedFor" s == Nothing
+                 || getField @"_votedFor" s == Just cid
     checkValid rv i t = _lastLogIdx rv >= i && _lastLogTerm rv >= t
     fail rv = send (_candidateID rv) . failResponse
 
@@ -63,9 +66,9 @@ handleAppendEntries :: ( DebugM m
                     -> RaftState
                     -> m ()
 handleAppendEntries ae s
-    | getField @"_term" ae < _currTerm s =
+    | getField @"_term" ae < getField @"_currTerm" s =
         send (_leaderId ae) $ failResponse s
-    | getField @"_term" ae > _currTerm s = do
+    | getField @"_term" ae > getField @"_currTerm" s = do
         debug "Transitioning to follower"
         transitionToFollower ae
         get >>= handleAppendEntries ae
@@ -98,9 +101,11 @@ handleAppendEntries ae s
                 send (_leaderId ae) $ failResponse s
   where
     successResponse lastIndex s = Response (_serverID s)
-                                $ AppendResponse (_currTerm s) True lastIndex
+                                $ AppendResponse (getField @"_currTerm" s)
+                                                 True
+                                                 lastIndex
     failResponse s = Response (_serverID s)
-                   $ AppendResponse (_currTerm s) False 0
+                   $ AppendResponse (getField @"_currTerm" s) False 0
 
 handleInstallSnapshot :: ( StorageM k v m
                          , LogM e m
@@ -113,7 +118,7 @@ handleInstallSnapshot :: ( StorageM k v m
                       -> RaftState
                       -> m ()
 handleInstallSnapshot is s
-    | getField @"_term" is < _currTerm s =
+    | getField @"_term" is < getField @"_currTerm" s =
         send (_leaderId is) $ failResponse s
     | otherwise = do
         let snapIndex = _lastIncludedIndex is
@@ -142,6 +147,6 @@ handleInstallSnapshot is s
         send (_leaderId is) $ successResponse s
   where
     successResponse s = Response (_serverID s)
-                      $ InstallSnapshotResponse (_currTerm s)
+                      $ InstallSnapshotResponse (getField @"_currTerm" s)
     failResponse s = Response (_serverID s)
-                   $ InstallSnapshotResponse (_currTerm s)
+                   $ InstallSnapshotResponse (getField @"_currTerm" s)

@@ -42,13 +42,13 @@ handleArgs (path:sid:_) = do
             }
     config <- readConfig initConfig path
     serverState <- configToServerState sid' config
-    -- TODO(DarinM223): load persistent Raft state
-    let raftState   = newRaftState sid'
+    persistentState <- loadBinary persistentStateFilename sid'
+    let raftState   = newRaftState sid' persistentState
         raftPort    = configRaftPort sid' config
         apiPort     = configAPIPort sid' config
         settings    = configToSettings config
         snapshotDir = configSnapshotDirectory sid' config
-    initLog <- loadLog sid'
+    initLog <- loadBinary logFilename sid'
     case initLog of
         Just log -> debugM "conduit" $ "Loading log: " ++ show log
         _        -> return ()
@@ -69,6 +69,9 @@ handleArgs (path:sid:_) = do
   where
     raftLoop appConfig raftState = do
         (_, s') <- runAppT run appConfig raftState
+        persistBinary persistentStateFilename
+                      (_serverID s')
+                      (newPersistentState s')
         case (_stateType raftState, _stateType s') of
             (Leader _, Leader _) -> return ()
             (Leader _, _) ->

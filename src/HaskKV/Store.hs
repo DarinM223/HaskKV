@@ -285,7 +285,7 @@ persistAfter f (Store store) = do
         modifyTVar store f
         s <- readTVar store
         return (_sid s, _log s)
-    persistLog sid log
+    persistBinary logFilename sid log
 
 -- Pure store functions
 

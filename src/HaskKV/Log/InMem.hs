@@ -1,14 +1,11 @@
 module HaskKV.Log.InMem where
 
-import Control.Exception
 import Data.Binary
 import Data.List
 import GHC.Generics
 import HaskKV.Log
 import HaskKV.Types
-import System.IO
 
-import qualified Data.ByteString.Lazy as BL
 import qualified Data.IntMap as IM
 
 data Log e = Log
@@ -62,21 +59,6 @@ storeEntriesLog es l = foldl' addEntry l es
         entries' = IM.insert (unLogIndex index) e (_entries l)
         lowIndex = if _lowIdx l == 0 then index else _lowIdx l
         highIndex = if index > _highIdx l then index else _highIdx l
-
--- | Persists the log to disk and returns the size of the persisted file.
-persistLog :: (Binary e) => SID -> Log e -> IO FileSize
-persistLog sid log =
-    withFile (logFilename sid) WriteMode $ \file -> do
-        BL.hPut file $ encode log
-        hFlush file
-        FileSize . fromIntegral <$> hFileSize file
-
--- | Loads the log from disk.
-loadLog :: (Binary e) => SID -> IO (Maybe (Log e))
-loadLog = handle (\(_ :: SomeException) -> pure Nothing)
-        . fmap (either (const Nothing) Just)
-        . decodeFileOrFail
-        . logFilename
 
 logFilename :: SID -> FilePath
 logFilename (SID sid) = show sid ++ ".log"

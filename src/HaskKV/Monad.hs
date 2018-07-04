@@ -107,4 +107,4 @@ runAppTConfig m config = flip runReaderT config
                        . unAppT
                        $ m
   where
-    emptyState = newRaftState (SID 0)
+    emptyState = newRaftState (SID 0) Nothing

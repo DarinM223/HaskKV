@@ -3,3 +3,4 @@ haskv.cabal
 *~
 *.log
 *.out
+*.state

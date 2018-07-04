@@ -58,8 +58,8 @@ handleLeaderResponse :: ( DebugM m
                      -> RaftState
                      -> m ()
 handleLeaderResponse (SID sender) msg@(AppendResponse term success lastIndex) s
-    | term < _currTerm s = return ()
-    | term > _currTerm s = transitionToFollower msg
+    | term < getField @"_currTerm" s = return ()
+    | term > getField @"_currTerm" s = transitionToFollower msg
     | not success = do
         debug $ "Decrementing next index for server " ++ show sender
         stateType._Leader.nextIndex %= IM.adjust prevIndex sender
@@ -78,8 +78,8 @@ handleLeaderResponse (SID sender) msg@(AppendResponse term success lastIndex) s
             debug $ "Updating commit index to " ++ show n
             commitIndex .= n
 handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
-    | term < _currTerm s = return ()
-    | term > _currTerm s = transitionToFollower msg
+    | term < getField @"_currTerm" s = return ()
+    | term > getField @"_currTerm" s = transitionToFollower msg
     | otherwise = do
         hasRemaining <- hasChunk sender
         if hasRemaining
