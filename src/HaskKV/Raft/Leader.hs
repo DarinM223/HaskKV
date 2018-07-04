@@ -51,6 +51,7 @@ runLeader = recv >>= \case
 
 handleLeaderResponse :: ( DebugM m
                         , MonadState RaftState m
+                        , LogM e m
                         , ServerM (RaftMessage e) event m
                         , SnapshotM s m
                         , PersistM m
@@ -74,9 +75,10 @@ handleLeaderResponse (SID sender) msg@(AppendResponse term success lastIndex) s
         -- a majority of matchIndex[i] >= N, and
         -- log[N].term = currentTerm, set commitIndex = N.
         n <- quorumIndex
+        term <- fromMaybe 0 <$> termFromIndex n
         debug $ "N: " ++ show n
         debug $ "Commit Index: " ++ show (_commitIndex s)
-        when (n > _commitIndex s) $ do
+        when (n > _commitIndex s && term == getField @"_currTerm" s) $ do
             debug $ "Updating commit index to " ++ show n
             commitIndex .= n
 handleLeaderResponse sender msg@(InstallSnapshotResponse term) s

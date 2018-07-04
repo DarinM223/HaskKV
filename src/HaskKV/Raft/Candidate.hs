@@ -5,6 +5,7 @@ import Control.Monad.State
 import Data.Maybe
 import GHC.Records
 import HaskKV.Log
+import HaskKV.Log.Entry
 import HaskKV.Raft.Debug
 import HaskKV.Raft.Message
 import HaskKV.Raft.RPC
@@ -16,13 +17,12 @@ import HaskKV.Store
 
 runCandidate :: ( DebugM m
                 , MonadState RaftState m
-                , LogM e m
-                , ServerM (RaftMessage e) ServerEvent m
+                , LogM (LogEntry k v) m
+                , ServerM (RaftMessage (LogEntry k v)) ServerEvent m
                 , StorageM k v m
                 , SnapshotM s m
                 , LoadSnapshotM s m
                 , PersistM m
-                , Entry e
                 )
              => m ()
 runCandidate = recv >>= \case

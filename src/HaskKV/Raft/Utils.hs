@@ -5,6 +5,7 @@ import Control.Monad.State
 import Data.Maybe
 import GHC.Records
 import HaskKV.Log
+import HaskKV.Log.Entry
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Server
@@ -23,9 +24,9 @@ transitionToFollower msg = do
     setCurrTerm $ getField @"_term" msg
     get >>= persist
 
-transitionToLeader :: ( LogM e m
+transitionToLeader :: ( LogM (LogEntry k v) m
                       , MonadState RaftState m
-                      , ServerM (RaftMessage e) ServerEvent m
+                      , ServerM (RaftMessage (LogEntry k v)) ServerEvent m
                       , HasField "_term" msg LogTerm
                       )
                    => msg
@@ -34,15 +35,23 @@ transitionToLeader msg = do
     reset HeartbeatTimeout
 
     lastIndex' <- lastIndex
-    lastTerm <- fromMaybe 0 <$> termFromIndex lastIndex'
+    currTerm' <- use currTerm
+    let noop = LogEntry
+            { _term      = currTerm'
+            , _index     = lastIndex' + 1
+            , _data      = Noop
+            , _completed = Completed Nothing
+            }
+    storeEntries [noop]
 
     sid <- use serverID
+    lastTerm <- fromMaybe 0 <$> termFromIndex lastIndex'
     broadcast $ AppendEntries
         { _term        = getField @"_term" msg
         , _leaderId    = sid
         , _prevLogIdx  = lastIndex'
         , _prevLogTerm = lastTerm
-        , _entries     = []
+        , _entries     = [noop]
         , _commitIdx   = 0
         }
 

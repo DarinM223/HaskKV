@@ -62,6 +62,13 @@ addedLogEntries value = [entry1, entry2]
         , _completed = Completed Nothing
         }
 
+noop :: LogEntry Int (StoreValue Int)
+noop = LogEntry { _term      = 1
+                , _index     = 1
+                , _data      = Noop
+                , _completed = Completed Nothing
+                }
+
 testElection :: TestTree
 testElection = testCase "Tests normal majority election" $ do
     value <- newStoreValue 2 1 10
@@ -187,7 +194,7 @@ testLeaderSendsAppendEntries =
                 , _leaderId    = 1
                 , _prevLogIdx  = 0
                 , _prevLogTerm = 0
-                , _entries     = []
+                , _entries     = [noop]
                 , _commitIdx   = 0
                 }
             expectedEntries = fmap (Just . (: [])) . replicate 4 $ blankAE
@@ -195,14 +202,18 @@ testLeaderSendsAppendEntries =
         let numUnique = length . nub . fmap (show . removeSID) $ stores
         numUnique @?= 1
         let storeEntries = getField @"_entries" . _log . head $ stores
-        storeEntries @?= IM.fromList (zip [1..] added)
-        let nextIndex  = [(1, 1), (2, 3), (3, 3), (4, 3), (5, 3)]
-            matchIndex = [(1, 2), (2, 2), (3, 2), (4, 2), (5, 2)]
+            expected = IM.fromList
+                     . fmap (\(i, e) -> (i, setEntryIndex (LogIndex i) e))
+                     . zip [1..]
+                     $ noop:added
+        storeEntries @?= expected
+        let nextIndex  = [(1, 1), (2, 4), (3, 4), (4, 4), (5, 4)]
+            matchIndex = [(1, 3), (2, 3), (3, 3), (4, 3), (5, 3)]
         state @?= Just LeaderState
             { _nextIndex  = IM.fromList nextIndex
             , _matchIndex = IM.fromList matchIndex
             }
-        commitIdx @?= Just 2
+        commitIdx @?= Just 3
 
 testLeaderDecrementsMatch :: TestTree
 testLeaderDecrementsMatch = testCase "Leader decrements match on fail" $ do
@@ -238,16 +249,16 @@ testLeaderDecrementsMatch = testCase "Leader decrements match on fail" $ do
     elem (Response 2 failResp) msgs && elem (Response 5 failResp) msgs @?
         "Servers 2 and 5 didn't respond with failure"
     s1 @?= Just LeaderState
-        { _nextIndex  = IM.fromList [(1,3),(2,2),(3,3),(4,3),(5,2)]
-        , _matchIndex = IM.fromList [(1,0),(2,0),(3,2),(4,2),(5,0)]
+        { _nextIndex  = IM.fromList [(1,3),(2,2),(3,4),(4,4),(5,2)]
+        , _matchIndex = IM.fromList [(1,0),(2,0),(3,3),(4,3),(5,0)]
         }
     s2 @?= Just LeaderState
-        { _nextIndex  = IM.fromList [(1,3),(2,1),(3,3),(4,3),(5,1)]
-        , _matchIndex = IM.fromList [(1,2),(2,0),(3,2),(4,2),(5,0)]
+        { _nextIndex  = IM.fromList [(1,3),(2,1),(3,4),(4,4),(5,1)]
+        , _matchIndex = IM.fromList [(1,3),(2,0),(3,3),(4,3),(5,0)]
         }
     s3 @?= Just LeaderState
-        { _nextIndex  = IM.fromList [(1,3),(2,3),(3,3),(4,3),(5,3)]
-        , _matchIndex = IM.fromList [(1,2),(2,2),(3,2),(4,2),(5,2)]
+        { _nextIndex  = IM.fromList [(1,3),(2,4),(3,4),(4,4),(5,4)]
+        , _matchIndex = IM.fromList [(1,3),(2,3),(3,3),(4,3),(5,3)]
         }
 
 testLeaderSendsSnapshot :: TestTree

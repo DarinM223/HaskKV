@@ -3,6 +3,7 @@ module HaskKV.Raft.Raft where
 import Control.Lens
 import Control.Monad.State
 import HaskKV.Log
+import HaskKV.Log.Entry
 import HaskKV.Server
 import HaskKV.Store
 import HaskKV.Raft.Candidate (runCandidate)
@@ -15,10 +16,9 @@ import HaskKV.Snapshot
 
 run :: ( DebugM m
        , MonadState RaftState m
-       , ServerM (RaftMessage e) ServerEvent m
-       , ApplyEntryM k v e m
-       , TempLogM e m
-       , Entry e
+       , ServerM (RaftMessage (LogEntry k v)) ServerEvent m
+       , ApplyEntryM k v (LogEntry k v) m
+       , TempLogM (LogEntry k v) m
        , SnapshotM s m
        , LoadSnapshotM s m
        , PersistM m

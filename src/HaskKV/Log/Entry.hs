@@ -34,6 +34,7 @@ data LogEntryData k v = Change TID k v
                       | Delete TID k
                       | Transaction Transaction
                       | Checkpoint Checkpoint
+                      | Noop
                       deriving (Show, Eq, Generic)
 
 data Transaction = Start TID
