@@ -90,7 +90,7 @@ testElection = testCase "Tests normal majority election" $ do
     let resp = VoteResponse { _term = 1, _success = True }
     msgs @?= Just [Response 1 resp, Response 3 resp, Response 4 resp]
     let expectedState = LeaderState
-            { _nextIndex  = IM.fromList [(1, 3), (2, 3), (3, 3), (4, 3)]
+            { _nextIndex  = IM.fromList [(1, 4), (2, 4), (3, 4), (4, 4)]
             , _matchIndex = IM.fromList [(1, 0), (2, 0), (3, 0), (4, 0)]
             }
     state @?= (Just $ Leader expectedState)
@@ -207,7 +207,7 @@ testLeaderSendsAppendEntries =
                      . zip [1..]
                      $ noop:added
         storeEntries @?= expected
-        let nextIndex  = [(1, 1), (2, 4), (3, 4), (4, 4), (5, 4)]
+        let nextIndex  = [(1, 2), (2, 4), (3, 4), (4, 4), (5, 4)]
             matchIndex = [(1, 3), (2, 3), (3, 3), (4, 3), (5, 3)]
         state @?= Just LeaderState
             { _nextIndex  = IM.fromList nextIndex
@@ -240,8 +240,12 @@ testLeaderDecrementsMatch = testCase "Leader decrements match on fail" $ do
             replicateM_ 5 runServers
             state3 <- MockT $ preuse $ ix 1 . raftState . stateType . _Leader
 
-            return (msgs, state1, state2, state3)
-        (Just msgs, s1, s2, s3) = result
+            runServer 1 $ MockT $ heartbeatTimer .= True
+            replicateM_ 5 runServers
+            state4 <- MockT $ preuse $ ix 1 . raftState . stateType . _Leader
+
+            return (msgs, state1, state2, state3, state4)
+        (Just msgs, s1, s2, s3, s4) = result
         failResp = AppendResponse { _term      = 1
                                   , _success   = False
                                   , _lastIndex = 0
@@ -249,15 +253,19 @@ testLeaderDecrementsMatch = testCase "Leader decrements match on fail" $ do
     elem (Response 2 failResp) msgs && elem (Response 5 failResp) msgs @?
         "Servers 2 and 5 didn't respond with failure"
     s1 @?= Just LeaderState
-        { _nextIndex  = IM.fromList [(1,3),(2,2),(3,4),(4,4),(5,2)]
+        { _nextIndex  = IM.fromList [(1,4),(2,3),(3,4),(4,4),(5,3)]
         , _matchIndex = IM.fromList [(1,0),(2,0),(3,3),(4,3),(5,0)]
         }
     s2 @?= Just LeaderState
-        { _nextIndex  = IM.fromList [(1,3),(2,1),(3,4),(4,4),(5,1)]
+        { _nextIndex  = IM.fromList [(1,4),(2,2),(3,4),(4,4),(5,2)]
         , _matchIndex = IM.fromList [(1,3),(2,0),(3,3),(4,3),(5,0)]
         }
     s3 @?= Just LeaderState
-        { _nextIndex  = IM.fromList [(1,3),(2,4),(3,4),(4,4),(5,4)]
+        { _nextIndex  = IM.fromList [(1,4),(2,1),(3,4),(4,4),(5,1)]
+        , _matchIndex = IM.fromList [(1,3),(2,0),(3,3),(4,3),(5,0)]
+        }
+    s4 @?= Just LeaderState
+        { _nextIndex  = IM.fromList [(1,4),(2,4),(3,4),(4,4),(5,4)]
         , _matchIndex = IM.fromList [(1,3),(2,3),(3,3),(4,3),(5,3)]
         }
 

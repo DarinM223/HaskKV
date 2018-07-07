@@ -34,32 +34,32 @@ transitionToLeader :: ( LogM (LogEntry k v) m
 transitionToLeader msg = do
     reset HeartbeatTimeout
 
-    lastIndex' <- lastIndex
+    prevLastIndex <- lastIndex
     currTerm' <- use currTerm
     let noop = LogEntry
             { _term      = currTerm'
-            , _index     = lastIndex' + 1
+            , _index     = prevLastIndex + 1
             , _data      = Noop
             , _completed = Completed Nothing
             }
     storeEntries [noop]
 
     sid <- use serverID
-    lastTerm <- fromMaybe 0 <$> termFromIndex lastIndex'
+    prevLastTerm <- fromMaybe 0 <$> termFromIndex prevLastIndex
     broadcast $ AppendEntries
         { _term        = getField @"_term" msg
         , _leaderId    = sid
-        , _prevLogIdx  = lastIndex'
-        , _prevLogTerm = lastTerm
+        , _prevLogIdx  = prevLastIndex
+        , _prevLogTerm = prevLastTerm
         , _entries     = [noop]
         , _commitIdx   = 0
         }
 
     ids <- fmap unSID <$> serverIds
-    let initNextIndex = lastIndex' + 1
-        nextIndexes   = IM.fromList . fmap (, initNextIndex) $ ids
-        matchIndexes  = IM.fromList . fmap (, 0) $ ids
-        leaderState   = LeaderState
+    initNextIndex <- (+ 1) <$> lastIndex
+    let nextIndexes  = IM.fromList . fmap (, initNextIndex) $ ids
+        matchIndexes = IM.fromList . fmap (, 0) $ ids
+        leaderState  = LeaderState
             { _nextIndex  = nextIndexes
             , _matchIndex = matchIndexes
             }
