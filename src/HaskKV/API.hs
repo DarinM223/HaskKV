@@ -6,11 +6,15 @@ module HaskKV.API
 import Control.Concurrent.Async
 import Control.Concurrent.STM
 import Control.Monad.Except
+import Control.Monad.Reader
+import Data.Aeson
+import Data.IORef
 import Data.Proxy
 import GHC.Records
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
 import HaskKV.Monad
+import HaskKV.Raft
 import HaskKV.Server
 import HaskKV.Store
 import Servant.API
@@ -24,37 +28,51 @@ type StoreAPI k v
 api :: Proxy (StoreAPI k v)
 api = Proxy
 
-get :: (KeyClass k) => AppConfig msg k v e -> k -> Handler (Maybe v)
-get config key =
-    checkLeader config $ liftIO $ getValueImpl key (_store config)
+get :: (Constr k v e m, MonadError ServantErr m)
+    => k
+    -> AppT msg k v e m (Maybe v)
+get key = checkLeader $ getValue key
 
-set :: AppConfig msg k v (LogEntry k v) -> k -> v -> Handler ()
-set config key value =
-    checkLeader config $ applyEntryData config entryData
-  where
-    entryData = Change (TID 0) key value
+set :: (MonadIO m, MonadError ServantErr m)
+    => k
+    -> v
+    -> AppT msg k v (LogEntry k v) m ()
+set key value = checkLeader $ applyEntryData $ Change (TID 0) key value
 
-delete :: AppConfig msg k v (LogEntry k v) -> k -> Handler ()
-delete config key =
-    checkLeader config $ applyEntryData config entryData
-  where
-    entryData = Delete (TID 0) key
+delete :: (MonadIO m, MonadError ServantErr m)
+       => k
+       -> AppT msg k v (LogEntry k v) m ()
+delete key = checkLeader $ applyEntryData $ Delete (TID 0) key
 
-server :: (KeyClass k)
+isLeader :: (MonadIO m) => AppT msg k v e m Bool
+isLeader = do
+    ref <- asks _state
+    state <- liftIO $ readIORef ref
+    case _stateType state of
+        Leader _ -> return True
+        _        -> return False
+
+checkLeader :: (MonadIO m, MonadError ServantErr m)
+            => AppT msg k v e m r
+            -> AppT msg k v e m r
+checkLeader handler = isLeader >>= \case
+    True  -> handler
+    False -> lift $ throwError err404
+
+convertApp :: AppConfig msg k v e -> AppT msg k v e Handler a -> Handler a
+convertApp = flip runAppT
+
+server :: (KeyClass k, ValueClass v, FromHttpApiData k, FromJSON v, ToJSON v)
        => AppConfig msg k v (LogEntry k v)
        -> Server (StoreAPI k v)
-server config = get config :<|> set config :<|> delete config
+server config = hoistServer api (convertApp config) server
+  where
+    server = get :<|> set :<|> delete
 
-checkLeader :: AppConfig msg k v e -> Handler r -> Handler r
-checkLeader config handler =
-    (liftIO . isLeader . _state) config >>= \case
-        True  -> handler
-        False -> throwError err404
-
-applyEntryData :: AppConfig msg k v (LogEntry k v)
-               -> LogEntryData k v
-               -> Handler ()
-applyEntryData config entryData = liftIO $ do
+applyEntryData :: (MonadIO m)
+               => LogEntryData k v
+               -> AppT msg k v (LogEntry k v) m ()
+applyEntryData entryData = ask >>= \config -> liftIO $ do
     completed <- Completed . Just <$> newEmptyTMVarIO
     let entry = LogEntry
             { _term      = 0

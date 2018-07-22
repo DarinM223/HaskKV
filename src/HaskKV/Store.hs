@@ -226,9 +226,8 @@ deleteRangeImpl :: (Binary e)
                 -> LogIndex
                 -> Store k v e
                 -> IO ()
-deleteRangeImpl a b store = do
-    persistAfter (modifyLog (deleteRangeLog a b)) store
-    return ()
+deleteRangeImpl a b store =
+    void $ persistAfter (modifyLog (deleteRangeLog a b)) store
 
 applyEntryImpl :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
 applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do

@@ -20,13 +20,6 @@ import HaskKV.Server
 import HaskKV.Snapshot
 import HaskKV.Store
 
-isLeader :: IORef RaftState -> IO Bool
-isLeader ref = do
-    state <- readIORef ref
-    case _stateType state of
-        Leader _ -> return True
-        _        -> return False
-
 data AppConfig msg k v e = AppConfig
     { _state       :: IORef RaftState
     , _store       :: Store k v e
@@ -68,46 +61,55 @@ newAppConfig config = do
         , _snapManager = snapManager
         }
 
-newtype AppT msg k v e a = AppT
-    { unAppT :: ReaderT (AppConfig msg k v e) IO a }
+newtype AppT msg k v e m a = AppT
+    { unAppT :: ReaderT (AppConfig msg k v e) m a }
     deriving ( Functor, Applicative, Monad, MonadIO
              , MonadReader (AppConfig msg k v e)
              )
 
 type SnapshotType k v = Map k v
 instance (Binary k, Binary v) =>
-    HasSnapshotType (SnapshotType k v) (AppT msg k v e)
+    HasSnapshotType (SnapshotType k v) (AppT msg k v e m)
 
-instance MonadState RaftState (AppT msg k v e) where
+instance (MonadIO m) => MonadState RaftState (AppT msg k v e m) where
     get = AppT $ ReaderT $ liftIO . readIORef . _state
     put x = AppT $ ReaderT $ liftIO . flip writeIORef x . _state
 
-$(deriveVia [t| forall msg k v e. ServerM msg ServerEvent (AppT msg k v e)
-                            `Via` ServerT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v, Entry e) =>
-                StorageM k v (AppT msg k v e)
-          `Via` StoreT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v. (KeyClass k, ValueClass v) =>
-                ApplyEntryM k v (LogEntry k v) (AppT msg k v (LogEntry k v))
-          `Via` StoreT (AppT msg k v (LogEntry k v)) |])
-$(deriveVia [t| forall msg k v e. (Entry e, KeyClass k, ValueClass v) =>
-                LogM e (AppT msg k v e)
-          `Via` StoreT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. (KeyClass k, ValueClass v, Entry e) =>
-                LoadSnapshotM (SnapshotType k v) (AppT msg k v e)
-          `Via` StoreT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. (Entry e, KeyClass k, ValueClass v) =>
-                TakeSnapshotM (AppT msg k v e)
-          `Via` StoreT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. TempLogM e (AppT msg k v e)
-                            `Via` TempLogT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. (Binary k, Binary v) =>
-                SnapshotM (SnapshotType k v) (AppT msg k v e)
-          `Via` SnapshotT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. DebugM (AppT msg k v e)
-                            `Via` PrintDebugT (AppT msg k v e) |])
-$(deriveVia [t| forall msg k v e. PersistM (AppT msg k v e)
-                            `Via` PersistT (AppT msg k v e) |])
+instance MonadTrans (AppT msg k v e) where
+    lift = AppT . lift
 
-runAppT :: AppT msg k v e a -> AppConfig msg k v e -> IO a
+type Constr k v e m = (KeyClass k, ValueClass v, Entry e, MonadIO m)
+
+$(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
+                ServerM msg ServerEvent (AppT msg k v e m)
+          `Via` ServerT (AppT msg k v e m) |])
+$(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
+                StorageM k v (AppT msg k v e m)
+          `Via` StoreT (AppT msg k v e m) |])
+$(deriveVia [t| forall msg k v m. (Constr k v (LogEntry k v) m) =>
+                ApplyEntryM k v (LogEntry k v) (AppT msg k v (LogEntry k v) m)
+          `Via` StoreT (AppT msg k v (LogEntry k v) m) |])
+$(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
+                LogM e (AppT msg k v e m)
+          `Via` StoreT (AppT msg k v e m) |])
+$(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
+                LoadSnapshotM (SnapshotType k v) (AppT msg k v e m)
+          `Via` StoreT (AppT msg k v e m) |])
+$(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
+                TakeSnapshotM (AppT msg k v e m)
+          `Via` StoreT (AppT msg k v e m) |])
+$(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
+                TempLogM e (AppT msg k v e m)
+          `Via` TempLogT (AppT msg k v e m) |])
+$(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
+                SnapshotM (SnapshotType k v) (AppT msg k v e m)
+          `Via` SnapshotT (AppT msg k v e m) |])
+$(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
+                DebugM (AppT msg k v e m)
+          `Via` PrintDebugT (AppT msg k v e m) |])
+$(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
+                PersistM (AppT msg k v e m)
+          `Via` PersistT (AppT msg k v e m) |])
+
+runAppT :: AppT msg k v e m a -> AppConfig msg k v e -> m a
 runAppT m config = flip runReaderT config . unAppT $ m
