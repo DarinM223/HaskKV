@@ -13,6 +13,7 @@ import Data.List
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Time
 import GHC.Generics
+import HaskKV.Constr
 import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
@@ -59,9 +60,6 @@ class (Monad s, KeyClass k, ValueClass v) => StorageM k v s | s -> k v where
 
 class (Binary s) => LoadSnapshotM s m | m -> s where
     loadSnapshot :: LogIndex -> LogTerm -> s -> m ()
-
-class TakeSnapshotM m where
-    takeSnapshot :: m ()
 
 class (StorageM k v m, LogM e m) => ApplyEntryM k v e m | m -> k v e where
     -- | Applies a log entry.
@@ -166,12 +164,10 @@ instance (StoreClass k v (LogEntry k v) r m) =>
 instance (StoreClass k v e r m) => LoadSnapshotM (M.Map k v) (StoreT m) where
     loadSnapshot i t map = liftIO . loadSnapshotImpl i t map =<< asks getStore
 
-instance (StoreClass k v e r m) => TakeSnapshotM (StoreT m) where
+instance (StoreClass k v e r m, HasRun r) => TakeSnapshotM (StoreT m) where
     takeSnapshot = do
-        store <- asks getStore
-        manager <- asks getSnapshotManager
-        lastApplied <- lift $ gets _lastApplied
-        liftIO $ takeSnapshotImpl lastApplied manager store
+        (RunFn run) <- asks getRun
+        liftIO $ run $ takeSnapshot
 
 getValueImpl :: (Ord k) => k -> Store k v e -> IO (Maybe v)
 getValueImpl k = fmap (getKey k) . readTVarIO . unStore

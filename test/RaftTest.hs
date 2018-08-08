@@ -5,6 +5,7 @@ import Control.Monad
 import Data.List
 import Data.Maybe
 import GHC.Records
+import HaskKV.Constr
 import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem

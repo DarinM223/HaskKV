@@ -10,6 +10,7 @@ import Data.Deriving.Via
 import Data.IORef
 import Data.Map (Map)
 import GHC.Records
+import HaskKV.Constr
 import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
@@ -26,6 +27,7 @@ data AppConfig msg k v e = AppConfig
     , _tempLog     :: TempLog e
     , _serverState :: ServerState msg
     , _snapManager :: SnapshotManager
+    , _run         :: RunFn
     }
 
 instance HasServerState msg (AppConfig msg k v e) where
@@ -36,6 +38,8 @@ instance HasTempLog e (AppConfig msg k v e) where
     getTempLog = _tempLog
 instance HasSnapshotManager (AppConfig msg k v e) where
     getSnapshotManager = _snapManager
+instance HasRun (AppConfig msg k v e) where
+    getRun = _run
 
 data InitAppConfig msg e = InitAppConfig
     { _initLog       :: Maybe (Log e)
@@ -43,23 +47,6 @@ data InitAppConfig msg e = InitAppConfig
     , _serverState   :: ServerState msg
     , _snapDirectory :: Maybe FilePath
     }
-
-newAppConfig :: InitAppConfig msg e -> IO (AppConfig msg k v e)
-newAppConfig config = do
-    let serverState = getField @"_serverState" config
-        sid         = getField @"_sid" serverState
-        raftState   = newRaftState sid $ _initState config
-    raftStateRef <- newIORef raftState
-    store <- newStore sid $ _initLog config
-    tempLog <- newTempLog
-    snapManager <- newSnapshotManager $ _snapDirectory config
-    return AppConfig
-        { _state       = raftStateRef
-        , _store       = store
-        , _tempLog     = tempLog
-        , _serverState = serverState
-        , _snapManager = snapManager
-        }
 
 newtype AppT msg k v e m a = AppT
     { unAppT :: ReaderT (AppConfig msg k v e) m a }
@@ -113,3 +100,22 @@ $(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
 
 runAppT :: AppT msg k v e m a -> AppConfig msg k v e -> m a
 runAppT m config = flip runReaderT config . unAppT $ m
+
+newAppConfig :: (KeyClass k, ValueClass v, Entry e) => InitAppConfig msg e -> IO (AppConfig msg k v e)
+newAppConfig config = do
+    let serverState = getField @"_serverState" config
+        sid         = getField @"_sid" serverState
+        raftState   = newRaftState sid $ _initState config
+    raftStateRef <- newIORef raftState
+    store <- newStore sid $ _initLog config
+    tempLog <- newTempLog
+    snapManager <- newSnapshotManager $ _snapDirectory config
+    let config = AppConfig
+            { _state       = raftStateRef
+            , _store       = store
+            , _tempLog     = tempLog
+            , _serverState = serverState
+            , _snapManager = snapManager
+            , _run         = RunFn $ flip runAppT config
+            }
+    return config

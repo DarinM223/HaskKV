@@ -8,6 +8,7 @@ import Data.Maybe
 import Data.Monoid
 import Data.Binary
 import GHC.Records
+import HaskKV.Constr
 import HaskKV.Log
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
