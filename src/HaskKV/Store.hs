@@ -28,17 +28,6 @@ import qualified Data.IntMap as IM
 import qualified Data.Map as M
 import qualified Data.Heap as H
 
-type Time = UTCTime
-type CAS  = Int
-
-class Storable v where
-    expireTime :: v -> Maybe Time
-    version    :: v -> CAS
-    setVersion :: CAS -> v -> v
-
-type KeyClass k = (Show k, Ord k, Binary k)
-type ValueClass v = (Show v, Storable v, Binary v)
-
 class (Monad s, KeyClass k, ValueClass v) => StorageM k v s | s -> k v where
     -- | Gets a value from the store given a key.
     getValue :: k -> s (Maybe v)
@@ -142,7 +131,7 @@ instance (StoreClass k v e r m) => StorageM k v (StoreT m) where
     deleteValue k = liftIO . deleteValueImpl k =<< asks getStore
     cleanupExpired t = liftIO . cleanupExpiredImpl t =<< asks getStore
 
-instance (StoreClass k v e r m) => LogM e (StoreT m) where
+instance (StoreClass k v e r m, HasRun k v e r) => LogM e (StoreT m) where
     firstIndex = liftIO . firstIndexImpl =<< asks getStore
     lastIndex = liftIO . lastIndexImpl =<< asks getStore
     loadEntry k = liftIO . loadEntryImpl k =<< asks getStore
@@ -151,12 +140,12 @@ instance (StoreClass k v e r m) => LogM e (StoreT m) where
         store <- asks getStore
         liftIO $ deleteRangeImpl a b store
     storeEntries es = do
-        manager <- asks getSnapshotManager
         lastApplied <- lift $ gets _lastApplied
         store <- asks getStore
-        liftIO $ storeEntriesImpl es lastApplied manager store
+        runFn <- asks getRun
+        liftIO $ storeEntriesImpl runFn es lastApplied store
 
-instance (StoreClass k v (LogEntry k v) r m) =>
+instance (StoreClass k v (LogEntry k v) r m, HasRun k v (LogEntry k v) r) =>
     ApplyEntryM k v (LogEntry k v) (StoreT m) where
 
     applyEntry = applyEntryImpl
@@ -164,10 +153,12 @@ instance (StoreClass k v (LogEntry k v) r m) =>
 instance (StoreClass k v e r m) => LoadSnapshotM (M.Map k v) (StoreT m) where
     loadSnapshot i t map = liftIO . loadSnapshotImpl i t map =<< asks getStore
 
-instance (StoreClass k v e r m, HasRun r) => TakeSnapshotM (StoreT m) where
+instance (StoreClass k v e r m, HasRun k v e r) => TakeSnapshotM (StoreT m) where
     takeSnapshot = do
-        (RunFn run) <- asks getRun
-        liftIO $ run $ takeSnapshot
+        store <- asks getStore
+        lastApplied <- lift $ gets _lastApplied
+        runFn <- asks getRun
+        liftIO $ takeSnapshotImpl runFn lastApplied store
 
 getValueImpl :: (Ord k) => k -> Store k v e -> IO (Maybe v)
 getValueImpl k = fmap (getKey k) . readTVarIO . unStore
@@ -205,16 +196,16 @@ termFromIndexImpl :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe LogTerm)
 termFromIndexImpl i = fmap (entryTermLog i . _log) . readTVarIO . unStore
 
 storeEntriesImpl :: (Entry e, KeyClass k, ValueClass v)
-                 => [e]
+                 => RunFn k v e
+                 -> [e]
                  -> LogIndex
-                 -> SnapshotManager
                  -> Store k v e
                  -> IO ()
-storeEntriesImpl es lastApplied manager store = do
+storeEntriesImpl (RunFn run) es lastApplied store = do
     logSize <- persistAfter (modifyLog (storeEntriesLog es)) store
-    snapshotInfoImpl manager >>= \case
+    run snapshotInfo >>= \case
         Just (_, _, snapSize) | logSize > snapSize * 4 ->
-            takeSnapshotImpl lastApplied manager store
+            takeSnapshotImpl (RunFn run) lastApplied store
         _ -> return ()
 
 deleteRangeImpl :: (Binary e)
@@ -244,28 +235,29 @@ loadSnapshotImpl lastIndex lastTerm map (Store store) = atomically $
     modifyTVar' store (loadSnapshotStore lastIndex lastTerm map)
 
 takeSnapshotImpl :: (KeyClass k, ValueClass v, Entry e)
-                 => LogIndex
-                 -> SnapshotManager
+                 => RunFn k v e
+                 -> LogIndex
                  -> Store k v e
                  -> IO ()
-takeSnapshotImpl lastApplied manager store = do
+takeSnapshotImpl (RunFn run) lastApplied store = do
     storeData <- readTVarIO $ unStore store
     let firstIndex = _lowIdx $ _log storeData
         lastTerm   = entryTerm . fromJust
                    . IM.lookup (unLogIndex lastApplied)
                    . _entries . _log
                    $ storeData
-    forkIO $ do
-        createSnapshotImpl lastApplied lastTerm manager
+    forkIO $ run $ do
+        createSnapshot lastApplied lastTerm
         let snapData = B.concat . BL.toChunks . encode . _map $ storeData
         -- FIXME(DarinM223): maybe write a version of writeSnapshotImpl
         -- that takes in a lazy bytestring instead of a strict bytestring?
-        writeSnapshotImpl 0 snapData lastApplied manager
-        saveSnapshotImpl lastApplied manager
+        writeSnapshot 0 snapData lastApplied
+        saveSnapshot lastApplied
 
-        snap <- readSnapshotImpl lastApplied manager
+        snap <- readSnapshot lastApplied
         forM_ snap $ \snap ->
-              flip persistAfter store
+              liftIO
+            $ flip persistAfter store
             $ loadSnapshotStore lastApplied lastTerm snap
             . modifyLog (deleteRangeLog firstIndex lastApplied)
     return ()

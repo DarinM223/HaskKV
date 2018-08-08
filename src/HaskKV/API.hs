@@ -11,6 +11,7 @@ import Data.Aeson
 import Data.IORef
 import Data.Proxy
 import GHC.Records
+import HaskKV.Constr
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
 import HaskKV.Monad

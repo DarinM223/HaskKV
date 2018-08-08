@@ -27,7 +27,7 @@ data AppConfig msg k v e = AppConfig
     , _tempLog     :: TempLog e
     , _serverState :: ServerState msg
     , _snapManager :: SnapshotManager
-    , _run         :: RunFn
+    , _run         :: RunFn k v e
     }
 
 instance HasServerState msg (AppConfig msg k v e) where
@@ -38,7 +38,7 @@ instance HasTempLog e (AppConfig msg k v e) where
     getTempLog = _tempLog
 instance HasSnapshotManager (AppConfig msg k v e) where
     getSnapshotManager = _snapManager
-instance HasRun (AppConfig msg k v e) where
+instance HasRun k v e (AppConfig msg k v e) where
     getRun = _run
 
 data InitAppConfig msg e = InitAppConfig
@@ -64,8 +64,6 @@ instance (MonadIO m) => MonadState RaftState (AppT msg k v e m) where
 
 instance MonadTrans (AppT msg k v e) where
     lift = AppT . lift
-
-type Constr k v e m = (KeyClass k, ValueClass v, Entry e, MonadIO m)
 
 $(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
                 ServerM msg ServerEvent (AppT msg k v e m)
