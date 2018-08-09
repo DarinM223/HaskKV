@@ -117,7 +117,6 @@ type StoreClass k v e r m =
     ( MonadIO m
     , MonadReader r m
     , HasStore k v e r
-    , HasSnapshotManager r
     , MonadState RaftState m
     , KeyClass k
     , ValueClass v
@@ -131,7 +130,7 @@ instance (StoreClass k v e r m) => StorageM k v (StoreT m) where
     deleteValue k = liftIO . deleteValueImpl k =<< asks getStore
     cleanupExpired t = liftIO . cleanupExpiredImpl t =<< asks getStore
 
-instance (StoreClass k v e r m, HasRun k v e r) => LogM e (StoreT m) where
+instance (StoreClass k v e r m, HasRun msg k v e r) => LogM e (StoreT m) where
     firstIndex = liftIO . firstIndexImpl =<< asks getStore
     lastIndex = liftIO . lastIndexImpl =<< asks getStore
     loadEntry k = liftIO . loadEntryImpl k =<< asks getStore
@@ -142,10 +141,10 @@ instance (StoreClass k v e r m, HasRun k v e r) => LogM e (StoreT m) where
     storeEntries es = do
         lastApplied <- lift $ gets _lastApplied
         store <- asks getStore
-        runFn <- asks getRun
-        liftIO $ storeEntriesImpl runFn es lastApplied store
+        config <- ask
+        liftIO $ storeEntriesImpl (getRun config) es lastApplied store
 
-instance (StoreClass k v (LogEntry k v) r m, HasRun k v (LogEntry k v) r) =>
+instance (StoreClass k v (LogEntry k v) r m, HasRun msg k v (LogEntry k v) r) =>
     ApplyEntryM k v (LogEntry k v) (StoreT m) where
 
     applyEntry = applyEntryImpl
@@ -153,12 +152,12 @@ instance (StoreClass k v (LogEntry k v) r m, HasRun k v (LogEntry k v) r) =>
 instance (StoreClass k v e r m) => LoadSnapshotM (M.Map k v) (StoreT m) where
     loadSnapshot i t map = liftIO . loadSnapshotImpl i t map =<< asks getStore
 
-instance (StoreClass k v e r m, HasRun k v e r) => TakeSnapshotM (StoreT m) where
+instance (StoreClass k v e r m, HasRun msg k v e r) => TakeSnapshotM (StoreT m) where
     takeSnapshot = do
         store <- asks getStore
         lastApplied <- lift $ gets _lastApplied
-        runFn <- asks getRun
-        liftIO $ takeSnapshotImpl runFn lastApplied store
+        config <- ask
+        liftIO $ takeSnapshotImpl (getRun config) lastApplied store
 
 getValueImpl :: (Ord k) => k -> Store k v e -> IO (Maybe v)
 getValueImpl k = fmap (getKey k) . readTVarIO . unStore
@@ -196,16 +195,16 @@ termFromIndexImpl :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe LogTerm)
 termFromIndexImpl i = fmap (entryTermLog i . _log) . readTVarIO . unStore
 
 storeEntriesImpl :: (Entry e, KeyClass k, ValueClass v)
-                 => RunFn k v e
+                 => SnapFn k v
                  -> [e]
                  -> LogIndex
                  -> Store k v e
                  -> IO ()
-storeEntriesImpl (RunFn run) es lastApplied store = do
+storeEntriesImpl run es lastApplied store = do
     logSize <- persistAfter (modifyLog (storeEntriesLog es)) store
     run snapshotInfo >>= \case
         Just (_, _, snapSize) | logSize > snapSize * 4 ->
-            takeSnapshotImpl (RunFn run) lastApplied store
+            takeSnapshotImpl run lastApplied store
         _ -> return ()
 
 deleteRangeImpl :: (Binary e)
@@ -235,11 +234,11 @@ loadSnapshotImpl lastIndex lastTerm map (Store store) = atomically $
     modifyTVar' store (loadSnapshotStore lastIndex lastTerm map)
 
 takeSnapshotImpl :: (KeyClass k, ValueClass v, Entry e)
-                 => RunFn k v e
+                 => SnapFn k v
                  -> LogIndex
                  -> Store k v e
                  -> IO ()
-takeSnapshotImpl (RunFn run) lastApplied store = do
+takeSnapshotImpl run lastApplied store = do
     storeData <- readTVarIO $ unStore store
     let firstIndex = _lowIdx $ _log storeData
         lastTerm   = entryTerm . fromJust

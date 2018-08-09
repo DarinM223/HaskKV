@@ -27,7 +27,7 @@ data AppConfig msg k v e = AppConfig
     , _tempLog     :: TempLog e
     , _serverState :: ServerState msg
     , _snapManager :: SnapshotManager
-    , _run         :: RunFn k v e
+    , _run         :: Fn msg k v e
     }
 
 instance HasServerState msg (AppConfig msg k v e) where
@@ -38,7 +38,7 @@ instance HasTempLog e (AppConfig msg k v e) where
     getTempLog = _tempLog
 instance HasSnapshotManager (AppConfig msg k v e) where
     getSnapshotManager = _snapManager
-instance HasRun k v e (AppConfig msg k v e) where
+instance HasRun msg k v e (AppConfig msg k v e) where
     getRun = _run
 
 data InitAppConfig msg e = InitAppConfig
@@ -114,6 +114,6 @@ newAppConfig config = do
             , _tempLog     = tempLog
             , _serverState = serverState
             , _snapManager = snapManager
-            , _run         = RunFn $ flip runAppT config
+            , _run         = flip runAppT config
             }
     return config
