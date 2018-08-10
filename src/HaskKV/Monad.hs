@@ -8,7 +8,6 @@ import Data.Binary
 import Data.Binary.Orphans ()
 import Data.Deriving.Via
 import Data.IORef
-import Data.Map (Map)
 import GHC.Records
 import HaskKV.Constr
 import HaskKV.Log
@@ -54,7 +53,6 @@ newtype AppT msg k v e m a = AppT
              , MonadReader (AppConfig msg k v e)
              )
 
-type SnapshotType k v = Map k v
 instance (Binary k, Binary v) =>
     HasSnapshotType (SnapshotType k v) (AppT msg k v e m)
 
@@ -71,9 +69,9 @@ $(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
 $(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
                 StorageM k v (AppT msg k v e m)
           `Via` StoreT (AppT msg k v e m) |])
-$(deriveVia [t| forall msg k v m. (Constr k v (LogEntry k v) m) =>
-                ApplyEntryM k v (LogEntry k v) (AppT msg k v (LogEntry k v) m)
-          `Via` StoreT (AppT msg k v (LogEntry k v) m) |])
+$(deriveVia [t| forall msg k v e m. (Constr k v e m, e ~ LogEntry k v) =>
+                ApplyEntryM k v e (AppT msg k v e m)
+          `Via` StoreT (AppT msg k v e m) |])
 $(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
                 LogM e (AppT msg k v e m)
           `Via` StoreT (AppT msg k v e m) |])
@@ -99,7 +97,7 @@ $(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
 runAppT :: AppT msg k v e m a -> AppConfig msg k v e -> m a
 runAppT m config = flip runReaderT config . unAppT $ m
 
-newAppConfig :: (KeyClass k, ValueClass v, Entry e)
+newAppConfig :: (KeyClass k, ValueClass v, e ~ LogEntry k v)
              => InitAppConfig msg e
              -> IO (AppConfig msg k v e)
 newAppConfig config = do

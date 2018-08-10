@@ -61,7 +61,7 @@ instance (StoreClass k v e r m, HasRun msg k v e r) => LogM e (StoreT m) where
         config <- ask
         liftIO $ storeEntriesImpl (getRun config) es lastApplied store
 
-instance (StoreClass k v (LogEntry k v) r m, HasRun msg k v (LogEntry k v) r)
+instance (StoreClass k v e r m, HasRun msg k v e r, e ~ LogEntry k v)
     => ApplyEntryM k v (LogEntry k v) (StoreT m) where
 
     applyEntry = applyEntryImpl
