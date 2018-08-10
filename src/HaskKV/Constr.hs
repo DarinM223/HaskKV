@@ -32,5 +32,3 @@ type FnConstr msg k v e m =
     , PersistM m
     )
 type Fn msg k v e = forall a. (forall m. (FnConstr msg k v e m) => m a) -> IO a
-type SnapFn k v =
-    forall a. (forall m. (MonadIO m, SnapshotM (M.Map k v) m) => m a) -> IO a

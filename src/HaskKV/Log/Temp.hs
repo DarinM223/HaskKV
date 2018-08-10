@@ -54,15 +54,18 @@ applyTimeout :: Timeout
 applyTimeout = 5000000
 
 -- | Stores entry in the log and then blocks until log entry is committed.
-waitApplyEntry :: (HasField "_completed" e Completed) => e -> TempLog e -> IO ()
-waitApplyEntry entry temp = do
-    addTemporaryEntryImpl entry temp
+waitApplyEntry :: (MonadIO m, TempLogM e m, HasField "_completed" e Completed)
+               => e
+               -> m ()
+waitApplyEntry entry = do
+    addTemporaryEntry entry
 
-    timer <- Timer.newIO
-    Timer.reset timer applyTimeout
-    -- Wait until either something is put in the TMVar
-    -- or the timeout is finished.
-    atomically $ (Timer.await timer) `orElse` awaitCompleted
+    liftIO $ do
+        timer <- Timer.newIO
+        Timer.reset timer applyTimeout
+        -- Wait until either something is put in the TMVar
+        -- or the timeout is finished.
+        atomically $ (Timer.await timer) `orElse` awaitCompleted
   where
     awaitCompleted = takeTMVar
                    . fromJust

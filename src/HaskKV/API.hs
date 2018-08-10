@@ -81,6 +81,6 @@ applyEntryData entryData = ask >>= \config -> liftIO $ do
             , _data      = entryData
             , _completed = completed
             }
-    f <- async $ waitApplyEntry entry (_tempLog config)
+    f <- async $ _run config $ waitApplyEntry entry
     inject HeartbeatTimeout $ getField @"_serverState" config
     wait f
