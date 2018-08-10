@@ -11,6 +11,7 @@ import Data.Aeson
 import Data.IORef
 import Data.Proxy
 import GHC.Records
+import HaskKV.Constr
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
 import HaskKV.Monad
@@ -80,6 +81,6 @@ applyEntryData entryData = ask >>= \config -> liftIO $ do
             , _data      = entryData
             , _completed = completed
             }
-    f <- async $ waitApplyEntry entry (_tempLog config)
+    f <- async $ _run config $ waitApplyEntry entry
     inject HeartbeatTimeout $ getField @"_serverState" config
     wait f
