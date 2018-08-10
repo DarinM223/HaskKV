@@ -1,4 +1,4 @@
-module HaskKV.Log where
+module HaskKV.Log.Class where
 
 import Data.Binary
 import HaskKV.Types

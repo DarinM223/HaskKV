@@ -5,11 +5,13 @@ import Control.Monad
 import Data.List
 import Data.Maybe
 import GHC.Records
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
-import HaskKV.Raft
-import HaskKV.Store
+import HaskKV.Raft.Message
+import HaskKV.Raft.Run
+import HaskKV.Raft.State
+import HaskKV.Store.All
 import HaskKV.Types
 import Mock
 import Mock.Instances

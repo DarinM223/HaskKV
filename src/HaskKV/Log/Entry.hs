@@ -4,7 +4,7 @@ import Control.Concurrent.STM
 import Data.Binary
 import Data.Binary.Put
 import GHC.Generics
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Types
 
 import qualified Data.Binary.Builder as B

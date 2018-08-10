@@ -10,15 +10,15 @@ import Data.Deriving.Via
 import Data.IORef
 import GHC.Records
 import HaskKV.Constr
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
 import HaskKV.Log.Temp
 import HaskKV.Raft.Debug
 import HaskKV.Raft.State
-import HaskKV.Server
-import HaskKV.Snapshot
-import HaskKV.Store
+import HaskKV.Server.All
+import HaskKV.Snapshot.All
+import HaskKV.Store.All
 
 data AppConfig msg k v e = AppConfig
     { _state       :: IORef RaftState

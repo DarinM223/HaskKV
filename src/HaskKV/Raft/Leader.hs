@@ -5,15 +5,15 @@ import Control.Monad.State
 import Data.Maybe
 import Data.List
 import GHC.Records
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Log.Utils
 import HaskKV.Raft.Debug
 import HaskKV.Raft.Message
 import HaskKV.Raft.RPC
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
-import HaskKV.Server
-import HaskKV.Snapshot
+import HaskKV.Server.Types
+import HaskKV.Snapshot.Types
 import HaskKV.Types
 
 import qualified Data.IntMap as IM

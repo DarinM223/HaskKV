@@ -7,7 +7,7 @@ import Data.Binary.Orphans ()
 import Data.Maybe (fromMaybe)
 import Data.Time
 import GHC.Generics
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Log.InMem
 import HaskKV.Types
 

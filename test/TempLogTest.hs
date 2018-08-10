@@ -3,7 +3,7 @@ module TempLogTest (tests) where
 import Control.Monad
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp
-import HaskKV.Store
+import HaskKV.Store.All
 import Test.Tasty
 import Test.Tasty.HUnit
 

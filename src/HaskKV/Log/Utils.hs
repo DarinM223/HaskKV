@@ -1,6 +1,6 @@
 module HaskKV.Log.Utils where
 
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Types
 
 type Index      = LogIndex

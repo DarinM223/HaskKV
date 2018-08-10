@@ -3,7 +3,7 @@ module HaskKV.Log.InMem where
 import Data.Binary
 import Data.List
 import GHC.Generics
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Types
 
 import qualified Data.IntMap as IM

@@ -1,18 +1,18 @@
-module HaskKV.Raft.Raft where
+module HaskKV.Raft.Run where
 
 import Control.Lens
 import Control.Monad.State
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Log.Entry
-import HaskKV.Server
-import HaskKV.Store
 import HaskKV.Raft.Candidate (runCandidate)
 import HaskKV.Raft.Debug
 import HaskKV.Raft.Follower (runFollower)
 import HaskKV.Raft.Leader (runLeader)
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
-import HaskKV.Snapshot
+import HaskKV.Server.Types
+import HaskKV.Snapshot.Types
+import HaskKV.Store.Types
 
 run :: ( DebugM m
        , MonadState RaftState m

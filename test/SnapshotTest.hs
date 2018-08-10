@@ -5,7 +5,7 @@ import Control.Monad
 import Data.Binary
 import Data.List
 import GHC.Records
-import HaskKV.Snapshot
+import HaskKV.Snapshot.All
 import HaskKV.Types
 import Test.Tasty
 import Test.Tasty.HUnit

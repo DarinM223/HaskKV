@@ -2,7 +2,7 @@ module HaskKV.Constr where
 
 import Control.Monad.IO.Class
 import Data.Map (Map)
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Raft.Debug
 import HaskKV.Raft.State
 import HaskKV.Server.Types

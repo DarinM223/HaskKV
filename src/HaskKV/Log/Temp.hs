@@ -8,7 +8,7 @@ import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Maybe (fromJust)
 import GHC.Records
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Types
 

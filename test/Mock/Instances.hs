@@ -8,14 +8,15 @@ import Data.Maybe
 import Data.Monoid
 import Data.Binary
 import GHC.Records
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
-import HaskKV.Raft
+import HaskKV.Raft.Message
+import HaskKV.Raft.State
 import HaskKV.Raft.Debug
-import HaskKV.Server
-import HaskKV.Snapshot hiding (HasSnapshotManager)
-import HaskKV.Store hiding (HasStore)
+import HaskKV.Server.All
+import HaskKV.Snapshot.All hiding (HasSnapshotManager)
+import HaskKV.Store.All hiding (HasStore)
 import HaskKV.Types
 
 import qualified Control.Monad.State as S

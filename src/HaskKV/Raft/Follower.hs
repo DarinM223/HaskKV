@@ -2,15 +2,15 @@ module HaskKV.Raft.Follower where
 
 import Control.Monad.State
 import GHC.Records
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Raft.Debug
 import HaskKV.Raft.Message
 import HaskKV.Raft.RPC
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
-import HaskKV.Server
-import HaskKV.Snapshot
-import HaskKV.Store
+import HaskKV.Server.Types
+import HaskKV.Snapshot.Types
+import HaskKV.Store.Types
 
 runFollower :: ( DebugM m
                , MonadState RaftState m

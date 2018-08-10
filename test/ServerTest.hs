@@ -12,7 +12,7 @@ import HaskKV.Types
 
 import qualified Data.Conduit.List as CL
 import qualified Data.IntMap as IM
-import qualified HaskKV.Server as S
+import qualified HaskKV.Server.All as S
 
 tests :: TestTree
 tests = testGroup "Server tests" [unitTests]

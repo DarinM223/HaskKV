@@ -4,15 +4,15 @@ import Control.Lens
 import Control.Monad.State
 import Data.Maybe
 import GHC.Records
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Log.Utils
 import HaskKV.Raft.Debug
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Raft.Utils
-import HaskKV.Server
-import HaskKV.Snapshot
-import HaskKV.Store
+import HaskKV.Server.Types
+import HaskKV.Snapshot.Types
+import HaskKV.Store.Types
 
 handleRequestVote :: ( DebugM m
                      , ServerM (RaftMessage e) ServerEvent m

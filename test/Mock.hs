@@ -4,7 +4,7 @@ import Control.Lens
 import Control.Monad.State
 import Data.List
 import Data.Maybe
-import HaskKV.Raft
+import HaskKV.Raft.Run
 import HaskKV.Types
 import Mock.Instances
 

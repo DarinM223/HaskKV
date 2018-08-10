@@ -5,7 +5,7 @@ import Control.Monad
 import Data.Conduit.Network
 import Data.List
 import Data.Maybe
-import HaskKV.Server
+import HaskKV.Server.Types
 import HaskKV.Types
 import Text.Read
 

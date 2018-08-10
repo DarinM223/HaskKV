@@ -4,11 +4,11 @@ import Control.Lens
 import Control.Monad.State
 import Data.Maybe
 import GHC.Records
-import HaskKV.Log
+import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
-import HaskKV.Server
+import HaskKV.Server.Types
 import HaskKV.Types
 
 import qualified Data.IntMap as IM

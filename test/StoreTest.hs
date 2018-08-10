@@ -7,7 +7,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 
 import HaskKV.Log.Entry
-import HaskKV.Store
+import HaskKV.Store.All
 import HaskKV.Types
 
 tests :: TestTree
