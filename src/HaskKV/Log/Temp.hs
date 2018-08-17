@@ -2,6 +2,7 @@
 
 module HaskKV.Log.Temp where
 
+import Control.Applicative ((<|>))
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
@@ -65,7 +66,7 @@ waitApplyEntry entry = do
         Timer.reset timer applyTimeout
         -- Wait until either something is put in the TMVar
         -- or the timeout is finished.
-        atomically $ (Timer.await timer) `orElse` awaitCompleted
+        atomically $ Timer.await timer <|> awaitCompleted
   where
     awaitCompleted = takeTMVar
                    . fromJust

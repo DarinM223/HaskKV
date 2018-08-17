@@ -7,7 +7,7 @@ import Data.List
 import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Utils
-import HaskKV.Raft.Debug
+import HaskKV.Raft.Class
 import HaskKV.Raft.Message
 import HaskKV.Raft.RPC
 import HaskKV.Raft.State
@@ -96,10 +96,7 @@ handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
                 stateType._Leader.nextIndex %= IM.adjust (max (i + 1)) sid
 handleLeaderResponse _ _ _ = return ()
 
-quorumIndex :: ( MonadState RaftState m
-               , ServerM msg event m
-               )
-            => m LogIndex
+quorumIndex :: (MonadState RaftState m, ServerM msg event m) => m LogIndex
 quorumIndex = do
     matchIndexes <- maybe [] IM.elems <$> preuse (stateType._Leader.matchIndex)
     let sorted = sortBy (flip compare) matchIndexes

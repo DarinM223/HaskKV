@@ -21,9 +21,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.IntMap as IM
 
-newtype SnapshotT m a = SnapshotT { unSnapshotT :: m a }
-    deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
-
 instance
     ( MonadIO m
     , MonadReader r m

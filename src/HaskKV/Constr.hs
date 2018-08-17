@@ -3,8 +3,7 @@ module HaskKV.Constr where
 import Control.Monad.IO.Class
 import Data.Map (Map)
 import HaskKV.Log.Class
-import HaskKV.Raft.Debug
-import HaskKV.Raft.State
+import HaskKV.Raft.Class
 import HaskKV.Server.Types
 import HaskKV.Snapshot.Types
 import HaskKV.Store.Types

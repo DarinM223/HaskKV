@@ -11,9 +11,9 @@ import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
+import HaskKV.Raft.Class
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
-import HaskKV.Raft.Debug
 import HaskKV.Server.All
 import HaskKV.Snapshot.All hiding (HasSnapshotManager)
 import HaskKV.Store.All hiding (HasStore)

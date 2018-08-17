@@ -6,7 +6,7 @@ import Data.Maybe
 import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
-import HaskKV.Raft.Debug
+import HaskKV.Raft.Class
 import HaskKV.Raft.Message
 import HaskKV.Raft.RPC
 import HaskKV.Raft.State

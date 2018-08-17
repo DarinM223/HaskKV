@@ -1,6 +1,7 @@
 module HaskKV.Store.Types where
 
 import Control.Concurrent.STM
+import Control.Monad.Reader
 import Data.Aeson hiding (encode)
 import Data.Binary
 import Data.Binary.Orphans ()
@@ -86,6 +87,12 @@ newtype Store k v e = Store { unStore :: TVar (StoreData k v e) }
 
 class HasStore k v e r | r -> k v e where
     getStore :: r -> Store k v e
+
+newtype StoreT m a = StoreT { unStoreT :: m a }
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
+
+instance MonadTrans StoreT where
+    lift = StoreT
 
 newStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
 newStoreValue seconds version val = do

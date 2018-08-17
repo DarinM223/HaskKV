@@ -24,12 +24,6 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
 
-newtype StoreT m a = StoreT { unStoreT :: m a }
-    deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
-
-instance MonadTrans StoreT where
-    lift = StoreT
-
 type StoreClass k v e r m =
     ( MonadIO m
     , MonadReader r m

@@ -5,7 +5,7 @@ import Control.Monad.State
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Raft.Candidate (runCandidate)
-import HaskKV.Raft.Debug
+import HaskKV.Raft.Class
 import HaskKV.Raft.Follower (runFollower)
 import HaskKV.Raft.Leader (runLeader)
 import HaskKV.Raft.Message

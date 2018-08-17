@@ -1,10 +1,11 @@
 {-# LANGUAGE UndecidableInstances #-}
 
-module HaskKV.Raft.Debug where
+module HaskKV.Raft.Class where
 
 import Control.Lens
 import Control.Monad.State
 import HaskKV.Raft.State
+import HaskKV.Utils
 import System.Log.Logger
 
 class DebugM m where
@@ -25,3 +26,14 @@ instance (MonadIO m, MonadState RaftState m) => DebugM (PrintDebugT m) where
             Leader _    -> "Leader"
         let serverName = "Server " ++ show sid ++ " [" ++ stateText ++ "]:"
         lift $ liftIO $ debugM (show sid) (serverName ++ text)
+
+class PersistM m where
+    persist :: RaftState -> m ()
+
+newtype PersistT m a = PersistT { unPersistT :: m a }
+    deriving (Functor, Applicative, Monad, MonadIO)
+
+instance (MonadIO m) => PersistM (PersistT m) where
+    persist state = void <$> liftIO $ persistBinary persistentStateFilename
+                                                    (_serverID state)
+                                                    (newPersistentState state)

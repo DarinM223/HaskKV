@@ -1,6 +1,7 @@
 module HaskKV.Server.Types where
 
 import Control.Concurrent.STM
+import Control.Monad.Reader
 import HaskKV.Types
 
 import qualified Data.IntMap as IM
@@ -29,6 +30,9 @@ data ServerState msg = ServerState
 
 class HasServerState msg r | r -> msg where
     getServerState :: r -> ServerState msg
+
+newtype ServerT m a = ServerT { unServerT :: m a }
+    deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
 newServerState :: Capacity -> Timeout -> Timeout -> SID -> IO (ServerState msg)
 newServerState backpressure electionTimeout heartbeatTimeout sid = do

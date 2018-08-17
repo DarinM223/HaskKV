@@ -3,6 +3,7 @@
 module HaskKV.Server.Instances where
 
 import Control.Concurrent.STM
+import Control.Applicative ((<|>))
 import Control.Monad.Reader
 import HaskKV.Server.Types
 import HaskKV.Types
@@ -13,9 +14,6 @@ import qualified HaskKV.Timer as Timer
 inject :: ServerEvent -> ServerState msg -> IO ()
 inject HeartbeatTimeout s = Timer.reset (_heartbeatTimer s) 0
 inject ElectionTimeout s  = Timer.reset (_electionTimer s) 0
-
-newtype ServerT m a = ServerT { unServerT :: m a }
-    deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
 instance
     ( MonadIO m
@@ -42,10 +40,10 @@ broadcastImpl msg ss = atomically
                      $ _outgoing ss
 
 recvImpl :: ServerState msg -> IO (Either ServerEvent msg)
-recvImpl s = atomically $
-    awaitElectionTimeout s
-    `orElse` awaitHeartbeatTimeout s
-    `orElse` (Right <$> readTBQueue (_messages s))
+recvImpl s = atomically
+           $ awaitElectionTimeout s
+         <|> awaitHeartbeatTimeout s
+         <|> Right <$> readTBQueue (_messages s)
   where
     awaitElectionTimeout
         = fmap (const (Left ElectionTimeout))
