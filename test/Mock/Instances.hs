@@ -63,25 +63,25 @@ makeFieldsNoPrefix ''MockConfig
 
 newMockSnapshotManager :: MockSnapshotManager
 newMockSnapshotManager = MockSnapshotManager
-    { _completed = Nothing
-    , _partial   = IM.empty
-    , _chunks    = IM.empty
-    }
+  { _completed = Nothing
+  , _partial   = IM.empty
+  , _chunks    = IM.empty
+  }
 
 newMockConfig :: [SID] -> SID -> MockConfig
 newMockConfig sids sid = MockConfig
-    { _raftState       = newRaftState sid Nothing
-    , _store           = newStoreData sid Nothing
-    , _tempLog         = []
-    , _snapshotManager = newMockSnapshotManager
-    , _receivingMsgs   = []
-    , _sendingMsgs     = []
-    , _myServerID      = sid
-    , _serverIDs       = sids
-    , _electionTimer   = False
-    , _heartbeatTimer  = False
-    , _appliedEntries  = []
-    }
+  { _raftState       = newRaftState sid Nothing
+  , _store           = newStoreData sid Nothing
+  , _tempLog         = []
+  , _snapshotManager = newMockSnapshotManager
+  , _receivingMsgs   = []
+  , _sendingMsgs     = []
+  , _myServerID      = sid
+  , _serverIDs       = sids
+  , _electionTimer   = False
+  , _heartbeatTimer  = False
+  , _appliedEntries  = []
+  }
 
 newtype MockT s a = MockT { unMockT :: State s a }
     deriving (Functor, Applicative, Monad)

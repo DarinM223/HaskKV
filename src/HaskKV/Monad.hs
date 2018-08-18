@@ -97,23 +97,26 @@ $(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
 runAppT :: AppT msg k v e m a -> AppConfig msg k v e -> m a
 runAppT m config = flip runReaderT config . unAppT $ m
 
-newAppConfig :: (KeyClass k, ValueClass v, e ~ LogEntry k v)
-             => InitAppConfig msg e
-             -> IO (AppConfig msg k v e)
+newAppConfig
+  :: (KeyClass k, ValueClass v, e ~ LogEntry k v)
+  => InitAppConfig msg e
+  -> IO (AppConfig msg k v e)
 newAppConfig config = do
-    let serverState = getField @"_serverState" config
-        sid         = getField @"_sid" serverState
-        raftState   = newRaftState sid $ _initState config
-    raftStateRef <- newIORef raftState
-    store <- newStore sid $ _initLog config
-    tempLog <- newTempLog
-    snapManager <- newSnapshotManager $ _snapDirectory config
-    let config = AppConfig
-            { _state       = raftStateRef
-            , _store       = store
-            , _tempLog     = tempLog
-            , _serverState = serverState
-            , _snapManager = snapManager
-            , _run         = flip runAppT config
-            }
-    return config
+  let
+    serverState = getField @"_serverState" config
+    sid         = getField @"_sid" serverState
+    raftState   = newRaftState sid $ _initState config
+  raftStateRef <- newIORef raftState
+  store        <- newStore sid $ _initLog config
+  tempLog      <- newTempLog
+  snapManager  <- newSnapshotManager $ _snapDirectory config
+  let
+    config = AppConfig
+      { _state       = raftStateRef
+      , _store       = store
+      , _tempLog     = tempLog
+      , _serverState = serverState
+      , _snapManager = snapManager
+      , _run         = flip runAppT config
+      }
+  return config

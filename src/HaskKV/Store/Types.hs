@@ -96,20 +96,23 @@ instance MonadTrans StoreT where
 
 newStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
 newStoreValue seconds version val = do
-    currTime <- getCurrentTime
-    let newTime = addUTCTime diff currTime
-    return StoreValue
-        { _version = version, _expireTime = Just newTime, _value = val }
-  where
-    diff = fromRational . toRational . secondsToDiffTime $ seconds
+  currTime <- getCurrentTime
+  let newTime = addUTCTime diff currTime
+  return StoreValue
+    { _version    = version
+    , _expireTime = Just newTime
+    , _value      = val
+    }
+  where diff = fromRational . toRational . secondsToDiffTime $ seconds
 
 newStore :: SID -> Maybe (Log e) -> IO (Store k v e)
 newStore sid log = fmap Store . newTVarIO $ newStoreData sid log
 
 newStoreData :: SID -> Maybe (Log e) -> StoreData k v e
-newStoreData sid log = StoreData { _map         = M.empty
-                                 , _heap        = H.empty
-                                 , _log         = fromMaybe emptyLog log
-                                 , _tempEntries = []
-                                 , _sid         = sid
-                                 }
+newStoreData sid log = StoreData
+  { _map         = M.empty
+  , _heap        = H.empty
+  , _log         = fromMaybe emptyLog log
+  , _tempEntries = []
+  , _sid         = sid
+  }

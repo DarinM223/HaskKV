@@ -12,7 +12,7 @@ import HaskKV.Constr
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
-import HaskKV.Raft.State (RaftState (..))
+import HaskKV.Raft.State (RaftState(..))
 import HaskKV.Snapshot.Types
 import HaskKV.Store.Types
 import HaskKV.Store.Utils
@@ -76,20 +76,15 @@ getValueImpl k = fmap (getKey k) . readTVarIO . unStore
 setValueImpl :: (Ord k, Storable v) => k -> v -> Store k v e -> IO ()
 setValueImpl k v = modifyTVarIO (setKey k v) . unStore
 
-replaceValueImpl :: (Ord k, Storable v)
-                 => k
-                 -> v
-                 -> Store k v e
-                 -> IO (Maybe CAS)
+replaceValueImpl
+  :: (Ord k, Storable v) => k -> v -> Store k v e -> IO (Maybe CAS)
 replaceValueImpl k v = stateTVarIO (replaceKey k v) . unStore
 
 deleteValueImpl :: (Ord k) => k -> Store k v e -> IO ()
 deleteValueImpl k = modifyTVarIO (deleteKey k) . unStore
 
-cleanupExpiredImpl :: (Show k, Ord k, Storable v)
-                   => Time
-                   -> Store k v e
-                   -> IO ()
+cleanupExpiredImpl
+  :: (Show k, Ord k, Storable v) => Time -> Store k v e -> IO ()
 cleanupExpiredImpl t = modifyTVarIO (cleanupStore t) . unStore
 
 firstIndexImpl :: Store k v e -> IO LogIndex
@@ -100,60 +95,65 @@ lastIndexImpl = fmap (lastIndexLog . _log) . readTVarIO . unStore
 
 loadEntryImpl :: LogIndex -> Store k v e -> IO (Maybe e)
 loadEntryImpl (LogIndex k) =
-    fmap (IM.lookup k . _entries . _log) . readTVarIO . unStore
+  fmap (IM.lookup k . _entries . _log) . readTVarIO . unStore
 
 termFromIndexImpl :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe LogTerm)
 termFromIndexImpl i = fmap (entryTermLog i . _log) . readTVarIO . unStore
 
-storeEntriesImpl :: (Entry e, MonadIO m, SnapshotM s m, TakeSnapshotM m)
-                 => [e]
-                 -> Store k v e
-                 -> m ()
+storeEntriesImpl
+  :: (Entry e, MonadIO m, SnapshotM s m, TakeSnapshotM m)
+  => [e]
+  -> Store k v e
+  -> m ()
 storeEntriesImpl es store = do
-    logSize <- liftIO $ persistAfter (modifyLog (storeEntriesLog es)) store
-    snapshotInfo >>= \case
-        Just (_, _, snapSize) | logSize > snapSize * 4 -> takeSnapshot
-        _                                              -> return ()
+  logSize <- liftIO $ persistAfter (modifyLog (storeEntriesLog es)) store
+  snapshotInfo >>= \case
+    Just (_, _, snapSize) | logSize > snapSize * 4 -> takeSnapshot
+    _ -> return ()
 
-deleteRangeImpl :: (Binary e)
-                => LogIndex
-                -> LogIndex
-                -> Store k v e
-                -> IO ()
+deleteRangeImpl :: (Binary e) => LogIndex -> LogIndex -> Store k v e -> IO ()
 deleteRangeImpl a b store =
-    void $ persistAfter (modifyLog (deleteRangeLog a b)) store
+  void $ persistAfter (modifyLog (deleteRangeLog a b)) store
 
 applyEntryImpl :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
-applyEntryImpl LogEntry{ _data = entry, _completed = Completed lock } = do
-    mapM_ (liftIO . atomically . flip putTMVar ()) lock
-    applyStore entry
-  where
-    applyStore (Change _ k v) = setValue k v
-    applyStore (Delete _ k)   = deleteValue k
-    applyStore _              = return ()
+applyEntryImpl LogEntry { _data = entry, _completed = Completed lock } = do
+  mapM_ (liftIO . atomically . flip putTMVar ()) lock
+  applyStore entry
+ where
+  applyStore (Change _ k v) = setValue k v
+  applyStore (Delete _ k  ) = deleteValue k
+  applyStore _              = return ()
 
-loadSnapshotImpl :: (Ord k, Storable v)
-                 => LogIndex
-                 -> LogTerm
-                 -> M.Map k v
-                 -> Store k v e
-                 -> IO ()
-loadSnapshotImpl lastIndex lastTerm map (Store store) = atomically $
-    modifyTVar' store (loadSnapshotStore lastIndex lastTerm map)
+loadSnapshotImpl
+  :: (Ord k, Storable v)
+  => LogIndex
+  -> LogTerm
+  -> M.Map k v
+  -> Store k v e
+  -> IO ()
+loadSnapshotImpl lastIndex lastTerm map (Store store) =
+  atomically $ modifyTVar' store (loadSnapshotStore lastIndex lastTerm map)
 
-takeSnapshotImpl :: (KeyClass k, ValueClass v, Entry e)
-                 => SnapFn k v
-                 -> LogIndex
-                 -> Store k v e
-                 -> IO ()
+takeSnapshotImpl
+  :: (KeyClass k, ValueClass v, Entry e)
+  => SnapFn k v
+  -> LogIndex
+  -> Store k v e
+  -> IO ()
 takeSnapshotImpl run lastApplied store = do
-    storeData <- readTVarIO $ unStore store
-    let firstIndex = _lowIdx $ _log storeData
-        lastTerm   = entryTerm . fromJust
-                   . IM.lookup (unLogIndex lastApplied)
-                   . _entries . _log
-                   $ storeData
-    forkIO $ run $ do
+  storeData <- readTVarIO $ unStore store
+  let
+    firstIndex = _lowIdx $ _log storeData
+    lastTerm =
+      entryTerm
+        . fromJust
+        . IM.lookup (unLogIndex lastApplied)
+        . _entries
+        . _log
+        $ storeData
+  forkIO
+    $ run
+    $ do
         createSnapshot lastApplied lastTerm
         let snapData = B.concat . BL.toChunks . encode . _map $ storeData
         -- FIXME(DarinM223): maybe write a version of writeSnapshot
@@ -163,8 +163,8 @@ takeSnapshotImpl run lastApplied store = do
 
         snap <- readSnapshot lastApplied
         forM_ snap $ \snap ->
-              liftIO
+          liftIO
             $ flip persistAfter store
             $ loadSnapshotStore lastApplied lastTerm snap
             . modifyLog (deleteRangeLog firstIndex lastApplied)
-    return ()
+  return ()

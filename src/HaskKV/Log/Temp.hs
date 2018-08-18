@@ -40,36 +40,32 @@ instance
 
 addTemporaryEntryImpl :: e -> TempLog e -> IO ()
 addTemporaryEntryImpl e = flip modifyMVar_ (pure . addEntry e) . unTempLog
-  where
-    addEntry e es
-        | length es + 1 > maxTempEntries = es
-        | otherwise                      = e:es
+ where
+  addEntry e es
+    | length es + 1 > maxTempEntries = es
+    | otherwise                      = e : es
 
 temporaryEntriesImpl :: TempLog e -> IO [e]
 temporaryEntriesImpl (TempLog var) = do
-    entries <- reverse <$> takeMVar var
-    putMVar var []
-    return entries
+  entries <- reverse <$> takeMVar var
+  putMVar var []
+  return entries
 
 applyTimeout :: Timeout
 applyTimeout = 5000000
 
 -- | Stores entry in the log and then blocks until log entry is committed.
-waitApplyEntry :: (MonadIO m, TempLogM e m, HasField "_completed" e Completed)
-               => e
-               -> m ()
+waitApplyEntry
+  :: (MonadIO m, TempLogM e m, HasField "_completed" e Completed) => e -> m ()
 waitApplyEntry entry = do
-    addTemporaryEntry entry
+  addTemporaryEntry entry
 
-    liftIO $ do
-        timer <- Timer.newIO
-        Timer.reset timer applyTimeout
-        -- Wait until either something is put in the TMVar
-        -- or the timeout is finished.
-        atomically $ Timer.await timer <|> awaitCompleted
-  where
-    awaitCompleted = takeTMVar
-                   . fromJust
-                   . unCompleted
-                   . getField @"_completed"
-                   $ entry
+  liftIO $ do
+    timer <- Timer.newIO
+    Timer.reset timer applyTimeout
+    -- Wait until either something is put in the TMVar
+    -- or the timeout is finished.
+    atomically $ Timer.await timer <|> awaitCompleted
+ where
+  awaitCompleted =
+    takeTMVar . fromJust . unCompleted . getField @"_completed" $ entry

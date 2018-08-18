@@ -28,26 +28,23 @@ data Config = Config
     } deriving (Show, Eq)
 
 parseConfig :: Config -> [String] -> Config
-parseConfig c = setData c
-              . catMaybes
-              . fmap attrsToServerData
-              . splitInto 5
-  where
-    splitInto :: Int -> [String] -> [[String]]
-    splitInto amount l
-        | length l >= amount = take amount l:splitInto amount (drop amount l)
-        | otherwise          = []
+parseConfig c = setData c . catMaybes . fmap attrsToServerData . splitInto 5
+ where
+  splitInto :: Int -> [String] -> [[String]]
+  splitInto amount l
+    | length l >= amount = take amount l : splitInto amount (drop amount l)
+    | otherwise          = []
 
-    setData c d = c { _serverData = d }
+  setData c d = c { _serverData = d }
 
-    attrsToServerData [id, host, raftPort, apiPort, dir]
-        = ServerData
+  attrsToServerData [id, host, raftPort, apiPort, dir] =
+    ServerData
       <$> fmap SID (readMaybe id)
       <*> pure host
       <*> readMaybe raftPort
       <*> readMaybe apiPort
       <*> pure dir
-    attrsToServerData _ = error "Invalid attributes"
+  attrsToServerData _ = error "Invalid attributes"
 
 readConfig :: Config -> FilePath -> IO Config
 readConfig c = fmap (parseConfig c . lines) . readFile
@@ -59,30 +56,25 @@ configAPIPort :: SID -> Config -> Maybe Int
 configAPIPort sid = fmap _apiPort . find ((== sid) . _id) . _serverData
 
 configSnapshotDirectory :: SID -> Config -> Maybe FilePath
-configSnapshotDirectory sid = fmap _snapshotDir
-                            . find ((== sid) . _id)
-                            . _serverData
+configSnapshotDirectory sid =
+  fmap _snapshotDir . find ((== sid) . _id) . _serverData
 
 configToSettings :: Config -> IM.IntMap ClientSettings
 configToSettings = foldl' insert IM.empty . _serverData
-  where
-    insert settings ServerData{ _id       = sid
-                              , _raftPort = port
-                              , _host     = host
-                              } =
-        IM.insert (unSID sid) (clientSettings port $ C.pack host) settings
+ where
+  insert settings ServerData { _id = sid, _raftPort = port, _host = host } =
+    IM.insert (unSID sid) (clientSettings port $ C.pack host) settings
 
 configToServerState :: SID -> Config -> IO (ServerState msg)
-configToServerState sid config@Config{ _backpressure     = backpressure
-                                     , _electionTimeout  = eTimeout
-                                     , _heartbeatTimeout = hTimeout
-                                     } = do
+configToServerState sid config@Config { _backpressure = backpressure, _electionTimeout = eTimeout, _heartbeatTimeout = hTimeout }
+  = do
     initServerState <- newServerState backpressure eTimeout hTimeout sid
-    outgoing' <- foldM (insert backpressure) (_outgoing initServerState)
-               . _serverData
-               $ config
+    outgoing'       <-
+      foldM (insert backpressure) (_outgoing initServerState)
+      . _serverData
+      $ config
     return initServerState { _outgoing = outgoing' }
-  where
-    insert backpressure outgoing ServerData{_id = sid} = do
-        bq <- newTBQueueIO (unCapacity backpressure)
-        return $ IM.insert (unSID sid) bq outgoing
+ where
+  insert backpressure outgoing ServerData { _id = sid } = do
+    bq <- newTBQueueIO (unCapacity backpressure)
+    return $ IM.insert (unSID sid) bq outgoing

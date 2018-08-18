@@ -50,17 +50,17 @@ persistentStateFilename (SID sid) = show sid ++ ".state"
 
 newPersistentState :: RaftState -> PersistentState
 newPersistentState s = PersistentState
-    { _currTerm = getField @"_currTerm" s
-    , _votedFor = getField @"_votedFor" s
-    }
+  { _currTerm = getField @"_currTerm" s
+  , _votedFor = getField @"_votedFor" s
+  }
 
 newRaftState :: SID -> Maybe PersistentState -> RaftState
 newRaftState sid s = RaftState
-    { _stateType   = Follower
-    , _currTerm    = fromMaybe 0 . fmap (getField @"_currTerm") $ s
-    , _votedFor    = s >>= getField @"_votedFor"
-    , _leader      = Nothing
-    , _commitIndex = 0
-    , _lastApplied = 0
-    , _serverID    = sid
-    }
+  { _stateType   = Follower
+  , _currTerm    = fromMaybe 0 . fmap (getField @"_currTerm") $ s
+  , _votedFor    = s >>= getField @"_votedFor"
+  , _leader      = Nothing
+  , _commitIndex = 0
+  , _lastApplied = 0
+  , _serverID    = sid
+  }

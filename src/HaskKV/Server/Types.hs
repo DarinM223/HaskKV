@@ -36,19 +36,19 @@ newtype ServerT m a = ServerT { unServerT :: m a }
 
 newServerState :: Capacity -> Timeout -> Timeout -> SID -> IO (ServerState msg)
 newServerState backpressure electionTimeout heartbeatTimeout sid = do
-    messages <- newTBQueueIO (unCapacity backpressure)
-    electionTimer <- Timer.newIO
-    heartbeatTimer <- Timer.newIO
+  messages       <- newTBQueueIO (unCapacity backpressure)
+  electionTimer  <- Timer.newIO
+  heartbeatTimer <- Timer.newIO
 
-    Timer.reset electionTimer electionTimeout
-    Timer.reset heartbeatTimer heartbeatTimeout
+  Timer.reset electionTimer electionTimeout
+  Timer.reset heartbeatTimer heartbeatTimeout
 
-    return ServerState
-        { _messages         = messages
-        , _outgoing         = IM.empty
-        , _sid              = sid
-        , _electionTimer    = electionTimer
-        , _heartbeatTimer   = heartbeatTimer
-        , _electionTimeout  = electionTimeout
-        , _heartbeatTimeout = heartbeatTimeout
-        }
+  return ServerState
+    { _messages         = messages
+    , _outgoing         = IM.empty
+    , _sid              = sid
+    , _electionTimer    = electionTimer
+    , _heartbeatTimer   = heartbeatTimer
+    , _electionTimeout  = electionTimeout
+    , _heartbeatTimeout = heartbeatTimeout
+    }
