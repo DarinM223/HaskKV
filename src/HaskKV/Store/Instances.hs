@@ -25,50 +25,50 @@ import qualified Data.IntMap as IM
 import qualified Data.Map as M
 
 type StoreClass k v e r m =
-    ( MonadIO m
-    , MonadReader r m
-    , HasStore k v e r
-    , MonadState RaftState m
-    , KeyClass k
-    , ValueClass v
-    , Entry e
-    )
+  ( MonadIO m
+  , MonadReader r m
+  , HasStore k v e r
+  , MonadState RaftState m
+  , KeyClass k
+  , ValueClass v
+  , Entry e
+  )
 type SnapFn k v =
-    forall a. (forall m. (MonadIO m, SnapshotM (M.Map k v) m) => m a) -> IO a
+  forall a. (forall m. (MonadIO m, SnapshotM (M.Map k v) m) => m a) -> IO a
 
 instance (StoreClass k v e r m) => StorageM k v (StoreT m) where
-    getValue k = liftIO . getValueImpl k =<< asks getStore
-    setValue k v = liftIO . setValueImpl k v =<< asks getStore
-    replaceValue k v = liftIO . replaceValueImpl k v =<< asks getStore
-    deleteValue k = liftIO . deleteValueImpl k =<< asks getStore
-    cleanupExpired t = liftIO . cleanupExpiredImpl t =<< asks getStore
+  getValue k = liftIO . getValueImpl k =<< asks getStore
+  setValue k v = liftIO . setValueImpl k v =<< asks getStore
+  replaceValue k v = liftIO . replaceValueImpl k v =<< asks getStore
+  deleteValue k = liftIO . deleteValueImpl k =<< asks getStore
+  cleanupExpired t = liftIO . cleanupExpiredImpl t =<< asks getStore
 
 instance (StoreClass k v e r m, SnapshotM s m, TakeSnapshotM m)
-    => LogM e (StoreT m) where
-    firstIndex = liftIO . firstIndexImpl =<< asks getStore
-    lastIndex = liftIO . lastIndexImpl =<< asks getStore
-    loadEntry k = liftIO . loadEntryImpl k =<< asks getStore
-    termFromIndex i = liftIO . termFromIndexImpl i =<< asks getStore
-    deleteRange a b = liftIO . deleteRangeImpl a b =<< asks getStore
-    storeEntries es = lift . storeEntriesImpl es =<< asks getStore
+  => LogM e (StoreT m) where
+  firstIndex = liftIO . firstIndexImpl =<< asks getStore
+  lastIndex = liftIO . lastIndexImpl =<< asks getStore
+  loadEntry k = liftIO . loadEntryImpl k =<< asks getStore
+  termFromIndex i = liftIO . termFromIndexImpl i =<< asks getStore
+  deleteRange a b = liftIO . deleteRangeImpl a b =<< asks getStore
+  storeEntries es = lift . storeEntriesImpl es =<< asks getStore
 
 instance ( StoreClass k v e r m
          , SnapshotM s m
          , TakeSnapshotM m
          , e ~ LogEntry k v
          ) => ApplyEntryM k v e (StoreT m) where
-    applyEntry = applyEntryImpl
+  applyEntry = applyEntryImpl
 
 instance (StoreClass k v e r m) => LoadSnapshotM (M.Map k v) (StoreT m) where
-    loadSnapshot i t map = liftIO . loadSnapshotImpl i t map =<< asks getStore
+  loadSnapshot i t map = liftIO . loadSnapshotImpl i t map =<< asks getStore
 
 instance (StoreClass k v e r m, HasRun msg k v e r)
-    => TakeSnapshotM (StoreT m) where
-    takeSnapshot = do
-        store <- asks getStore
-        lastApplied <- lift $ gets _lastApplied
-        config <- ask
-        liftIO $ takeSnapshotImpl (getRun config) lastApplied store
+  => TakeSnapshotM (StoreT m) where
+  takeSnapshot = do
+    store <- asks getStore
+    lastApplied <- lift $ gets _lastApplied
+    config <- ask
+    liftIO $ takeSnapshotImpl (getRun config) lastApplied store
 
 getValueImpl :: (Ord k) => k -> Store k v e -> IO (Maybe v)
 getValueImpl k = fmap (getKey k) . readTVarIO . unStore

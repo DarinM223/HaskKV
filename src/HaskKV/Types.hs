@@ -3,14 +3,14 @@ module HaskKV.Types where
 import Data.Binary
 
 newtype LogIndex = LogIndex { unLogIndex :: Int }
-    deriving (Eq, Num, Ord, Binary)
+  deriving (Eq, Num, Ord, Binary)
 instance Show LogIndex where
-    show (LogIndex i) = show i
+  show (LogIndex i) = show i
 
 newtype LogTerm = LogTerm { unLogTerm :: Int }
-    deriving (Eq, Num, Ord, Binary)
+  deriving (Eq, Num, Ord, Binary)
 instance Show LogTerm where
-    show (LogTerm t) = show t
+  show (LogTerm t) = show t
 
 newtype SID = SID { unSID :: Int } deriving (Show, Eq, Num, Binary)
 newtype FilePos = FilePos { unFilePos :: Int } deriving (Show, Eq, Num, Binary)

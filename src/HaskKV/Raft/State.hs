@@ -15,33 +15,33 @@ import qualified Data.IntMap as IM
 type Time = UTCTime
 
 data LeaderState = LeaderState
-    { _nextIndex  :: IM.IntMap LogIndex
-    , _matchIndex :: IM.IntMap LogIndex
-    } deriving (Show, Eq)
+  { _nextIndex  :: IM.IntMap LogIndex
+  , _matchIndex :: IM.IntMap LogIndex
+  } deriving (Show, Eq)
 makeFieldsNoPrefix ''LeaderState
 
 data StateType
-    = Follower
-    | Candidate Int
-    | Leader LeaderState
-    deriving (Show, Eq)
+  = Follower
+  | Candidate Int
+  | Leader LeaderState
+  deriving (Show, Eq)
 makePrisms ''StateType
 
 data RaftState = RaftState
-    { _stateType   :: StateType
-    , _currTerm    :: LogTerm
-    , _votedFor    :: Maybe SID
-    , _leader      :: Maybe SID
-    , _commitIndex :: LogIndex
-    , _lastApplied :: LogIndex
-    , _serverID    :: SID
-    } deriving (Show, Eq)
+  { _stateType   :: StateType
+  , _currTerm    :: LogTerm
+  , _votedFor    :: Maybe SID
+  , _leader      :: Maybe SID
+  , _commitIndex :: LogIndex
+  , _lastApplied :: LogIndex
+  , _serverID    :: SID
+  } deriving (Show, Eq)
 makeFieldsNoPrefix ''RaftState
 
 data PersistentState = PersistentState
-    { _currTerm :: LogTerm
-    , _votedFor :: Maybe SID
-    } deriving (Show, Eq, Generic)
+  { _currTerm :: LogTerm
+  , _votedFor :: Maybe SID
+  } deriving (Show, Eq, Generic)
 
 instance Binary PersistentState
 

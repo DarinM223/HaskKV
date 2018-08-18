@@ -9,12 +9,12 @@ import HaskKV.Types
 import qualified Data.IntMap as IM
 
 data Log e = Log
-    { _entries           :: IM.IntMap e
-    , _highIdx           :: LogIndex
-    , _lowIdx            :: LogIndex
-    , _snapshotLastIndex :: Maybe LogIndex
-    , _snapshotLastTerm  :: Maybe LogTerm
-    } deriving (Show, Generic)
+  { _entries           :: IM.IntMap e
+  , _highIdx           :: LogIndex
+  , _lowIdx            :: LogIndex
+  , _snapshotLastIndex :: Maybe LogIndex
+  , _snapshotLastTerm  :: Maybe LogTerm
+  } deriving (Show, Generic)
 
 instance (Binary e) => Binary (Log e)
 

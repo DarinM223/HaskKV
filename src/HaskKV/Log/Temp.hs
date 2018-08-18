@@ -18,7 +18,7 @@ import qualified HaskKV.Timer as Timer
 newtype TempLog e = TempLog { unTempLog :: MVar [e] }
 
 class HasTempLog e r | r -> e where
-    getTempLog :: r -> TempLog e
+  getTempLog :: r -> TempLog e
 
 newTempLog :: IO (TempLog e)
 newTempLog = TempLog <$> newMVar []
@@ -27,16 +27,13 @@ maxTempEntries :: Int
 maxTempEntries = 1000
 
 newtype TempLogT m a = TempLogT { unTempLogT :: m a }
-    deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
+  deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
-instance
-    ( MonadIO m
-    , MonadReader r m
-    , HasTempLog e r
-    ) => TempLogM e (TempLogT m) where
+instance (MonadIO m, MonadReader r m, HasTempLog e r)
+  => TempLogM e (TempLogT m) where
 
-    addTemporaryEntry e = liftIO . addTemporaryEntryImpl e =<< asks getTempLog
-    temporaryEntries = liftIO . temporaryEntriesImpl =<< asks getTempLog
+  addTemporaryEntry e = liftIO . addTemporaryEntryImpl e =<< asks getTempLog
+  temporaryEntries = liftIO . temporaryEntriesImpl =<< asks getTempLog
 
 addTemporaryEntryImpl :: e -> TempLog e -> IO ()
 addTemporaryEntryImpl e = flip modifyMVar_ (pure . addEntry e) . unTempLog

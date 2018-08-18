@@ -15,17 +15,14 @@ inject :: ServerEvent -> ServerState msg -> IO ()
 inject HeartbeatTimeout s = Timer.reset (_heartbeatTimer s) 0
 inject ElectionTimeout  s = Timer.reset (_electionTimer s) 0
 
-instance
-    ( MonadIO m
-    , MonadReader r m
-    , HasServerState msg r
-    ) => ServerM msg ServerEvent (ServerT m) where
+instance (MonadIO m, MonadReader r m, HasServerState msg r)
+  => ServerM msg ServerEvent (ServerT m) where
 
-    send i msg = liftIO . sendImpl i msg =<< asks getServerState
-    broadcast msg = liftIO . broadcastImpl msg =<< asks getServerState
-    recv = liftIO . recvImpl =<< asks getServerState
-    reset e = liftIO . resetImpl e =<< asks getServerState
-    serverIds = serverIdsImpl <$> asks getServerState
+  send i msg = liftIO . sendImpl i msg =<< asks getServerState
+  broadcast msg = liftIO . broadcastImpl msg =<< asks getServerState
+  recv = liftIO . recvImpl =<< asks getServerState
+  reset e = liftIO . resetImpl e =<< asks getServerState
+  serverIds = serverIdsImpl <$> asks getServerState
 
 sendImpl :: SID -> msg -> ServerState msg -> IO ()
 sendImpl (SID i) msg s = do

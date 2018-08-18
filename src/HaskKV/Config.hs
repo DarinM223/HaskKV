@@ -13,19 +13,19 @@ import qualified Data.ByteString.Char8 as C
 import qualified Data.IntMap as IM
 
 data ServerData = ServerData
-    { _id          :: SID
-    , _host        :: String
-    , _raftPort    :: Int
-    , _apiPort     :: Int
-    , _snapshotDir :: FilePath
-    } deriving (Show, Eq)
+  { _id          :: SID
+  , _host        :: String
+  , _raftPort    :: Int
+  , _apiPort     :: Int
+  , _snapshotDir :: FilePath
+  } deriving (Show, Eq)
 
 data Config = Config
-    { _backpressure     :: Capacity
-    , _electionTimeout  :: Timeout
-    , _heartbeatTimeout :: Timeout
-    , _serverData       :: [ServerData]
-    } deriving (Show, Eq)
+  { _backpressure     :: Capacity
+  , _electionTimeout  :: Timeout
+  , _heartbeatTimeout :: Timeout
+  , _serverData       :: [ServerData]
+  } deriving (Show, Eq)
 
 parseConfig :: Config -> [String] -> Config
 parseConfig c = setData c . catMaybes . fmap attrsToServerData . splitInto 5

@@ -22,21 +22,21 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.IntMap as IM
 
 instance
-    ( MonadIO m
-    , MonadReader r m
-    , HasSnapshotManager r
-    , HasSnapshotType s m
-    ) => SnapshotM s (SnapshotT m) where
+  ( MonadIO m
+  , MonadReader r m
+  , HasSnapshotManager r
+  , HasSnapshotType s m
+  ) => SnapshotM s (SnapshotT m) where
 
-    createSnapshot i t = liftIO . createSnapshotImpl i t
-                     =<< asks getSnapshotManager
-    writeSnapshot o d i = liftIO . writeSnapshotImpl o d i
-                      =<< asks getSnapshotManager
-    saveSnapshot i = liftIO . saveSnapshotImpl i =<< asks getSnapshotManager
-    readSnapshot i = liftIO . readSnapshotImpl i =<< asks getSnapshotManager
-    hasChunk i = liftIO . hasChunkImpl i =<< asks getSnapshotManager
-    readChunk a i = liftIO . readChunkImpl a i =<< asks getSnapshotManager
-    snapshotInfo = liftIO . snapshotInfoImpl =<< asks getSnapshotManager
+  createSnapshot i t = liftIO . createSnapshotImpl i t
+                   =<< asks getSnapshotManager
+  writeSnapshot o d i = liftIO . writeSnapshotImpl o d i
+                    =<< asks getSnapshotManager
+  saveSnapshot i = liftIO . saveSnapshotImpl i =<< asks getSnapshotManager
+  readSnapshot i = liftIO . readSnapshotImpl i =<< asks getSnapshotManager
+  hasChunk i = liftIO . hasChunkImpl i =<< asks getSnapshotManager
+  readChunk a i = liftIO . readChunkImpl a i =<< asks getSnapshotManager
+  snapshotInfo = liftIO . snapshotInfoImpl =<< asks getSnapshotManager
 
 createSnapshotImpl :: LogIndex -> LogTerm -> SnapshotManager -> IO ()
 createSnapshotImpl index term manager = do

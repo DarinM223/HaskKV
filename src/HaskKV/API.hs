@@ -23,9 +23,9 @@ import Servant.API
 import Servant.Server
 
 type StoreAPI k v
-    = "get" :> Capture "key" k :> Get '[JSON] (Maybe v)
- :<|> "set" :> Capture "key" k :> ReqBody '[JSON] v :> Post '[JSON] ()
- :<|> "delete" :> Capture "key" k :> Delete '[JSON] ()
+  =    "get" :> Capture "key" k :> Get '[JSON] (Maybe v)
+  :<|> "set" :> Capture "key" k :> ReqBody '[JSON] v :> Post '[JSON] ()
+  :<|> "delete" :> Capture "key" k :> Delete '[JSON] ()
 
 api :: Proxy (StoreAPI k v)
 api = Proxy
