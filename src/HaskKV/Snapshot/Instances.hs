@@ -131,7 +131,7 @@ saveSnapshotImpl index manager = do
   let snap = find ((== index) . getField @"_index") . _partial $ snapshots
 
   forM_ snap $ \snap -> do
-      -- Close and rename snapshot file as completed.
+    -- Close and rename snapshot file as completed.
     hClose $ _file snap
     let
       index = getField @"_index" snap

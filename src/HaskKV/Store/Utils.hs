@@ -65,8 +65,8 @@ cleanupStore curr s = case minHeapMaybe (_heap s) of
       (_, h') = fromJust . H.viewMin $ _heap s
       v       = getKey k s
     in 
-        -- Only delete key from store if it hasn't been
-        -- replaced/removed after it was set.
+       -- Only delete key from store if it hasn't been
+       -- replaced/removed after it was set.
        if maybe False ((== 0) . diff t) (v >>= expireTime)
       then cleanupStore curr . deleteKey k $ s { _heap = h' }
       else cleanupStore curr s { _heap = h' }

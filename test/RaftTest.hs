@@ -155,8 +155,8 @@ testLeaderSendsAppendEntries
         entries     = initLogEntries value
         added       = addedLogEntries value
         (result, _) = flip runMockT servers $ do
-            -- Add log entries to minority of servers
-            -- so that leader won't have these entries.
+          -- Add log entries to minority of servers
+          -- so that leader won't have these entries.
           runServer 2 $ storeEntries entries
           runServer 3 $ storeEntries entries
           runServer 1 $ MockT (electionTimer .= True)

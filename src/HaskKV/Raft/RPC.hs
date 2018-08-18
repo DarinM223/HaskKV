@@ -137,12 +137,12 @@ handleInstallSnapshot is s
       saveSnapshot snapIndex
       loadEntry snapIndex >>= \case
         Just e | entryTerm e == _lastIncludedTerm is -> do
-            -- Delete logs up to index.
+          -- Delete logs up to index.
           first <- firstIndex
           deleteRange first snapIndex
         _ -> do
-            -- Discard entire log and reset state machine
-            -- using snapshot contents.
+          -- Discard entire log and reset state machine
+          -- using snapshot contents.
           first <- firstIndex
           last  <- lastIndex
           deleteRange first last

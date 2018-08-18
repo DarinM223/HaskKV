@@ -37,8 +37,8 @@ diffEntriesWithLog last entries =
     Just start -> drop start entries
     Nothing    -> []
  where
-    -- Returns the first index in the entries that doesn't exist in the log
-    -- or is different from the existing entry in the log.
+  -- Returns the first index in the entries that doesn't exist in the log
+  -- or is different from the existing entry in the log.
   diffEntriesStart _ [] = return Nothing
   diffEntriesStart lastIndex ((i, e) : es)
     | entryIndex e > lastIndex = return $ Just i
