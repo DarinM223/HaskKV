@@ -5,7 +5,7 @@ import Control.Concurrent (threadDelay, forkIO)
 import Control.Concurrent.STM
 import Control.Monad
 import Data.ByteString
-import Test.Tasty hiding (Timeout)
+import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 import HaskKV.Utils
 import HaskKV.Types

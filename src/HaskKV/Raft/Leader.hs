@@ -2,8 +2,8 @@ module HaskKV.Raft.Leader where
 
 import Control.Lens
 import Control.Monad.State
+import Data.List (sortBy)
 import Data.Maybe
-import Data.List
 import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Utils

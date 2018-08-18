@@ -2,7 +2,7 @@ module Mock where
 
 import Control.Lens
 import Control.Monad.State
-import Data.List
+import Data.Foldable (foldl')
 import Data.Maybe
 import HaskKV.Raft.Run
 import HaskKV.Types

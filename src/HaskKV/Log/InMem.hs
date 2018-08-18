@@ -1,7 +1,7 @@
 module HaskKV.Log.InMem where
 
 import Data.Binary
-import Data.List
+import Data.Foldable (foldl')
 import GHC.Generics
 import HaskKV.Log.Class
 import HaskKV.Types

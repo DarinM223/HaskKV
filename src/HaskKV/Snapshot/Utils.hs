@@ -2,7 +2,7 @@ module HaskKV.Snapshot.Utils where
 
 import Control.Concurrent.STM
 import Control.Exception
-import Data.List
+import Data.List (findIndex)
 import Data.Maybe
 import GHC.IO.Handle
 import HaskKV.Snapshot.Types

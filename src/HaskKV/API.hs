@@ -3,15 +3,15 @@ module HaskKV.API
     , server
     ) where
 
-import Control.Concurrent.Async
-import Control.Concurrent.STM
+import Control.Concurrent.Async (async, wait)
+import Control.Concurrent.STM (newEmptyTMVarIO)
 import Control.Monad.Except
 import Control.Monad.Reader
-import Data.Aeson
+import Data.Aeson (FromJSON, ToJSON)
 import Data.IORef
-import Data.Proxy
+import Data.Proxy (Proxy (Proxy))
 import GHC.Records
-import HaskKV.Constr
+import HaskKV.Constr (Constr)
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
 import HaskKV.Monad

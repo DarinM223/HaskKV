@@ -12,7 +12,7 @@ import HaskKV.Constr
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
-import HaskKV.Raft.State hiding (Time)
+import HaskKV.Raft.State (RaftState (..))
 import HaskKV.Snapshot.Types
 import HaskKV.Store.Types
 import HaskKV.Store.Utils

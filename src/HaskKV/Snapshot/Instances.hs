@@ -6,8 +6,8 @@ import Control.Concurrent.STM
 import Control.Exception
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.Binary hiding (get)
-import Data.List
+import Data.Binary (Binary, decode)
+import Data.Foldable (find)
 import GHC.IO.Handle
 import GHC.Records
 import HaskKV.Snapshot.Types

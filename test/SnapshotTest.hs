@@ -3,7 +3,7 @@ module SnapshotTest (tests) where
 import Control.Concurrent.STM
 import Control.Monad
 import Data.Binary
-import Data.List
+import Data.List (nub, sort)
 import GHC.Records
 import HaskKV.Snapshot.All
 import HaskKV.Types

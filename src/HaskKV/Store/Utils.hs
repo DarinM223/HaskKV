@@ -2,7 +2,7 @@ module HaskKV.Store.Utils where
 
 import Control.Concurrent.STM
 import Data.Binary
-import Data.List
+import Data.Foldable (foldl')
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Time
 import HaskKV.Log.InMem

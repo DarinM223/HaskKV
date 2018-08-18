@@ -2,7 +2,7 @@ module HaskKV.Store.Types where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
-import Data.Aeson hiding (encode)
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Binary
 import Data.Binary.Orphans ()
 import Data.Maybe (fromMaybe)

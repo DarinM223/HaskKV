@@ -2,7 +2,7 @@ module RaftTest (tests) where
 
 import Control.Lens
 import Control.Monad
-import Data.List
+import Data.List (nub)
 import Data.Maybe
 import GHC.Records
 import HaskKV.Log.Class
