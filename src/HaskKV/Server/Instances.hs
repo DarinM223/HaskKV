@@ -42,8 +42,7 @@ recvImpl s =
   atomically
     $   awaitElectionTimeout s
     <|> awaitHeartbeatTimeout s
-    <|> Right
-    <$> readTBQueue (_messages s)
+    <|> (Right <$> readTBQueue (_messages s))
  where
   awaitElectionTimeout =
     fmap (const (Left ElectionTimeout)) . Timer.await . _electionTimer

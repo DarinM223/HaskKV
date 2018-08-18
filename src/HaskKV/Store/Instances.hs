@@ -151,7 +151,8 @@ takeSnapshotImpl run lastApplied store = do
         . _entries
         . _log
         $ storeData
-  forkIO
+  void
+    $ forkIO
     $ run
     $ do
         createSnapshot lastApplied lastTerm
@@ -167,4 +168,3 @@ takeSnapshotImpl run lastApplied store = do
             $ flip persistAfter store
             $ loadSnapshotStore lastApplied lastTerm snap
             . modifyLog (deleteRangeLog firstIndex lastApplied)
-  return ()

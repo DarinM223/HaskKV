@@ -28,10 +28,10 @@ instance
   , HasSnapshotType s m
   ) => SnapshotM s (SnapshotT m) where
 
-  createSnapshot i t = liftIO . createSnapshotImpl i t
-                   =<< asks getSnapshotManager
-  writeSnapshot o d i = liftIO . writeSnapshotImpl o d i
-                    =<< asks getSnapshotManager
+  createSnapshot i t =
+    liftIO . createSnapshotImpl i t =<< asks getSnapshotManager
+  writeSnapshot o d i =
+    liftIO . writeSnapshotImpl o d i =<< asks getSnapshotManager
   saveSnapshot i = liftIO . saveSnapshotImpl i =<< asks getSnapshotManager
   readSnapshot i = liftIO . readSnapshotImpl i =<< asks getSnapshotManager
   hasChunk i = liftIO . hasChunkImpl i =<< asks getSnapshotManager
