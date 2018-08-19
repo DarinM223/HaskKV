@@ -1,4 +1,7 @@
-module HaskKV (module M) where
+module HaskKV
+  ( module M
+  )
+where
 
 import HaskKV.API as M
 import HaskKV.Config as M

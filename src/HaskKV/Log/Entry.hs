@@ -14,21 +14,21 @@ newtype TID = TID { unTID :: Int } deriving (Show, Eq, Binary)
 newtype Completed = Completed { unCompleted :: Maybe (TMVar ()) }
 
 instance Binary Completed where
-    put _ = putBuilder B.empty
-    get = return $ Completed Nothing
+  put _ = putBuilder B.empty
+  get = return $ Completed Nothing
 
 instance Show Completed where
-    show _ = ""
+  show _ = ""
 
 instance Eq Completed where
-    (==) _ _ = True
+  (==) _ _ = True
 
 data LogEntry k v = LogEntry
-    { _term      :: LogTerm
-    , _index     :: LogIndex
-    , _data      :: LogEntryData k v
-    , _completed :: Completed
-    } deriving (Show, Eq, Generic)
+  { _term      :: LogTerm
+  , _index     :: LogIndex
+  , _data      :: LogEntryData k v
+  , _completed :: Completed
+  } deriving (Show, Eq, Generic)
 
 data LogEntryData k v = Change TID k v
                       | Delete TID k
@@ -45,10 +45,10 @@ data Transaction = Start TID
 data Checkpoint = Begin [TID] | End deriving (Show, Eq, Generic)
 
 instance (Show k, Show v, Binary k, Binary v) => Entry (LogEntry k v) where
-    entryIndex = _index
-    entryTerm = _term
-    setEntryIndex index e = e { _index = index }
-    setEntryTerm term e = e { _term = term }
+  entryIndex = _index
+  entryTerm = _term
+  setEntryIndex index e = e { _index = index }
+  setEntryTerm term e = e { _term = term }
 
 instance (Binary k, Binary v) => Binary (LogEntryData k v)
 instance Binary Transaction

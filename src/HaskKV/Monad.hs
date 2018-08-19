@@ -21,47 +21,47 @@ import HaskKV.Snapshot.All
 import HaskKV.Store.All
 
 data AppConfig msg k v e = AppConfig
-    { _state       :: IORef RaftState
-    , _store       :: Store k v e
-    , _tempLog     :: TempLog e
-    , _serverState :: ServerState msg
-    , _snapManager :: SnapshotManager
-    , _run         :: Fn msg k v e
-    }
+  { _state       :: IORef RaftState
+  , _store       :: Store k v e
+  , _tempLog     :: TempLog e
+  , _serverState :: ServerState msg
+  , _snapManager :: SnapshotManager
+  , _run         :: Fn msg k v e
+  }
 
 instance HasServerState msg (AppConfig msg k v e) where
-    getServerState = _serverState
+  getServerState = _serverState
 instance HasStore k v e (AppConfig msg k v e) where
-    getStore = _store
+  getStore = _store
 instance HasTempLog e (AppConfig msg k v e) where
-    getTempLog = _tempLog
+  getTempLog = _tempLog
 instance HasSnapshotManager (AppConfig msg k v e) where
-    getSnapshotManager = _snapManager
+  getSnapshotManager = _snapManager
 instance HasRun msg k v e (AppConfig msg k v e) where
-    getRun = _run
+  getRun = _run
 
 data InitAppConfig msg e = InitAppConfig
-    { _initLog       :: Maybe (Log e)
-    , _initState     :: Maybe PersistentState
-    , _serverState   :: ServerState msg
-    , _snapDirectory :: Maybe FilePath
-    }
+  { _initLog       :: Maybe (Log e)
+  , _initState     :: Maybe PersistentState
+  , _serverState   :: ServerState msg
+  , _snapDirectory :: Maybe FilePath
+  }
 
 newtype AppT msg k v e m a = AppT
-    { unAppT :: ReaderT (AppConfig msg k v e) m a }
-    deriving ( Functor, Applicative, Monad, MonadIO
-             , MonadReader (AppConfig msg k v e)
-             )
+  { unAppT :: ReaderT (AppConfig msg k v e) m a }
+  deriving ( Functor, Applicative, Monad, MonadIO
+           , MonadReader (AppConfig msg k v e)
+           )
 
 instance (Binary k, Binary v) =>
-    HasSnapshotType (SnapshotType k v) (AppT msg k v e m)
+  HasSnapshotType (SnapshotType k v) (AppT msg k v e m)
 
 instance (MonadIO m) => MonadState RaftState (AppT msg k v e m) where
-    get = AppT $ ReaderT $ liftIO . readIORef . _state
-    put x = AppT $ ReaderT $ liftIO . flip writeIORef x . _state
+  get = AppT $ ReaderT $ liftIO . readIORef . _state
+  put x = AppT $ ReaderT $ liftIO . flip writeIORef x . _state
 
 instance MonadTrans (AppT msg k v e) where
-    lift = AppT . lift
+  lift = AppT . lift
 
 $(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
                 ServerM msg ServerEvent (AppT msg k v e m)
@@ -97,23 +97,26 @@ $(deriveVia [t| forall msg k v e m. (Constr k v e m) =>
 runAppT :: AppT msg k v e m a -> AppConfig msg k v e -> m a
 runAppT m config = flip runReaderT config . unAppT $ m
 
-newAppConfig :: (KeyClass k, ValueClass v, e ~ LogEntry k v)
-             => InitAppConfig msg e
-             -> IO (AppConfig msg k v e)
+newAppConfig
+  :: (KeyClass k, ValueClass v, e ~ LogEntry k v)
+  => InitAppConfig msg e
+  -> IO (AppConfig msg k v e)
 newAppConfig config = do
-    let serverState = getField @"_serverState" config
-        sid         = getField @"_sid" serverState
-        raftState   = newRaftState sid $ _initState config
-    raftStateRef <- newIORef raftState
-    store <- newStore sid $ _initLog config
-    tempLog <- newTempLog
-    snapManager <- newSnapshotManager $ _snapDirectory config
-    let config = AppConfig
-            { _state       = raftStateRef
-            , _store       = store
-            , _tempLog     = tempLog
-            , _serverState = serverState
-            , _snapManager = snapManager
-            , _run         = flip runAppT config
-            }
-    return config
+  let
+    serverState = getField @"_serverState" config
+    sid         = getField @"_sid" serverState
+    raftState   = newRaftState sid $ _initState config
+  raftStateRef <- newIORef raftState
+  store        <- newStore sid $ _initLog config
+  tempLog      <- newTempLog
+  snapManager  <- newSnapshotManager $ _snapDirectory config
+  let
+    config = AppConfig
+      { _state       = raftStateRef
+      , _store       = store
+      , _tempLog     = tempLog
+      , _serverState = serverState
+      , _snapManager = snapManager
+      , _run         = flip runAppT config
+      }
+  return config

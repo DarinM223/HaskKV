@@ -1,4 +1,7 @@
-module Tests (allTests) where
+module Tests
+  ( allTests
+  )
+where
 
 import Test.Tasty
 
@@ -10,12 +13,12 @@ import qualified TempLogTest as TempLog
 import qualified RaftTest as Raft
 
 allTests :: TestTree
-allTests = testGroup "Tests"
-    [ Store.tests
-    , Server.tests
-    , Log.tests
-    , TempLog.tests
-    , Snapshot.tests
-    , Raft.tests
-    ]
-
+allTests = testGroup
+  "Tests"
+  [ Store.tests
+  , Server.tests
+  , Log.tests
+  , TempLog.tests
+  , Snapshot.tests
+  , Raft.tests
+  ]

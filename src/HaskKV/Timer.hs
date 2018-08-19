@@ -21,31 +21,31 @@ data Timer = Timer
 
 new :: STM Timer
 new = do
-    thread <- newEmptyTMVar
-    var <- newEmptyTMVar
-    return $ Timer thread var
+  thread <- newEmptyTMVar
+  var    <- newEmptyTMVar
+  return $ Timer thread var
 
 newIO :: IO Timer
 newIO = do
-    thread <- newEmptyTMVarIO
-    var <- newEmptyTMVarIO
-    return $ Timer thread var
+  thread <- newEmptyTMVarIO
+  var    <- newEmptyTMVarIO
+  return $ Timer thread var
 
 reset :: (MonadIO m) => Timer -> Timeout -> m ()
 reset t (Timeout timeout) = liftIO $ do
-    cancel t
+  cancel t
 
-    n <- forkIO $ do
-        threadDelay timeout
-        atomically $ tryPutTMVar (_var t) ()
-        return ()
+  n <- forkIO $ do
+    threadDelay timeout
+    atomically $ tryPutTMVar (_var t) ()
+    return ()
 
-    atomically $ putTMVar (_thread t) n
+  atomically $ putTMVar (_thread t) n
 
 cancel :: (MonadIO m) => Timer -> m ()
 cancel t = liftIO $ do
-    tid <- atomically $ tryTakeTMVar (_thread t)
-    mapM_ killThread tid
+  tid <- atomically $ tryTakeTMVar (_thread t)
+  mapM_ killThread tid
 
 await :: Timer -> STM ()
 await = takeTMVar . _var

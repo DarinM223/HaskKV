@@ -1,4 +1,7 @@
-module LogTest (tests) where
+module LogTest
+  ( tests
+  )
+where
 
 import Test.Tasty
 

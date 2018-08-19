@@ -15,33 +15,33 @@ import qualified Data.IntMap as IM
 type Time = UTCTime
 
 data LeaderState = LeaderState
-    { _nextIndex  :: IM.IntMap LogIndex
-    , _matchIndex :: IM.IntMap LogIndex
-    } deriving (Show, Eq)
+  { _nextIndex  :: IM.IntMap LogIndex
+  , _matchIndex :: IM.IntMap LogIndex
+  } deriving (Show, Eq)
 makeFieldsNoPrefix ''LeaderState
 
 data StateType
-    = Follower
-    | Candidate Int
-    | Leader LeaderState
-    deriving (Show, Eq)
+  = Follower
+  | Candidate Int
+  | Leader LeaderState
+  deriving (Show, Eq)
 makePrisms ''StateType
 
 data RaftState = RaftState
-    { _stateType   :: StateType
-    , _currTerm    :: LogTerm
-    , _votedFor    :: Maybe SID
-    , _leader      :: Maybe SID
-    , _commitIndex :: LogIndex
-    , _lastApplied :: LogIndex
-    , _serverID    :: SID
-    } deriving (Show, Eq)
+  { _stateType   :: StateType
+  , _currTerm    :: LogTerm
+  , _votedFor    :: Maybe SID
+  , _leader      :: Maybe SID
+  , _commitIndex :: LogIndex
+  , _lastApplied :: LogIndex
+  , _serverID    :: SID
+  } deriving (Show, Eq)
 makeFieldsNoPrefix ''RaftState
 
 data PersistentState = PersistentState
-    { _currTerm :: LogTerm
-    , _votedFor :: Maybe SID
-    } deriving (Show, Eq, Generic)
+  { _currTerm :: LogTerm
+  , _votedFor :: Maybe SID
+  } deriving (Show, Eq, Generic)
 
 instance Binary PersistentState
 
@@ -50,17 +50,17 @@ persistentStateFilename (SID sid) = show sid ++ ".state"
 
 newPersistentState :: RaftState -> PersistentState
 newPersistentState s = PersistentState
-    { _currTerm = getField @"_currTerm" s
-    , _votedFor = getField @"_votedFor" s
-    }
+  { _currTerm = getField @"_currTerm" s
+  , _votedFor = getField @"_votedFor" s
+  }
 
 newRaftState :: SID -> Maybe PersistentState -> RaftState
 newRaftState sid s = RaftState
-    { _stateType   = Follower
-    , _currTerm    = fromMaybe 0 . fmap (getField @"_currTerm") $ s
-    , _votedFor    = s >>= getField @"_votedFor"
-    , _leader      = Nothing
-    , _commitIndex = 0
-    , _lastApplied = 0
-    , _serverID    = sid
-    }
+  { _stateType   = Follower
+  , _currTerm    = fromMaybe 0 . fmap (getField @"_currTerm") $ s
+  , _votedFor    = s >>= getField @"_votedFor"
+  , _leader      = Nothing
+  , _commitIndex = 0
+  , _lastApplied = 0
+  , _serverID    = sid
+  }
