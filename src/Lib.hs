@@ -59,7 +59,7 @@ handleArgs (path : sid : _) = do
     <*> configToServerState sid' config
     <*> pure (configSnapshotDirectory sid' config)
   appConfig <- newAppConfig initAppConfig :: IO MyConfig
-  flip runAppT appConfig $ runMaybeT $ do
+  _run appConfig $ runMaybeT $ do
     (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
     snapshot         <- lift (readSnapshot index) >>= MaybeT . pure
     lift $ loadSnapshot index term snapshot
@@ -67,7 +67,7 @@ handleArgs (path : sid : _) = do
   -- Run Raft server and handler.
   let serverState = getField @"_serverState" appConfig
   mapM_ (\p -> runServer p "*" settings serverState) raftPort
-  forkIO $ forever $ runAppT run appConfig
+  forkIO $ forever $ _run appConfig run
 
   -- Run API server.
   mapM_ (flip Warp.run (serve api (server appConfig))) apiPort

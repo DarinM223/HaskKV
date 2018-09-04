@@ -27,29 +27,21 @@ type StoreAPI k v
   :<|> "set" :> Capture "key" k :> ReqBody '[JSON] v :> Post '[JSON] ()
   :<|> "delete" :> Capture "key" k :> Delete '[JSON] ()
 
+type MyHandler msg k v e a = ExceptT ServantErr (App msg k v e) a
+
 api :: Proxy (StoreAPI k v)
 api = Proxy
 
-get
-  :: (Constr k v e m, MonadError ServantErr m)
-  => k
-  -> AppT msg k v e m (Maybe v)
+get :: (Constr k v e) => k -> MyHandler msg k v e (Maybe v)
 get key = checkLeader $ getValue key
 
-set
-  :: (MonadIO m, MonadError ServantErr m)
-  => k
-  -> v
-  -> AppT msg k v (LogEntry k v) m ()
+set :: k -> v -> MyHandler msg k v (LogEntry k v) ()
 set key value = checkLeader $ applyEntryData $ Change (TID 0) key value
 
-delete
-  :: (MonadIO m, MonadError ServantErr m)
-  => k
-  -> AppT msg k v (LogEntry k v) m ()
+delete :: k -> MyHandler msg k v (LogEntry k v) ()
 delete key = checkLeader $ applyEntryData $ Delete (TID 0) key
 
-isLeader :: (MonadIO m) => AppT msg k v e m Bool
+isLeader :: App msg k v e Bool
 isLeader = do
   ref   <- asks _state
   state <- liftIO $ readIORef ref
@@ -57,16 +49,13 @@ isLeader = do
     Leader _ -> return True
     _        -> return False
 
-checkLeader
-  :: (MonadIO m, MonadError ServantErr m)
-  => AppT msg k v e m r
-  -> AppT msg k v e m r
-checkLeader handler = isLeader >>= \case
-  True  -> handler
-  False -> lift $ throwError err404
+checkLeader :: App msg k v e r -> MyHandler msg k v e r
+checkLeader handler = lift isLeader >>= \case
+  True  -> lift handler
+  False -> throwError err404
 
-convertApp :: AppConfig msg k v e -> AppT msg k v e Handler a -> Handler a
-convertApp = flip runAppT
+convertApp :: AppConfig msg k v e -> MyHandler msg k v e a -> Handler a
+convertApp config = Handler . ExceptT . flip runApp config . runExceptT
 
 server
   :: (KeyClass k, ValueClass v, FromHttpApiData k, FromJSON v, ToJSON v)
@@ -75,8 +64,7 @@ server
 server config = hoistServer api (convertApp config) server
   where server = get :<|> set :<|> delete
 
-applyEntryData
-  :: (MonadIO m) => LogEntryData k v -> AppT msg k v (LogEntry k v) m ()
+applyEntryData :: LogEntryData k v -> App msg k v (LogEntry k v) ()
 applyEntryData entryData = ask >>= \config -> liftIO $ do
   completed <- Completed . Just <$> newEmptyTMVarIO
   let
