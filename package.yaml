@@ -49,6 +49,7 @@ dependencies:
 
 default-extensions:
 - BangPatterns
+- BlockArguments
 - ConstraintKinds
 - DataKinds
 - DefaultSignatures
@@ -58,6 +59,7 @@ default-extensions:
 - DeriveLift
 - DeriveTraversable
 - DerivingStrategies
+- DerivingVia
 - DuplicateRecordFields
 - EmptyCase
 - ExistentialQuantification
@@ -70,8 +72,10 @@ default-extensions:
 - KindSignatures
 - LambdaCase
 - MultiParamTypeClasses
+- NumericUnderscores
 - OverloadedStrings
 - PatternSynonyms
+- QuantifiedConstraints
 - RankNTypes
 - ScopedTypeVariables
 - StandaloneDeriving
@@ -88,6 +92,7 @@ ghc-options:
 - -Wincomplete-uni-patterns
 - -Wredundant-constraints
 - -fshow-hole-constraints
+- -haddock
 
 library:
   source-dirs: src

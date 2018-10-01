@@ -36,7 +36,7 @@ newtype ServerT m a = ServerT { unServerT :: m a }
 
 newServerState :: Capacity -> Timeout -> Timeout -> SID -> IO (ServerState msg)
 newServerState backpressure electionTimeout heartbeatTimeout sid = do
-  messages       <- newTBQueueIO (unCapacity backpressure)
+  messages       <- newTBQueueIO $ fromIntegral $ unCapacity backpressure
   electionTimer  <- Timer.newIO
   heartbeatTimer <- Timer.newIO
 

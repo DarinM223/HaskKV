@@ -76,5 +76,5 @@ configToServerState sid config@Config { _backpressure = backpressure, _electionT
     return initServerState { _outgoing = outgoing' }
  where
   insert backpressure outgoing ServerData { _id = sid } = do
-    bq <- newTBQueueIO (unCapacity backpressure)
+    bq <- newTBQueueIO $ fromIntegral $ unCapacity backpressure
     return $ IM.insert (unSID sid) bq outgoing

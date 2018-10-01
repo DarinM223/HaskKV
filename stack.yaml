@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-11.1
+resolver: nightly-2018-10-01
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -39,8 +39,18 @@ packages:
 - .
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
+
+allow-newer: true
 extra-deps:
-- rolling-queue-0.1
+- binary-orphans-0.1.8.0
+- servant-0.14.1
+- servant-server-0.14.1
+- http-media-0.7.1.2
+- vector-binary-instances-0.2.4
+- wai-app-static-3.1.6.2
+- cryptonite-0.25
+- memory-0.14.18
+- mime-types-0.1.0.8
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

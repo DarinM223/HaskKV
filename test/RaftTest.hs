@@ -259,10 +259,11 @@ testLeaderDecrementsMatch = testCase "Leader decrements match on fail" $ do
       state4 <- MockT $ preuse $ ix 1 . raftState . stateType . _Leader
 
       return (msgs, state1, state2, state3, state4)
-    (Just msgs, s1, s2, s3, s4) = result
+    (msgs, s1, s2, s3, s4) = result
+    msgs' = fromJust msgs
     failResp = AppendResponse {_term = 1, _success = False, _lastIndex = 0}
-  elem (Response 2 failResp) msgs
-    && elem (Response 5 failResp) msgs
+  elem (Response 2 failResp) msgs'
+    && elem (Response 5 failResp) msgs'
     @? "Servers 2 and 5 didn't respond with failure"
   s1 @?= Just LeaderState
     { _nextIndex  = IM.fromList [(1, 4), (2, 3), (3, 4), (4, 4), (5, 3)]
