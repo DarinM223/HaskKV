@@ -29,7 +29,6 @@ dependencies:
 - conduit
 - conduit-extra
 - containers
-- deriving-compat
 - directory
 - filepath
 - heaps

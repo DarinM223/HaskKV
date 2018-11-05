@@ -1,12 +1,9 @@
-{-# LANGUAGE TemplateHaskell #-}
-
 module HaskKV.Monad where
 
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Binary
 import Data.Binary.Orphans ()
-import Data.Deriving.Via
 import Data.IORef
 import GHC.Records
 import HaskKV.Constr
@@ -69,9 +66,8 @@ newtype App msg k v e a = App
   deriving DebugM via PrintDebugT (App msg k v e)
   deriving PersistM via PersistT (App msg k v e)
 
--- FIXME(DarinM223): How to use deriving via to derive this instance?
-$(deriveVia [t| forall msg k v e. (Constr k v e, e ~ LogEntry k v) =>
-    ApplyEntryM k v e (App msg k v e) `Via` StoreT (App msg k v e) |])
+deriving via StoreT (App msg k v e) instance (Constr k v e, e ~ LogEntry k v)
+  => ApplyEntryM k v e (App msg k v e)
 
 runApp :: App msg k v e a -> AppConfig msg k v e -> IO a
 runApp m config = flip runReaderT config . unApp $ m
