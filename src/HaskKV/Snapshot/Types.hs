@@ -22,14 +22,15 @@ data SnapshotChunk = SnapshotChunk
   , _term   :: LogTerm
   } deriving (Show, Eq)
 
-class (Binary s) => SnapshotM s m | m -> s where
-  createSnapshot :: LogIndex -> LogTerm -> m ()
-  writeSnapshot  :: FilePos -> B.ByteString -> LogIndex -> m ()
-  saveSnapshot   :: LogIndex -> m ()
-  readSnapshot   :: LogIndex -> m (Maybe s)
-  hasChunk       :: SID -> m Bool
-  readChunk      :: Int -> SID -> m (Maybe SnapshotChunk)
-  snapshotInfo   :: m (Maybe (LogIndex, LogTerm, FileSize))
+data SnapshotM s m = SnapshotM
+  { createSnapshot :: LogIndex -> LogTerm -> m ()
+  , writeSnapshot  :: FilePos -> B.ByteString -> LogIndex -> m ()
+  , saveSnapshot   :: LogIndex -> m ()
+  , readSnapshot   :: LogIndex -> m (Maybe s)
+  , hasChunk       :: SID -> m Bool
+  , readChunk      :: Int -> SID -> m (Maybe SnapshotChunk)
+  , snapshotInfo   :: m (Maybe (LogIndex, LogTerm, FileSize))
+  }
 
 data Snapshot = Snapshot
   { _file     :: Handle
@@ -52,9 +53,3 @@ data SnapshotManager = SnapshotManager
   { _snapshots     :: TVar Snapshots
   , _directoryPath :: FilePath
   }
-
-class HasSnapshotManager r where
-  getSnapshotManager :: r -> SnapshotManager
-
-newtype SnapshotT m a = SnapshotT { unSnapshotT :: m a }
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)

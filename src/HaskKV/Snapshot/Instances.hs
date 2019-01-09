@@ -1,5 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
-
 module HaskKV.Snapshot.Instances where
 
 import Control.Concurrent.STM
@@ -8,6 +6,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Binary (Binary, decode)
 import Data.Foldable (find)
+import Data.Generics.Product.Typed
 import GHC.IO.Handle
 import GHC.Records
 import HaskKV.Snapshot.Types
@@ -21,25 +20,28 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.IntMap as IM
 
-instance
-  ( MonadIO m
-  , MonadReader r m
-  , HasSnapshotManager r
-  , HasSnapshotType s m
-  ) => SnapshotM s (SnapshotT m) where
+snapshotMIO :: ( HasType SnapshotManager r, HasSnapshotType s m
+               , MonadReader r m, MonadIO m)
+            => SnapshotM s m
+snapshotMIO = SnapshotM
+  { createSnapshot = createSnapshot'
+  , writeSnapshot  = writeSnapshot'
+  , saveSnapshot   = saveSnapshot'
+  , readSnapshot   = readSnapshot'
+  , hasChunk       = hasChunk'
+  , readChunk      = readChunk'
+  , snapshotInfo   = snapshotInfo'
+  }
 
-  createSnapshot i t =
-    liftIO . createSnapshotImpl i t =<< asks getSnapshotManager
-  writeSnapshot o d i =
-    liftIO . writeSnapshotImpl o d i =<< asks getSnapshotManager
-  saveSnapshot i = liftIO . saveSnapshotImpl i =<< asks getSnapshotManager
-  readSnapshot i = liftIO . readSnapshotImpl i =<< asks getSnapshotManager
-  hasChunk i = liftIO . hasChunkImpl i =<< asks getSnapshotManager
-  readChunk a i = liftIO . readChunkImpl a i =<< asks getSnapshotManager
-  snapshotInfo = liftIO . snapshotInfoImpl =<< asks getSnapshotManager
+type SM = SnapshotManager
+type SMClass r m = (HasType SM r, MonadReader r m, MonadIO m)
 
-createSnapshotImpl :: LogIndex -> LogTerm -> SnapshotManager -> IO ()
-createSnapshotImpl index term manager = do
+getManager :: SMClass r m => (SnapshotManager -> IO a) -> m a
+getManager m = asks (getTyped @SnapshotManager) >>= liftIO . m
+
+createSnapshot' :: SMClass r m => LogIndex -> LogTerm -> m ()
+createSnapshot' index term = getManager $ \manager -> do
+  let filename = _directoryPath manager </> partialFilename index term
   handle <- openFile filename WriteMode
   atomically $ modifyTVar (_snapshots manager) $ \s ->
     let
@@ -51,11 +53,9 @@ createSnapshotImpl index term manager = do
         , _offset   = 0
         }
     in s { _partial = snap : _partial s }
-  where filename = _directoryPath manager </> partialFilename index term
 
-writeSnapshotImpl
-  :: FilePos -> B.ByteString -> LogIndex -> SnapshotManager -> IO ()
-writeSnapshotImpl offset snapData index manager = do
+writeSnapshot' :: SMClass r m => FilePos -> B.ByteString -> LogIndex -> m ()
+writeSnapshot' offset snapData index = getManager $ \manager -> do
   snapshots <- readTVarIO $ _snapshots manager
   partial'  <- mapM (putAndUpdate offset snapData index) (_partial snapshots)
   atomically $ modifyTVar (_snapshots manager) $ \s -> s { _partial = partial' }
@@ -77,8 +77,8 @@ writeSnapshotImpl offset snapData index manager = do
       offset <- getPos <$> hGetPosn (_file snap)
       return (snap { _offset = offset } :: Snapshot)
 
-readSnapshotImpl :: (Binary s) => LogIndex -> SnapshotManager -> IO (Maybe s)
-readSnapshotImpl index manager =
+readSnapshot' :: (Binary s, SMClass r m) => LogIndex -> m (Maybe s)
+readSnapshot' index = getManager $ \manager -> do
   handle (\(_ :: SomeException) -> return Nothing) $ do
     snapshots <- readTVarIO $ _snapshots manager
     case _completed snapshots of
@@ -86,15 +86,15 @@ readSnapshotImpl index manager =
         Just . decode <$> BL.readFile path
       _ -> return Nothing
 
-hasChunkImpl :: SID -> SnapshotManager -> IO Bool
-hasChunkImpl (SID i) manager = do
+hasChunk' :: SMClass r m => SID -> m Bool
+hasChunk' (SID i) = getManager $ \manager -> do
   snapshots <- readTVarIO $ _snapshots manager
   case IM.lookup i $ _chunks snapshots of
     Just handle -> not <$> hIsEOF handle
     Nothing     -> return False
 
-readChunkImpl :: Int -> SID -> SnapshotManager -> IO (Maybe SnapshotChunk)
-readChunkImpl amount (SID sid) manager = do
+readChunk' :: SMClass r m => Int -> SID -> m (Maybe SnapshotChunk)
+readChunk' amount (SID sid) = getManager $ \manager -> do
   snapshots <- readTVarIO $ _snapshots manager
   case _completed snapshots of
     Just snap@Snapshot { _filepath = filepath } -> do
@@ -125,8 +125,8 @@ readChunkImpl amount (SID sid) manager = do
       return $ Just chunk
     _ -> return Nothing
 
-saveSnapshotImpl :: LogIndex -> SnapshotManager -> IO ()
-saveSnapshotImpl index manager = do
+saveSnapshot' :: SMClass r m => LogIndex -> m ()
+saveSnapshot' index = getManager $ \manager -> do
   snapshots <- readTVarIO $ _snapshots manager
   let snap = find ((== index) . getField @"_index") . _partial $ snapshots
 
@@ -166,8 +166,8 @@ saveSnapshotImpl index manager = do
     Snapshot { _index = i } | i > index -> pure True
     _ -> pure False
 
-snapshotInfoImpl :: SnapshotManager -> IO (Maybe (LogIndex, LogTerm, FileSize))
-snapshotInfoImpl manager = do
+snapshotInfo' :: SMClass r m => m (Maybe (LogIndex, LogTerm, FileSize))
+snapshotInfo' = getManager $ \manager -> do
   snapshots <- readTVarIO $ _snapshots manager
   size <- maybe (pure Nothing) (fmap (Just . fromIntegral) . hFileSize . _file)
     $ _completed snapshots

@@ -26,34 +26,24 @@ class Storable v where
 type KeyClass k = (Show k, Ord k, Binary k)
 type ValueClass v = (Show v, Storable v, Binary v)
 
-class (Monad s, KeyClass k, ValueClass v) => StorageM k v s | s -> k v where
-  -- | Gets a value from the store given a key.
-  getValue :: k -> s (Maybe v)
-
-  -- | Sets a value in the store given a key-value pairing.
-  setValue :: k -> v -> s ()
-
-  -- | Only sets the values if the CAS values match.
+data StorageM k v m = StorageM
+  { getValue :: k -> m (Maybe v)
+  -- ^ Gets a value from the store given a key.
+  , setValue :: k -> v -> m ()
+  -- ^ Sets a value in the store given a key-value pairing.
+  , replaceValue :: k -> v -> m (Maybe CAS)
+  -- ^ Only sets the values if the CAS values match.
   --
   -- Returns the new CAS value if they match,
   -- Nothing otherwise.
-  replaceValue :: k -> v -> s (Maybe CAS)
-
-  -- | Deletes a value in the store given a key.
-  deleteValue :: k -> s ()
-
-  -- | Deletes all values that passed the expiration time.
-  cleanupExpired :: Time -> s ()
-
-class (Binary s) => LoadSnapshotM s m | m -> s where
-  loadSnapshot :: LogIndex -> LogTerm -> s -> m ()
-
-class (StorageM k v m, LogM e m) => ApplyEntryM k v e m | m -> k v e where
-  -- | Applies a log entry.
-  applyEntry :: e -> m ()
-
-class TakeSnapshotM m where
-  takeSnapshot :: m ()
+  , deleteValue :: k -> m ()
+  -- ^ Deletes a value in the store given a key.
+  , cleanupExpired :: Time -> m ()
+  -- ^ Deletes all values that passed the expiration time.
+  }
+type LoadSnapshotM s m = Binary s => LogIndex -> LogTerm -> s -> m ()
+newtype ApplyEntryM e m = ApplyEntryM (e -> m ())
+newtype TakeSnapshotM m = TakeSnapshotM (m ())
 
 data StoreValue v = StoreValue
   { _expireTime :: Maybe Time
@@ -84,15 +74,7 @@ data StoreData k v e = StoreData
   } deriving (Show)
 
 newtype Store k v e = Store { unStore :: TVar (StoreData k v e) }
-
-class HasStore k v e r | r -> k v e where
-  getStore :: r -> Store k v e
-
-newtype StoreT m a = StoreT { unStoreT :: m a }
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
-
-instance MonadTrans StoreT where
-  lift = StoreT
+class HasStore k v e r | r -> k v e where getStore :: r -> Store k v e
 
 newStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
 newStoreValue seconds version val = do
