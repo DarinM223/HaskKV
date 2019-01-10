@@ -132,8 +132,6 @@ loadSnapshot lastIndex lastTerm map
   .   flip modifyTVar' (loadSnapshotStore lastIndex lastTerm map)
   .   unStore
 
-class HasRun m r where getRun :: r -> (forall a. m a -> IO a)
-
 takeSnapshot
   :: ( KeyClass k, ValueClass v, Entry e
      , HasStore k v e r, HasRun m r

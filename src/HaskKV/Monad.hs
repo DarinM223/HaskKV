@@ -17,25 +17,19 @@ import HaskKV.Server.All
 import HaskKV.Snapshot.All
 import HaskKV.Store.All
 
-data AppConfig msg k v e = AppConfig
+data AppConfig msg k v e m = AppConfig
   { _state       :: IORef RaftState
   , _store       :: Store k v e
   , _tempLog     :: TempLog e
   , _serverState :: ServerState msg
   , _snapManager :: SnapshotManager
-  , _run         :: Fn msg k v e
+  , _run         :: forall a. m a -> IO a
   }
 
-instance HasServerState msg (AppConfig msg k v e) where
-  getServerState = _serverState
-instance HasStore k v e (AppConfig msg k v e) where
-  getStore = _store
-instance HasTempLog e (AppConfig msg k v e) where
-  getTempLog = _tempLog
-instance HasSnapshotManager (AppConfig msg k v e) where
-  getSnapshotManager = _snapManager
-instance HasRun msg k v e (AppConfig msg k v e) where
-  getRun = _run
+instance HasServerState msg (AppConfig msg k v e m) where getServerState = _serverState
+instance HasStore k v e (AppConfig msg k v e m) where getStore = _store
+instance HasTempLog e (AppConfig msg k v e m) where getTempLog = _tempLog
+instance HasRun m (AppConfig msg k v e m) where getRun = _run
 
 data InitAppConfig msg e = InitAppConfig
   { _initLog       :: Maybe (Log e)
@@ -52,30 +46,18 @@ instance (Binary k, Binary v) =>
   HasSnapshotType (SnapshotType k v) (App msg k v e)
 
 newtype App msg k v e a = App
-  { unApp :: ReaderT (AppConfig msg k v e) IO a }
+  { unApp :: ReaderT (AppConfig msg k v e (App msg k v e)) IO a }
   deriving ( Functor, Applicative, Monad, MonadIO
-           , MonadReader (AppConfig msg k v e)
+           , MonadReader (AppConfig msg k v e (App msg k v e))
            )
-  deriving (ServerM msg ServerEvent) via ServerT (App msg k v e)
-  deriving (StorageM k v) via StoreT (App msg k v e)
-  deriving (LogM e) via StoreT (App msg k v e)
-  deriving (LoadSnapshotM (SnapshotType k v)) via StoreT (App msg k v e)
-  deriving TakeSnapshotM via StoreT (App msg k v e)
-  deriving (TempLogM e) via TempLogT (App msg k v e)
-  deriving (SnapshotM (SnapshotType k v)) via SnapshotT (App msg k v e)
-  deriving DebugM via PrintDebugT (App msg k v e)
-  deriving PersistM via PersistT (App msg k v e)
 
-deriving via StoreT (App msg k v e) instance (Constr k v e, e ~ LogEntry k v)
-  => ApplyEntryM k v e (App msg k v e)
-
-runApp :: App msg k v e a -> AppConfig msg k v e -> IO a
+runApp :: App msg k v e a -> AppConfig msg k v e (App msg k v e) -> IO a
 runApp m config = flip runReaderT config . unApp $ m
 
 newAppConfig
   :: (KeyClass k, ValueClass v, e ~ LogEntry k v)
   => InitAppConfig msg e
-  -> IO (AppConfig msg k v e)
+  -> IO (AppConfig msg k v e (App msg k v e))
 newAppConfig config = do
   let
     serverState = getField @"_serverState" config

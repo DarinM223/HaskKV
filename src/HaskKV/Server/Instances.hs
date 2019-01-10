@@ -1,5 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
-
 module HaskKV.Server.Instances where
 
 import Control.Concurrent.STM
@@ -15,30 +13,35 @@ inject :: ServerEvent -> ServerState msg -> IO ()
 inject HeartbeatTimeout s = Timer.reset (_heartbeatTimer s) 0
 inject ElectionTimeout  s = Timer.reset (_electionTimer s) 0
 
-instance (MonadIO m, MonadReader r m, HasServerState msg r)
-  => ServerM msg ServerEvent (ServerT m) where
+type SSClass msg r m = (HasServerState msg r, MonadReader r m, MonadIO m)
 
-  send i msg = liftIO . sendImpl i msg =<< asks getServerState
-  broadcast msg = liftIO . broadcastImpl msg =<< asks getServerState
-  recv = liftIO . recvImpl =<< asks getServerState
-  reset e = liftIO . resetImpl e =<< asks getServerState
-  serverIds = serverIdsImpl <$> asks getServerState
+getSS :: SSClass msg r m => (ServerState msg -> IO a) -> m a
+getSS m = asks getServerState >>= liftIO . m
 
-sendImpl :: SID -> msg -> ServerState msg -> IO ()
-sendImpl (SID i) msg s = do
-  let bq = IM.lookup i . _outgoing $ s
+serverMIO :: SSClass msg r m => ServerM msg ServerEvent m
+serverMIO = ServerM
+  { send      = send'
+  , broadcast = broadcast'
+  , recv      = recv'
+  , reset     = reset'
+  , serverIds = serverIds' <$> asks getServerState
+  }
+
+send' :: SSClass msg r m => SID -> msg -> m ()
+send' (SID i) msg = getSS $ \state -> do
+  let bq = IM.lookup i . _outgoing $ state
   mapM_ (atomically . flip writeTBQueue msg) bq
 
-broadcastImpl :: msg -> ServerState msg -> IO ()
-broadcastImpl msg ss =
+broadcast' :: SSClass msg r m => msg -> m ()
+broadcast' msg = getSS $ \ss ->
   atomically
     . mapM_ ((`writeTBQueue` msg) . snd)
     . filter ((/= _sid ss) . SID . fst)
     . IM.assocs
     $ _outgoing ss
 
-recvImpl :: ServerState msg -> IO (Either ServerEvent msg)
-recvImpl s =
+recv' :: SSClass msg r m => m (Either ServerEvent msg)
+recv' = getSS $ \s ->
   atomically
     $   awaitElectionTimeout s
     <|> awaitHeartbeatTimeout s
@@ -49,12 +52,12 @@ recvImpl s =
   awaitHeartbeatTimeout =
     fmap (const (Left HeartbeatTimeout)) . Timer.await . _heartbeatTimer
 
-resetImpl :: ServerEvent -> ServerState msg -> IO ()
-resetImpl HeartbeatTimeout s =
+reset' :: SSClass msg r m => ServerEvent -> m ()
+reset' HeartbeatTimeout = getSS $ \s ->
   Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
-resetImpl ElectionTimeout s = do
+resetImpl ElectionTimeout s = getSS $ \s -> do
   timeout <- Timer.randTimeout $ _electionTimeout s
   Timer.reset (_electionTimer s) timeout
 
-serverIdsImpl :: ServerState msg -> [SID]
-serverIdsImpl = fmap SID . IM.keys . _outgoing
+serverIds' :: ServerState msg -> [SID]
+serverIds' = fmap SID . IM.keys . _outgoing

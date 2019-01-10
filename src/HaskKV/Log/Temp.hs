@@ -16,9 +16,7 @@ import HaskKV.Types
 import qualified HaskKV.Timer as Timer
 
 newtype TempLog e = TempLog { unTempLog :: MVar [e] }
-
-class HasTempLog e r | r -> e where
-  getTempLog :: r -> TempLog e
+class HasTempLog e r | r -> e where getTempLog :: r -> TempLog e
 
 newTempLog :: IO (TempLog e)
 newTempLog = TempLog <$> newMVar []
@@ -26,24 +24,26 @@ newTempLog = TempLog <$> newMVar []
 maxTempEntries :: Int
 maxTempEntries = 1000
 
-newtype TempLogT m a = TempLogT { unTempLogT :: m a }
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
+type TLClass e r m = (HasTempLog e r, MonadReader r m, MonadIO m)
 
-instance (MonadIO m, MonadReader r m, HasTempLog e r)
-  => TempLogM e (TempLogT m) where
+tempLogMIO :: TLClass e r m => TempLogM e m
+tempLogMIO = TempLogM
+  { addTemporaryEntry = addTemporaryEntry'
+  , temporaryEntries  = temporaryEntries'
+  }
 
-  addTemporaryEntry e = liftIO . addTemporaryEntryImpl e =<< asks getTempLog
-  temporaryEntries = liftIO . temporaryEntriesImpl =<< asks getTempLog
+getTL :: TLClass e r m => (TempLog e -> IO a) -> m a
+getTL m = asks getTempLog >>= liftIO . m
 
-addTemporaryEntryImpl :: e -> TempLog e -> IO ()
-addTemporaryEntryImpl e = flip modifyMVar_ (pure . addEntry e) . unTempLog
+addTemporaryEntry' :: TLClass e r m => e -> m ()
+addTemporaryEntry' e = getTL $ flip modifyMVar_ (pure . addEntry e) . unTempLog
  where
   addEntry e es
     | length es + 1 > maxTempEntries = es
     | otherwise                      = e : es
 
-temporaryEntriesImpl :: TempLog e -> IO [e]
-temporaryEntriesImpl (TempLog var) = do
+temporaryEntries' :: TLClass e r m => m [e]
+temporaryEntries' = getTL $ \(TempLog var) -> do
   entries <- reverse <$> takeMVar var
   putMVar var []
   return entries
@@ -53,9 +53,10 @@ applyTimeout = 5000000
 
 -- | Stores entry in the log and then blocks until log entry is committed.
 waitApplyEntry
-  :: (MonadIO m, TempLogM e m, HasField "_completed" e Completed) => e -> m ()
-waitApplyEntry entry = do
-  addTemporaryEntry entry
+  :: (MonadIO m, HasField "_completed" e Completed)
+  => TempLogM e m -> e -> m ()
+waitApplyEntry tempLogM entry = do
+  addTemporaryEntry tempLogM entry
 
   liftIO $ do
     timer <- Timer.newIO
