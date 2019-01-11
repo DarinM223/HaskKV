@@ -6,6 +6,7 @@ import Data.Binary
 import Data.Binary.Orphans ()
 import Data.IORef
 import GHC.Records
+import GHC.Generics
 import HaskKV.Constr
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
@@ -17,19 +18,13 @@ import HaskKV.Server.All
 import HaskKV.Snapshot.All
 import HaskKV.Store.All
 
-data AppConfig msg k v e m = AppConfig
+data AppConfig msg k v e = AppConfig
   { _state       :: IORef RaftState
   , _store       :: Store k v e
   , _tempLog     :: TempLog e
   , _serverState :: ServerState msg
   , _snapManager :: SnapshotManager
-  , _run         :: forall a. m a -> IO a
-  }
-
-instance HasServerState msg (AppConfig msg k v e m) where getServerState = _serverState
-instance HasStore k v e (AppConfig msg k v e m) where getStore = _store
-instance HasTempLog e (AppConfig msg k v e m) where getTempLog = _tempLog
-instance HasRun m (AppConfig msg k v e m) where getRun = _run
+  } deriving Generic
 
 data InitAppConfig msg e = InitAppConfig
   { _initLog       :: Maybe (Log e)
@@ -46,18 +41,17 @@ instance (Binary k, Binary v) =>
   HasSnapshotType (SnapshotType k v) (App msg k v e)
 
 newtype App msg k v e a = App
-  { unApp :: ReaderT (AppConfig msg k v e (App msg k v e)) IO a }
+  { unApp :: ReaderT (AppConfig msg k v e) IO a }
   deriving ( Functor, Applicative, Monad, MonadIO
-           , MonadReader (AppConfig msg k v e (App msg k v e))
-           )
+           , MonadReader (AppConfig msg k v e) )
 
-runApp :: App msg k v e a -> AppConfig msg k v e (App msg k v e) -> IO a
+runApp :: App msg k v e a -> AppConfig msg k v e -> IO a
 runApp m config = flip runReaderT config . unApp $ m
 
 newAppConfig
   :: (KeyClass k, ValueClass v, e ~ LogEntry k v)
   => InitAppConfig msg e
-  -> IO (AppConfig msg k v e (App msg k v e))
+  -> IO (AppConfig msg k v e)
 newAppConfig config = do
   let
     serverState = getField @"_serverState" config
@@ -74,6 +68,5 @@ newAppConfig config = do
       , _tempLog     = tempLog
       , _serverState = serverState
       , _snapManager = snapManager
-      , _run         = flip runApp config
       }
   return config

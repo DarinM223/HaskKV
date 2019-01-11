@@ -28,8 +28,6 @@ data ServerState msg = ServerState
   , _electionTimeout  :: Timeout
   , _heartbeatTimeout :: Timeout
   }
-class HasServerState msg r | r -> msg where
-  getServerState :: r -> ServerState msg
 
 newServerState :: Capacity -> Timeout -> Timeout -> SID -> IO (ServerState msg)
 newServerState backpressure electionTimeout heartbeatTimeout sid = do

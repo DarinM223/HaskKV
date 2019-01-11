@@ -1,8 +1,11 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+
 module HaskKV.Server.Instances where
 
 import Control.Concurrent.STM
 import Control.Applicative ((<|>))
 import Control.Monad.Reader
+import Data.Generics.Product.Typed
 import HaskKV.Server.Types
 import HaskKV.Types
 
@@ -13,18 +16,18 @@ inject :: ServerEvent -> ServerState msg -> IO ()
 inject HeartbeatTimeout s = Timer.reset (_heartbeatTimer s) 0
 inject ElectionTimeout  s = Timer.reset (_electionTimer s) 0
 
-type SSClass msg r m = (HasServerState msg r, MonadReader r m, MonadIO m)
+type SSClass msg r m = (HasType (ServerState msg) r, MonadReader r m, MonadIO m)
 
-getSS :: SSClass msg r m => (ServerState msg -> IO a) -> m a
-getSS m = asks getServerState >>= liftIO . m
+getSS :: forall msg r m a. SSClass msg r m => (ServerState msg -> IO a) -> m a
+getSS m = asks (getTyped @(ServerState msg)) >>= liftIO . m
 
-serverMIO :: SSClass msg r m => ServerM msg ServerEvent m
+serverMIO :: forall msg r m. SSClass msg r m => ServerM msg ServerEvent m
 serverMIO = ServerM
   { send      = send'
   , broadcast = broadcast'
   , recv      = recv'
-  , reset     = reset'
-  , serverIds = serverIds' <$> asks getServerState
+  , reset     = reset' @msg
+  , serverIds = serverIds' <$> asks (getTyped @(ServerState msg))
   }
 
 send' :: SSClass msg r m => SID -> msg -> m ()
@@ -52,10 +55,10 @@ recv' = getSS $ \s ->
   awaitHeartbeatTimeout =
     fmap (const (Left HeartbeatTimeout)) . Timer.await . _heartbeatTimer
 
-reset' :: SSClass msg r m => ServerEvent -> m ()
-reset' HeartbeatTimeout = getSS $ \s ->
+reset' :: forall msg r m. SSClass msg r m => ServerEvent -> m ()
+reset' HeartbeatTimeout = getSS @msg $ \s ->
   Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
-resetImpl ElectionTimeout s = getSS $ \s -> do
+reset' ElectionTimeout = getSS @msg $ \s -> do
   timeout <- Timer.randTimeout $ _electionTimeout s
   Timer.reset (_electionTimer s) timeout
 

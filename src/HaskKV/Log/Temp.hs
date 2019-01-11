@@ -1,5 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
-
 module HaskKV.Log.Temp where
 
 import Control.Applicative ((<|>))
@@ -7,6 +5,7 @@ import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Control.Monad.Reader
+import Data.Generics.Product.Typed
 import Data.Maybe (fromJust)
 import GHC.Records
 import HaskKV.Log.Class
@@ -16,7 +15,6 @@ import HaskKV.Types
 import qualified HaskKV.Timer as Timer
 
 newtype TempLog e = TempLog { unTempLog :: MVar [e] }
-class HasTempLog e r | r -> e where getTempLog :: r -> TempLog e
 
 newTempLog :: IO (TempLog e)
 newTempLog = TempLog <$> newMVar []
@@ -24,7 +22,7 @@ newTempLog = TempLog <$> newMVar []
 maxTempEntries :: Int
 maxTempEntries = 1000
 
-type TLClass e r m = (HasTempLog e r, MonadReader r m, MonadIO m)
+type TLClass e r m = (HasType (TempLog e) r, MonadReader r m, MonadIO m)
 
 tempLogMIO :: TLClass e r m => TempLogM e m
 tempLogMIO = TempLogM
@@ -32,8 +30,8 @@ tempLogMIO = TempLogM
   , temporaryEntries  = temporaryEntries'
   }
 
-getTL :: TLClass e r m => (TempLog e -> IO a) -> m a
-getTL m = asks getTempLog >>= liftIO . m
+getTL :: forall e r m a. TLClass e r m => (TempLog e -> IO a) -> m a
+getTL m = asks (getTyped @(TempLog e)) >>= liftIO . m
 
 addTemporaryEntry' :: TLClass e r m => e -> m ()
 addTemporaryEntry' e = getTL $ flip modifyMVar_ (pure . addEntry e) . unTempLog

@@ -53,12 +53,12 @@ checkLeader handler = lift isLeader >>= \case
   True  -> lift handler
   False -> throwError err404
 
-convertApp :: AppConfig msg k v e (App msg k v e) -> MyHandler msg k v e a -> Handler a
+convertApp :: AppConfig msg k v e -> MyHandler msg k v e a -> Handler a
 convertApp config = Handler . ExceptT . flip runApp config . runExceptT
 
 server
   :: (KeyClass k, ValueClass v, FromHttpApiData k, FromJSON v, ToJSON v)
-  => AppConfig msg k v (LogEntry k v) (App msg k v (LogEntry k v))
+  => AppConfig msg k v (LogEntry k v)
   -> Server (StoreAPI k v)
 server config = hoistServer api (convertApp config) server
   where server = get :<|> set :<|> delete

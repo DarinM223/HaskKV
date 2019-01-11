@@ -74,7 +74,6 @@ data StoreData k v e = StoreData
   } deriving (Show)
 
 newtype Store k v e = Store { unStore :: TVar (StoreData k v e) }
-class HasStore k v e r | r -> k v e where getStore :: r -> Store k v e
 
 newStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
 newStoreValue seconds version val = do
