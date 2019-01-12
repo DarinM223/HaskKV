@@ -35,8 +35,8 @@ type StoreClass k v e r m =
   , Entry e
   )
 
-storageMIO :: forall k v e r m. StoreClass k v e r m => StorageM k v m
-storageMIO = StorageM
+mkStorageM :: forall k v e r m. StoreClass k v e r m => StorageM k v m
+mkStorageM = StorageM
   { getValue       = getValue' @_ @_ @e
   , setValue       = setValue' @_ @_ @e
   , replaceValue   = replaceValue' @_ @_ @e
@@ -44,9 +44,9 @@ storageMIO = StorageM
   , cleanupExpired = cleanupExpired' @k @v @e
   }
 
-logMIO :: forall k v e r s m. StoreClass k v e r m
+mkLogM :: forall k v e r s m. StoreClass k v e r m
        => SnapshotM s m -> TakeSnapshotM m -> LogM e m
-logMIO snapM takeSnapM = LogM
+mkLogM snapM takeSnapM = LogM
   { firstIndex    = firstIndex' @k @v @e
   , lastIndex     = lastIndex' @k @v @e
   , loadEntry     = loadEntry' @k @v
@@ -72,8 +72,7 @@ replaceValue'
   => k -> v -> m (Maybe CAS)
 replaceValue' k v = getS @_ @_ @e $ stateTVarIO (replaceKey k v) . unStore
 
-deleteValue' :: forall k v e r m. (SClass k v e r m, Ord k)
-             => k -> m ()
+deleteValue' :: forall k v e r m. (SClass k v e r m, Ord k) => k -> m ()
 deleteValue' k = getS @_ @v @e $ modifyTVarIO (deleteKey k) . unStore
 
 cleanupExpired'

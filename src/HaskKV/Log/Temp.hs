@@ -24,8 +24,8 @@ maxTempEntries = 1000
 
 type TLClass e r m = (HasType (TempLog e) r, MonadReader r m, MonadIO m)
 
-tempLogMIO :: TLClass e r m => TempLogM e m
-tempLogMIO = TempLogM
+mkTempLogM :: TLClass e r m => TempLogM e m
+mkTempLogM = TempLogM
   { addTemporaryEntry = addTemporaryEntry'
   , temporaryEntries  = temporaryEntries'
   }

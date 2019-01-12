@@ -12,21 +12,18 @@ import HaskKV.Types
 import qualified Data.IntMap as IM
 import qualified HaskKV.Timer as Timer
 
-inject :: ServerEvent -> ServerState msg -> IO ()
-inject HeartbeatTimeout s = Timer.reset (_heartbeatTimer s) 0
-inject ElectionTimeout  s = Timer.reset (_electionTimer s) 0
-
 type SSClass msg r m = (HasType (ServerState msg) r, MonadReader r m, MonadIO m)
 
 getSS :: forall msg r m a. SSClass msg r m => (ServerState msg -> IO a) -> m a
 getSS m = asks (getTyped @(ServerState msg)) >>= liftIO . m
 
-serverMIO :: forall msg r m. SSClass msg r m => ServerM msg ServerEvent m
-serverMIO = ServerM
+mkServerM :: forall msg r m. SSClass msg r m => ServerM msg ServerEvent m
+mkServerM = ServerM
   { send      = send'
   , broadcast = broadcast'
   , recv      = recv'
   , reset     = reset' @msg
+  , inject    = inject' @msg
   , serverIds = serverIds' <$> asks (getTyped @(ServerState msg))
   }
 
@@ -61,6 +58,10 @@ reset' HeartbeatTimeout = getSS @msg $ \s ->
 reset' ElectionTimeout = getSS @msg $ \s -> do
   timeout <- Timer.randTimeout $ _electionTimeout s
   Timer.reset (_electionTimer s) timeout
+
+inject' :: forall msg r m. SSClass msg r m => ServerEvent -> m ()
+inject' HeartbeatTimeout = getSS @msg $ \s -> Timer.reset (_heartbeatTimer s) 0
+inject' ElectionTimeout  = getSS @msg $ \s -> Timer.reset (_electionTimer s) 0
 
 serverIds' :: ServerState msg -> [SID]
 serverIds' = fmap SID . IM.keys . _outgoing

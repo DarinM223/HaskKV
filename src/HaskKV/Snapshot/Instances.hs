@@ -20,10 +20,10 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.IntMap as IM
 
-snapshotMIO :: ( HasType SnapshotManager r, HasSnapshotType s m
-               , MonadReader r m, MonadIO m)
+mkSnapshotM :: ( HasType SnapshotManager r, HasSnapshotType s m
+               , MonadReader r m, MonadIO m )
             => SnapshotM s m
-snapshotMIO = SnapshotM
+mkSnapshotM = SnapshotM
   { createSnapshot = createSnapshot'
   , writeSnapshot  = writeSnapshot'
   , saveSnapshot   = saveSnapshot'

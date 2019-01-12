@@ -12,6 +12,7 @@ data ServerM msg e m = ServerM
   , broadcast :: msg -> m ()
   , recv      :: m (Either e msg)
   , reset     :: e -> m ()
+  , inject    :: e -> m ()
   , serverIds :: m [SID]
   }
 
