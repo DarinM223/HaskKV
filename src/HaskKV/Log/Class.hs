@@ -31,3 +31,8 @@ data TempLogM e m = TempLogM
   -- ^ Removes and returns the temporary entries that haven't
   -- been stored in the log yet.
   }
+
+class HasLogM e m cfg | cfg -> e m where
+  getLogM :: cfg -> LogM e m
+class HasTempLogM e m cfg | cfg -> e m where
+  getTempLogM :: cfg -> TempLogM e m

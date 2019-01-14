@@ -53,3 +53,8 @@ data SnapshotManager = SnapshotManager
   { _snapshots     :: TVar Snapshots
   , _directoryPath :: FilePath
   }
+
+class HasSnapshotM s m cfg | cfg -> s m where
+  getSnapshotM :: cfg -> SnapshotM s m
+class HasSnapshotManager cfg where
+  getSnapshotManager :: cfg -> SnapshotManager

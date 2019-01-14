@@ -13,12 +13,12 @@ prevIndex :: Index -> Index
 prevIndex index = if index <= 0 then 0 else index - 1
 
 -- | Returns a range of entries from start to end inclusive.
-entryRange :: (LogM e m) => StartIndex -> EndIndex -> m (Maybe [e])
-entryRange = getEntries []
+entryRange :: Monad m => LogM e m -> StartIndex -> EndIndex -> m (Maybe [e])
+entryRange logM = getEntries []
  where
   getEntries entries start end
     | end < start = return $ Just entries
-    | otherwise = loadEntry end >>= \case
+    | otherwise = loadEntry logM end >>= \case
       Just entry -> getEntries (entry : entries) start (prevIndex end)
       Nothing    -> return Nothing
 
@@ -28,11 +28,12 @@ entryRange = getEntries []
 -- Returns a subset of the passed in entries with only the entries that
 -- don't exist in the log.
 diffEntriesWithLog
-  :: (LogM e m, Entry e)
-  => LastIndex -- Index of the last entry in the log.
+  :: (Entry e, Monad m)
+  => LogM e m
+  -> LastIndex -- Index of the last entry in the log.
   -> [e]       -- Entries to append.
   -> m [e]
-diffEntriesWithLog last entries =
+diffEntriesWithLog logM last entries =
   diffEntriesStart last (zip [0 ..] entries) >>= pure . \case
     Just start -> drop start entries
     Nothing    -> []
@@ -42,8 +43,8 @@ diffEntriesWithLog last entries =
   diffEntriesStart _ [] = return Nothing
   diffEntriesStart lastIndex ((i, e) : es)
     | entryIndex e > lastIndex = return $ Just i
-    | otherwise = termFromIndex (entryIndex e) >>= \case
+    | otherwise = termFromIndex logM (entryIndex e) >>= \case
       Just term | entryTerm e /= term -> do
-        deleteRange (entryIndex e) lastIndex
+        deleteRange logM (entryIndex e) lastIndex
         return $ Just i
       _ -> diffEntriesStart lastIndex es

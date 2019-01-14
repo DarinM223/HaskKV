@@ -31,7 +31,6 @@ dependencies:
 - containers
 - directory
 - filepath
-- generic-lens
 - heaps
 - hslogger
 - lens

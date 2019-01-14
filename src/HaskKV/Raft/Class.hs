@@ -1,5 +1,3 @@
-{-# LANGUAGE UndecidableInstances #-}
-
 module HaskKV.Raft.Class where
 
 import Control.Lens
@@ -8,19 +6,9 @@ import HaskKV.Raft.State
 import HaskKV.Utils
 import System.Log.Logger
 
-class DebugM m where
-  debug :: String -> m ()
+newtype DebugM m = DebugM { debug :: String -> m () }
 
-newtype PrintDebugT m a = PrintDebugT { unPrintDebugT :: m a }
-  deriving (Functor, Applicative, Monad)
-
-instance MonadTrans PrintDebugT where
-  lift = PrintDebugT
-
-instance (MonadIO m, MonadState RaftState m) => DebugM (PrintDebugT m) where
-  debug = debugImpl
-
-debugImpl text = do
+debug' text = do
   sid       <- lift $ use serverID
   stateText <- lift (use stateType) >>= pure . \case
     Follower    -> "Follower"
@@ -29,16 +17,14 @@ debugImpl text = do
   let serverName = "Server " ++ show sid ++ " [" ++ stateText ++ "]:"
   lift $ liftIO $ debugM (show sid) (serverName ++ text)
 
-class PersistM m where
-  persist :: RaftState -> m ()
+newtype PersistM m = PersistM { persist :: RaftState -> m () }
 
-newtype PersistT m a = PersistT { unPersistT :: m a }
-  deriving (Functor, Applicative, Monad, MonadIO)
-
-instance (MonadIO m) => PersistM (PersistT m) where
-  persist = persistImpl
-
-persistImpl state = void <$> liftIO $ persistBinary
+persist' state = void <$> liftIO $ persistBinary
   persistentStateFilename
   (_serverID state)
   (newPersistentState state)
+
+class HasDebugM m cfg | cfg -> m where
+  getDebugM :: cfg -> DebugM m
+class HasPersistM m cfg | cfg -> m where
+  getPersistM :: cfg -> PersistM m

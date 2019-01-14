@@ -48,3 +48,8 @@ newServerState backpressure electionTimeout heartbeatTimeout sid = do
     , _electionTimeout  = electionTimeout
     , _heartbeatTimeout = heartbeatTimeout
     }
+
+class HasServerM msg e m cfg | cfg -> msg e m where
+  getServerM :: cfg -> ServerM msg e m
+class HasServerState msg cfg | cfg -> msg where
+  getServerState :: cfg -> ServerState msg

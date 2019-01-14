@@ -5,7 +5,6 @@ import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Data.Generics.Product.Typed
 import Data.Maybe (fromJust)
 import GHC.Records
 import HaskKV.Log.Class
@@ -22,26 +21,28 @@ newTempLog = TempLog <$> newMVar []
 maxTempEntries :: Int
 maxTempEntries = 1000
 
-type TLClass e r m = (HasType (TempLog e) r, MonadReader r m, MonadIO m)
+class HasTempLog e cfg | cfg -> e where
+  getTempLog :: cfg -> TempLog e
 
-mkTempLogM :: TLClass e r m => TempLogM e m
-mkTempLogM = TempLogM
-  { addTemporaryEntry = addTemporaryEntry'
-  , temporaryEntries  = temporaryEntries'
+type TLClass e cfg m = (HasTempLog e cfg, MonadIO m)
+
+mkTempLogM :: TLClass e cfg m => cfg -> TempLogM e m
+mkTempLogM cfg = TempLogM
+  { addTemporaryEntry = addTemporaryEntry' cfg
+  , temporaryEntries  = temporaryEntries' cfg
   }
 
-getTL :: forall e r m a. TLClass e r m => (TempLog e -> IO a) -> m a
-getTL m = asks (getTyped @(TempLog e)) >>= liftIO . m
-
-addTemporaryEntry' :: TLClass e r m => e -> m ()
-addTemporaryEntry' e = getTL $ flip modifyMVar_ (pure . addEntry e) . unTempLog
+addTemporaryEntry' :: TLClass e cfg m => cfg -> e -> m ()
+addTemporaryEntry' cfg e =
+  liftIO . flip modifyMVar_ (pure . addEntry e) . unTempLog . getTempLog $ cfg
  where
   addEntry e es
     | length es + 1 > maxTempEntries = es
     | otherwise                      = e : es
 
-temporaryEntries' :: TLClass e r m => m [e]
-temporaryEntries' = getTL $ \(TempLog var) -> do
+temporaryEntries' :: TLClass e cfg m => cfg -> m [e]
+temporaryEntries' cfg = liftIO $ do
+  let (TempLog var) = getTempLog cfg
   entries <- reverse <$> takeMVar var
   putMVar var []
   return entries

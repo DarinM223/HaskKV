@@ -6,7 +6,6 @@ import Data.Binary
 import Data.Binary.Orphans ()
 import Data.IORef
 import GHC.Records
-import GHC.Generics
 import HaskKV.Constr
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
@@ -24,7 +23,16 @@ data AppConfig msg k v e = AppConfig
   , _tempLog     :: TempLog e
   , _serverState :: ServerState msg
   , _snapManager :: SnapshotManager
-  } deriving Generic
+  }
+
+instance HasStore k v e (AppConfig msg k v e) where
+  getStore = _store
+instance HasTempLog e (AppConfig msg k v e) where
+  getTempLog = _tempLog
+instance HasServerState msg (AppConfig msg k v e) where
+  getServerState = _serverState
+instance HasSnapshotManager (AppConfig msg k v e) where
+  getSnapshotManager = _snapManager
 
 data InitAppConfig msg e = InitAppConfig
   { _initLog       :: Maybe (Log e)

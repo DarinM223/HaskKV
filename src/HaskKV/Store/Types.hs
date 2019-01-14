@@ -41,9 +41,11 @@ data StorageM k v m = StorageM
   , cleanupExpired :: Time -> m ()
   -- ^ Deletes all values that passed the expiration time.
   }
-type LoadSnapshotM s m = Binary s => LogIndex -> LogTerm -> s -> m ()
-newtype ApplyEntryM e m = ApplyEntryM (e -> m ())
-newtype TakeSnapshotM m = TakeSnapshotM (m ())
+
+newtype LoadSnapshotM s m = LoadSnapshotM
+  { loadSnapshot :: LogIndex -> LogTerm -> s -> m () }
+newtype ApplyEntryM e m = ApplyEntryM { applyEntry :: e -> m () }
+newtype TakeSnapshotM m = TakeSnapshotM { takeSnapshot :: m () }
 
 data StoreValue v = StoreValue
   { _expireTime :: Maybe Time
@@ -97,3 +99,14 @@ newStoreData sid log = StoreData
   , _tempEntries = []
   , _sid         = sid
   }
+
+class HasStorageM k v m cfg | cfg -> k v m where
+  getStorageM :: cfg -> StorageM k v m
+class HasLoadSnapshotM s m cfg | cfg -> s m where
+  getLoadSnapshotM :: cfg -> LoadSnapshotM s m
+class HasApplyEntryM e m cfg | cfg -> e m where
+  getApplyEntryM :: cfg -> ApplyEntryM e m
+class HasTakeSnapshotM m cfg | cfg -> m where
+  getTakeSnapshotM :: cfg -> TakeSnapshotM m
+class HasStore k v e cfg | cfg -> k v e where
+  getStore :: cfg -> Store k v e

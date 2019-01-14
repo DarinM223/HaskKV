@@ -14,38 +14,50 @@ import HaskKV.Server.Types
 import HaskKV.Snapshot.Types
 import HaskKV.Store.Types
 
-handleRequestVote
-  :: ( DebugM m
-     , ServerM (RaftMessage e) ServerEvent m
-     , MonadState RaftState m
-     , LogM e m
-     , PersistM m
-     , Entry e
-     )
-  => RaftMessage e
-  -> RaftState
-  -> m ()
-handleRequestVote rv s
+{-handleRequestVote-}
+{-  :: ( DebugM m-}
+{-     , ServerM (RaftMessage e) ServerEvent m-}
+{-     , MonadState RaftState m-}
+{-     , LogM e m-}
+{-     , PersistM m-}
+{-     , Entry e-}
+{-     )-}
+{-  => RaftMessage e-}
+{-  -> RaftState-}
+{-  -> m ()-}
+handleRequestVote :: ( MonadState RaftState m
+                     , HasServerM (RaftMessage e) ServerEvent m effs
+                     , HasLogM e m effs
+                     , HasDebugM m effs
+                     , HasPersistM m effs
+                     , Entry e )
+                  => effs -> RaftMessage e -> RaftState -> m ()
+handleRequestVote effs rv s
   | existingLeader rv s = fail rv s
   | getField @"_term" rv < getField @"_currTerm" s = fail rv s
   | getField @"_term" rv > getField @"_currTerm" s = do
-    debug "Transitioning to follower"
-    transitionToFollower rv
-    get >>= handleRequestVote rv
+    debug debugM "Transitioning to follower"
+    transitionToFollower persistM rv
+    get >>= handleRequestVote effs rv
   | canVote (_candidateID rv) s = do
-    index <- lastIndex
-    term  <- termFromIndex index
+    index <- lastIndex logM
+    term  <- termFromIndex logM index
     let isValid = checkValid rv index (fromMaybe 0 term)
     if isValid
       then do
-        debug $ "Sending vote to " ++ show (_candidateID rv)
+        debug debugM $ "Sending vote to " ++ show (_candidateID rv)
         votedFor .= Just (_candidateID rv)
-        get >>= persist
-        send (_candidateID rv) $ successResponse s
-        reset ElectionTimeout
+        get >>= persist persistM
+        send serverM (_candidateID rv) $ successResponse s
+        reset serverM ElectionTimeout
       else fail rv s
   | otherwise = fail rv s
  where
+  serverM = getServerM effs
+  logM = getLogM effs
+  debugM = getDebugM effs
+  persistM = getPersistM effs
+
   successResponse s =
     Response (_serverID s) $ VoteResponse (getField @"_currTerm" s) True
   failResponse s =
@@ -56,26 +68,32 @@ handleRequestVote rv s
   canVote cid s =
     getField @"_votedFor" s == Nothing || getField @"_votedFor" s == Just cid
   checkValid rv i t = _lastLogIdx rv >= i && _lastLogTerm rv >= t
-  fail rv = send (_candidateID rv) . failResponse
+  fail rv = send serverM (_candidateID rv) . failResponse
 
-handleAppendEntries
-  :: ( DebugM m
-     , ServerM (RaftMessage e) ServerEvent m
-     , MonadState RaftState m
-     , LogM e m
-     , PersistM m
-     , Entry e
-     )
-  => RaftMessage e
-  -> RaftState
-  -> m ()
-handleAppendEntries ae s
+{-handleAppendEntries-}
+{-  :: ( DebugM m-}
+{-     , ServerM (RaftMessage e) ServerEvent m-}
+{-     , MonadState RaftState m-}
+{-     , LogM e m-}
+{-     , PersistM m-}
+{-     , Entry e-}
+{-     )-}
+{-  => RaftMessage e-}
+{-  -> RaftState-}
+{-  -> m ()-}
+handleAppendEntries :: ( MonadState RaftState m
+                       , HasServerM (RaftMessage e) ServerEvent m effs
+                       , HasLogM e m effs
+                       , HasPersistM m effs
+                       , Entry e )
+                    => effs -> RaftMessage e -> RaftState -> m ()
+handleAppendEntries effs ae s
   | getField @"_term" ae < getField @"_currTerm" s = send (_leaderId ae)
   $ failResponse s
   | getField @"_term" ae > getField @"_currTerm" s = do
     debug "Transitioning to follower"
     transitionToFollower ae
-    get >>= handleAppendEntries ae
+    get >>= handleAppendEntries effs ae
   | otherwise = do
     leader .= Just (_leaderId ae)
     reset ElectionTimeout
@@ -111,18 +129,25 @@ handleAppendEntries ae s
   failResponse s =
     Response (_serverID s) $ AppendResponse (getField @"_currTerm" s) False 0
 
-handleInstallSnapshot
-  :: ( StorageM k v m
-     , LogM e m
-     , ServerM (RaftMessage e) ServerEvent m
-     , SnapshotM s m
-     , LoadSnapshotM s m
-     , Entry e
-     )
-  => RaftMessage e
-  -> RaftState
-  -> m ()
-handleInstallSnapshot is s
+{-handleInstallSnapshot-}
+{-  :: ( StorageM k v m-}
+{-     , LogM e m-}
+{-     , ServerM (RaftMessage e) ServerEvent m-}
+{-     , SnapshotM s m-}
+{-     , LoadSnapshotM s m-}
+{-     , Entry e-}
+{-     )-}
+{-  => RaftMessage e-}
+{-  -> RaftState-}
+{-  -> m ()-}
+handleInstallSnapshot :: ( HasStorageM k v m effs
+                         , HasLogM e m effs
+                         , HasServerM (RaftMessage e) ServerEvent m effs
+                         , HasSnapshotM s m effs
+                         , HasLoadSnapshotM s m effs
+                         , Entry e )
+                      => effs -> RaftMessage e -> RaftState -> m ()
+handleInstallSnapshot effs is s
   | getField @"_term" is < getField @"_currTerm" s = send (_leaderId is)
   $ failResponse s
   | otherwise = do
