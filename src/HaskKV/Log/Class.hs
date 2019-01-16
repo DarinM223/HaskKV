@@ -23,6 +23,8 @@ data LogM e m = LogM
   , deleteRange :: LogIndex -> LogIndex -> m ()
   -- ^ Deletes entries in an inclusive range.
   }
+class HasLogM e m effs | effs -> e m where
+  getLogM :: effs -> LogM e m
 
 data TempLogM e m = TempLogM
   { addTemporaryEntry :: e -> m ()
@@ -31,8 +33,5 @@ data TempLogM e m = TempLogM
   -- ^ Removes and returns the temporary entries that haven't
   -- been stored in the log yet.
   }
-
-class HasLogM e m cfg | cfg -> e m where
-  getLogM :: cfg -> LogM e m
-class HasTempLogM e m cfg | cfg -> e m where
-  getTempLogM :: cfg -> TempLogM e m
+class HasTempLogM e m effs | effs -> e m where
+  getTempLogM :: effs -> TempLogM e m

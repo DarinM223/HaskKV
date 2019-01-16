@@ -6,7 +6,6 @@ import Data.Binary
 import Data.Binary.Orphans ()
 import Data.IORef
 import GHC.Records
-import HaskKV.Constr
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
@@ -16,6 +15,9 @@ import HaskKV.Raft.State
 import HaskKV.Server.All
 import HaskKV.Snapshot.All
 import HaskKV.Store.All
+import qualified Data.Map as M
+
+type SnapshotType k v = M.Map k v
 
 data AppConfig msg k v e = AppConfig
   { _state       :: IORef RaftState

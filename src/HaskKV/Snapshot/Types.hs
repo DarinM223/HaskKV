@@ -31,6 +31,8 @@ data SnapshotM s m = SnapshotM
   , readChunk      :: Int -> SID -> m (Maybe SnapshotChunk)
   , snapshotInfo   :: m (Maybe (LogIndex, LogTerm, FileSize))
   }
+class HasSnapshotM s m effs | effs -> s m where
+  getSnapshotM :: effs -> SnapshotM s m
 
 data Snapshot = Snapshot
   { _file     :: Handle
@@ -53,8 +55,5 @@ data SnapshotManager = SnapshotManager
   { _snapshots     :: TVar Snapshots
   , _directoryPath :: FilePath
   }
-
-class HasSnapshotM s m cfg | cfg -> s m where
-  getSnapshotM :: cfg -> SnapshotM s m
 class HasSnapshotManager cfg where
   getSnapshotManager :: cfg -> SnapshotManager

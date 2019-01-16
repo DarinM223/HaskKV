@@ -15,6 +15,8 @@ data ServerM msg e m = ServerM
   , inject    :: e -> m ()
   , serverIds :: m [SID]
   }
+class HasServerM msg e m effs | effs -> msg e m where
+  getServerM :: effs -> ServerM msg e m
 
 data ServerEvent = ElectionTimeout
                  | HeartbeatTimeout
@@ -29,6 +31,8 @@ data ServerState msg = ServerState
   , _electionTimeout  :: Timeout
   , _heartbeatTimeout :: Timeout
   }
+class HasServerState msg cfg | cfg -> msg where
+  getServerState :: cfg -> ServerState msg
 
 newServerState :: Capacity -> Timeout -> Timeout -> SID -> IO (ServerState msg)
 newServerState backpressure electionTimeout heartbeatTimeout sid = do
@@ -48,8 +52,3 @@ newServerState backpressure electionTimeout heartbeatTimeout sid = do
     , _electionTimeout  = electionTimeout
     , _heartbeatTimeout = heartbeatTimeout
     }
-
-class HasServerM msg e m cfg | cfg -> msg e m where
-  getServerM :: cfg -> ServerM msg e m
-class HasServerState msg cfg | cfg -> msg where
-  getServerState :: cfg -> ServerState msg
