@@ -7,6 +7,7 @@ import Control.Monad.Trans.Maybe
 import GHC.Records
 import HaskKV
 import HaskKV.Store.All
+import HaskKV.Raft.Class
 import Servant.Server (serve)
 import System.Environment (getArgs)
 import System.Log.Logger
@@ -16,8 +17,8 @@ import System.Log.Formatter
 
 import qualified Network.Wai.Handler.Warp as Warp
 
-runApp :: IO ()
-runApp = getArgs >>= handleArgs
+runProg :: IO ()
+runProg = getArgs >>= handleArgs
 
 type MyKey     = Int
 type MyValue   = StoreValue Int
@@ -35,44 +36,51 @@ setLogging sid = do
   updateGlobalLogger sid       (addHandler h)
   updateGlobalLogger "conduit" (addHandler h)
 
-handleArgs = undefined
-{-handleArgs :: [String] -> IO ()-}
-{-handleArgs (path : sid : _) = do-}
-{-  setLogging sid-}
+handleArgs :: [String] -> IO ()
+handleArgs (path : sid : _) = do
+  setLogging sid
 
-{-  let-}
-{-    sid'   = SID $ read sid-}
-{-    config = Config-}
-{-      { _backpressure     = Capacity 100-}
-{-      , _electionTimeout  = 2000000-}
-{-      , _heartbeatTimeout = 1000000-}
-{-      , _serverData       = []-}
-{-      }-}
-{-  config <- readConfig config path-}
-{-  let-}
-{-    raftPort = configRaftPort sid' config-}
-{-    apiPort  = configAPIPort sid' config-}
-{-    settings = configToSettings config-}
-{-  initAppConfig <--}
-{-    InitAppConfig-}
-{-    <$> loadBinary logFilename             sid'-}
-{-    <*> loadBinary persistentStateFilename sid'-}
-{-    <*> configToServerState sid' config-}
-{-    <*> pure (configSnapshotDirectory sid' config)-}
-{-  appConfig <- newAppConfig initAppConfig :: IO MyConfig-}
-{-  _run appConfig $ runMaybeT $ do-}
-{-    (index, term, _) <- lift snapshotInfo >>= MaybeT . pure-}
-{-    snapshot         <- lift (readSnapshot index) >>= MaybeT . pure-}
-{-    lift $ loadSnapshot index term snapshot-}
+  let
+    sid'   = SID $ read sid
+    config = Config
+      { _backpressure     = Capacity 100
+      , _electionTimeout  = 2000000
+      , _heartbeatTimeout = 1000000
+      , _serverData       = []
+      }
+  config <- readConfig config path
+  let
+    raftPort = configRaftPort sid' config
+    apiPort  = configAPIPort sid' config
+    settings = configToSettings config
+  initAppConfig <-
+    InitAppConfig
+    <$> loadBinary logFilename             sid'
+    <*> loadBinary persistentStateFilename sid'
+    <*> configToServerState sid' config
+    <*> pure (configSnapshotDirectory sid' config)
+  appConfig <- mkAppConfig initAppConfig :: IO MyConfig
+  let effs = mkEffs appConfig (flip runApp appConfig)
+      SnapshotM { readSnapshot, snapshotInfo } = _snapshotM effs
+      LoadSnapshotM loadSnapshot = _loadSnapshotM effs
+  flip runApp appConfig $ runMaybeT $ do
+    (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
+    snapshot         <- lift (readSnapshot index) >>= MaybeT . pure
+    lift $ loadSnapshot index term snapshot
 
-{-  -- Run Raft server and handler.-}
-{-  let serverState = getField @"_serverState" appConfig-}
-{-  mapM_ (\p -> runServer p "*" settings serverState) raftPort-}
-{-  forkIO $ forever $ _run appConfig run-}
+  -- Run Raft server and handler.
+  let serverState = getField @"_serverState" appConfig
+  mapM_ (\p -> runServer p "*" settings serverState) raftPort
+  forkIO $ forever $ runApp (run effs) appConfig
 
-{-  -- Run API server.-}
-{-  mapM_ (flip Warp.run (serve api (server appConfig))) apiPort-}
-{-handleArgs _ = do-}
-{-  putStrLn "Invalid arguments passed"-}
-{-  putStrLn "Arguments are:"-}
-{-  putStrLn "[config path] [server id]"-}
+  -- Run API server.
+  let server' = server
+        (_storageM effs)
+        (_serverM effs)
+        (_tempLogM effs)
+        (flip runApp appConfig)
+  mapM_ (flip Warp.run (serve api server')) apiPort
+handleArgs _ = do
+  putStrLn "Invalid arguments passed"
+  putStrLn "Arguments are:"
+  putStrLn "[config path] [server id]"

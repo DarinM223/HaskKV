@@ -109,8 +109,8 @@ deleteRange' :: (SClass k v e cfg m, Binary e)
 deleteRange' cfg a b =
   liftIO $ void $ persistAfter (modifyLog (deleteRangeLog a b)) $ getStore cfg
 
-applyEntry :: MonadIO m => StorageM k v m -> LogEntry k v -> m ()
-applyEntry storeM LogEntry { _data = entry, _completed = Completed lock } = do
+applyEntry' :: MonadIO m => StorageM k v m -> LogEntry k v -> m ()
+applyEntry' storeM LogEntry { _data = entry, _completed = Completed lock } = do
   mapM_ (liftIO . atomically . flip putTMVar ()) lock
   applyStore entry
  where
@@ -118,26 +118,26 @@ applyEntry storeM LogEntry { _data = entry, _completed = Completed lock } = do
   applyStore (Delete _ k  ) = deleteValue storeM k
   applyStore _              = return ()
 
-loadSnapshot :: (SClass k v e cfg m, Ord k, Storable v)
-             => cfg
-             -> LogIndex
-             -> LogTerm
-             -> M.Map k v
-             -> m ()
-loadSnapshot cfg lastIndex lastTerm map
+loadSnapshot' :: (SClass k v e cfg m, Ord k, Storable v)
+              => cfg
+              -> LogIndex
+              -> LogTerm
+              -> M.Map k v
+              -> m ()
+loadSnapshot' cfg lastIndex lastTerm map
   = liftIO . atomically
   . flip modifyTVar' (loadSnapshotStore lastIndex lastTerm map)
   . unStore
   $ getStore cfg
 
-takeSnapshot :: ( SClass k v e cfg m
-                , KeyClass k, ValueClass v, Entry e
-                , MonadState RaftState m )
-             => SnapshotM (M.Map k v) m
-             -> (forall a. m a -> IO a)
-             -> cfg
-             -> m ()
-takeSnapshot snapM run cfg = do
+takeSnapshot' :: ( SClass k v e cfg m
+                 , KeyClass k, ValueClass v, Entry e
+                 , MonadState RaftState m )
+              => SnapshotM (M.Map k v) m
+              -> (forall a. m a -> IO a)
+              -> cfg
+              -> m ()
+takeSnapshot' snapM run cfg = do
   let store = getStore cfg
   lastApplied <- gets _lastApplied
   storeData <- liftIO $ readTVarIO $ unStore store

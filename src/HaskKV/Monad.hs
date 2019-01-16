@@ -56,11 +56,9 @@ newtype App msg k v e a = App
 runApp :: App msg k v e a -> AppConfig msg k v e -> IO a
 runApp m config = flip runReaderT config . unApp $ m
 
-newAppConfig
-  :: e ~ LogEntry k v
-  => InitAppConfig msg e
-  -> IO (AppConfig msg k v e)
-newAppConfig config = do
+mkAppConfig :: InitAppConfig msg (LogEntry k v)
+            -> IO (AppConfig msg k v (LogEntry k v))
+mkAppConfig config = do
   let serverState = getField @"_serverState" config
       sid         = getField @"_sid" serverState
       raftState   = newRaftState sid $ _initState config
