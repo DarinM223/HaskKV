@@ -22,19 +22,19 @@ runFollower
      , HasPersistM m effs
      , Entry e )
   => effs -> m ()
-runFollower effs = recv serverM >>= \case
+runFollower effs = recv >>= \case
   Left ElectionTimeout -> do
-    debug debugM "Starting election"
-    reset serverM ElectionTimeout
+    debug "Starting election"
+    reset ElectionTimeout
     startElection effs
-  Left  HeartbeatTimeout     -> reset serverM HeartbeatTimeout
+  Left  HeartbeatTimeout     -> reset HeartbeatTimeout
   Right rv@RequestVote{}     -> get >>= handleRequestVote effs rv
   Right ae@AppendEntries{}   -> get >>= handleAppendEntries effs ae
   Right is@InstallSnapshot{} -> get >>= handleInstallSnapshot effs is
   Right (Response _ resp)    -> get >>= handleFollowerResponse persistM resp
  where
-  serverM = getServerM effs
-  debugM = getDebugM effs
+  ServerM { recv, reset } = getServerM effs
+  DebugM debug = getDebugM effs
   persistM = getPersistM effs
 
 handleFollowerResponse persistM msg@(VoteResponse term _) s

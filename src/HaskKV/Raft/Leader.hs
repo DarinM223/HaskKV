@@ -28,30 +28,30 @@ runLeader
      , HasPersistM m effs
      , Entry e )
   => effs -> m ()
-runLeader effs = recv serverM >>= \case
-  Left ElectionTimeout  -> reset serverM ElectionTimeout
+runLeader effs = recv >>= \case
+  Left ElectionTimeout  -> reset ElectionTimeout
   Left HeartbeatTimeout -> do
-    reset serverM HeartbeatTimeout
+    reset HeartbeatTimeout
     commitIndex' <- use commitIndex
     serverID'    <- use serverID
 
     storeTemporaryEntries effs
 
     -- Update the highest replicated index for our server.
-    lastIndex' <- lastIndex logM
+    lastIndex' <- lastIndex
     stateType . _Leader . matchIndex %= IM.insert (unSID serverID') lastIndex'
-    ids <- serverIds serverM
+    ids <- serverIds
     let otherServerIds = filter (/= serverID') ids
-    debug debugM "Sending AppendEntries"
+    debug "Sending AppendEntries"
     mapM_ (sendAppendEntries effs lastIndex' commitIndex') otherServerIds
   Right rv@RequestVote{}       -> get >>= handleRequestVote effs rv
   Right ae@AppendEntries{}     -> get >>= handleAppendEntries effs ae
   Right InstallSnapshot{}      -> return ()
   Right (Response sender resp) -> get >>= handleLeaderResponse effs sender resp
  where
-  serverM = getServerM effs
-  logM = getLogM effs
-  debugM = getDebugM effs
+  ServerM { recv, reset, serverIds } = getServerM effs
+  LogM { lastIndex } = getLogM effs
+  DebugM debug = getDebugM effs
 
 handleLeaderResponse
   :: ( MonadState RaftState m
@@ -66,10 +66,10 @@ handleLeaderResponse
   | term < getField @"_currTerm" s = return ()
   | term > getField @"_currTerm" s = transitionToFollower persistM msg
   | not success = do
-    debug debugM $ "Decrementing next index for server " ++ show sender
+    debug $ "Decrementing next index for server " ++ show sender
     stateType . _Leader . nextIndex %= IM.adjust prevIndex sender
   | otherwise = do
-    debug debugM $ "Updating indexes for server " ++ show sender
+    debug $ "Updating indexes for server " ++ show sender
     stateType . _Leader . matchIndex %= IM.adjust (max lastIndex) sender
     stateType . _Leader . nextIndex %= IM.adjust (max (lastIndex + 1)) sender
 
@@ -77,33 +77,33 @@ handleLeaderResponse
     -- a majority of matchIndex[i] >= N, and
     -- log[N].term = currentTerm, set commitIndex = N.
     n    <- quorumIndex serverM
-    term <- fromMaybe 0 <$> termFromIndex logM n
-    debug debugM $ "N: " ++ show n
-    debug debugM $ "Commit Index: " ++ show (_commitIndex s)
+    term <- fromMaybe 0 <$> termFromIndex n
+    debug $ "N: " ++ show n
+    debug $ "Commit Index: " ++ show (_commitIndex s)
     when (n > _commitIndex s && term == getField @"_currTerm" s) $ do
-      debug debugM $ "Updating commit index to " ++ show n
+      debug $ "Updating commit index to " ++ show n
       commitIndex .= n
  where
   persistM = getPersistM effs
-  debugM = getDebugM effs
+  DebugM debug = getDebugM effs
   serverM = getServerM effs
-  logM = getLogM effs
+  LogM { termFromIndex } = getLogM effs
 handleLeaderResponse effs sender msg@(InstallSnapshotResponse term) s
   | term < getField @"_currTerm" s = return ()
   | term > getField @"_currTerm" s = transitionToFollower persistM msg
   | otherwise = do
-    hasRemaining <- hasChunk snapM sender
+    hasRemaining <- hasChunk sender
     if hasRemaining
       then do
-        chunk <- readChunk snapM snapshotChunkSize sender
+        chunk <- readChunk snapshotChunkSize sender
         mapM_ (sendSnapshotChunk serverM sender) chunk
-      else snapshotInfo snapM >>= \info -> forM_ info $ \(i, _, _) -> do
+      else snapshotInfo >>= \info -> forM_ info $ \(i, _, _) -> do
         let sid = unSID sender
         stateType . _Leader . matchIndex %= IM.adjust (max i) sid
         stateType . _Leader . nextIndex %= IM.adjust (max (i + 1)) sid
  where
   persistM = getPersistM effs
-  snapM = getSnapshotM effs
+  SnapshotM { hasChunk, readChunk, snapshotInfo } = getSnapshotM effs
   serverM = getServerM effs
 handleLeaderResponse _ _ _ _ = return ()
 
@@ -123,16 +123,15 @@ storeTemporaryEntries :: ( MonadState RaftState m
                       => effs -> m ()
 storeTemporaryEntries effs = do
   term       <- use currTerm
-  lastIndex' <- lastIndex logM
+  lastIndex' <- lastIndex
 
-  entries <- setIndexAndTerms (lastIndex' + 1) term
-         <$> temporaryEntries tempLogM
-  debug debugM $ "Storing temporary entries: " ++ show entries
-  storeEntries logM entries
+  entries <- setIndexAndTerms (lastIndex' + 1) term <$> temporaryEntries
+  debug $ "Storing temporary entries: " ++ show entries
+  storeEntries entries
  where
-  logM = getLogM effs
-  tempLogM = getTempLogM effs
-  debugM = getDebugM effs
+  LogM { lastIndex, storeEntries } = getLogM effs
+  TempLogM { temporaryEntries } = getTempLogM effs
+  DebugM debug = getDebugM effs
 
   setIndexAndTerms _   _    []       = []
   setIndexAndTerms idx term (e : es) = e' : rest
@@ -155,21 +154,21 @@ sendAppendEntries effs lastIndex commitIndex id = do
   case nextIndexes >>= IM.lookup (unSID id) of
     Just nextIndex -> do
       let pi = prevIndex nextIndex
-      pt      <- termFromIndex logM $ prevIndex nextIndex
+      pt      <- termFromIndex $ prevIndex nextIndex
       entries <- entryRange logM nextIndex lastIndex
       if isNothing entries || isNothing pt
         then tryInstallSnapshot snapM serverM id pi pt commitIndex
         else sendAppend serverM id pi pt (fromMaybe [] entries) commitIndex
     Nothing -> sendAppend serverM id 0 Nothing [] commitIndex
  where
-  logM = getLogM effs
+  logM@LogM { termFromIndex } = getLogM effs
   snapM = getSnapshotM effs
   serverM = getServerM effs
 
-  sendAppend serverM id prevIndex prevTerm entries commitIndex = do
+  sendAppend ServerM{ send } id prevIndex prevTerm entries commitIndex = do
     term <- use currTerm
     sid  <- use serverID
-    send serverM id AppendEntries
+    send id AppendEntries
       { _term        = term
       , _leaderId    = sid
       , _prevLogIdx  = prevIndex
@@ -177,15 +176,15 @@ sendAppendEntries effs lastIndex commitIndex id = do
       , _entries     = entries
       , _commitIdx   = commitIndex
       }
-  tryInstallSnapshot snapM serverM id pi pt commitIndex =
-    readChunk snapM snapshotChunkSize id >>= \case
+  tryInstallSnapshot SnapshotM{ readChunk } serverM id pi pt commitIndex =
+    readChunk snapshotChunkSize id >>= \case
       Just chunk -> sendSnapshotChunk serverM id chunk
       Nothing    -> sendAppend serverM id pi pt [] commitIndex
 
 sendSnapshotChunk
   :: MonadState RaftState m
   => ServerM (RaftMessage e) event m -> SID -> SnapshotChunk -> m ()
-sendSnapshotChunk serverM id chunk = do
+sendSnapshotChunk ServerM{ send } id chunk = do
   term <- use currTerm
   sid  <- use serverID
   let done      = _type chunk == EndChunk
@@ -193,7 +192,7 @@ sendSnapshotChunk serverM id chunk = do
       lastTerm  = getField @"_term" chunk
       offset    = getField @"_offset" chunk
       snapData  = getField @"_data" chunk
-  send serverM id InstallSnapshot
+  send id InstallSnapshot
     { _term              = term
     , _leaderId          = sid
     , _lastIncludedIndex = lastIndex

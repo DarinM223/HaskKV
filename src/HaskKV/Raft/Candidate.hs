@@ -25,35 +25,35 @@ runCandidate
      , HasPersistM m effs
      , KeyClass k, ValueClass v)
   => effs -> m ()
-runCandidate effs = recv serverM >>= \case
+runCandidate effs = recv >>= \case
   Left ElectionTimeout -> do
-    debug debugM "Restarting election"
-    reset serverM ElectionTimeout
+    debug "Restarting election"
+    reset ElectionTimeout
     startElection effs
-  Left  HeartbeatTimeout     -> reset serverM HeartbeatTimeout
+  Left  HeartbeatTimeout     -> reset HeartbeatTimeout
   Right rv@RequestVote{}     -> get >>= handleRequestVote effs rv
   Right ae@AppendEntries{}   -> get >>= handleAppendEntries effs ae
   Right is@InstallSnapshot{} -> get >>= handleInstallSnapshot effs is
   Right (Response _ resp)    -> get >>= handleCandidateResponse effs resp
  where
-  serverM = getServerM effs
-  debugM = getDebugM effs
+  ServerM { recv, reset } = getServerM effs
+  DebugM debug = getDebugM effs
 
 handleCandidateResponse effs msg@(VoteResponse term success) s
   | term > getField @"_currTerm" s = do
-    debug debugM "Transitioning to follower"
+    debug "Transitioning to follower"
     transitionToFollower persistM msg
   | success = do
     stateType . _Candidate %= (+ 1)
     votes <- fromMaybe 0 <$> preuse (stateType . _Candidate)
-    debug debugM $ "Received " ++ show votes ++ " votes"
+    debug $ "Received " ++ show votes ++ " votes"
     quorumSize' <- quorumSize serverM
     when (votes >= quorumSize') $ do
-      debug debugM "Transitioning to leader"
+      debug "Transitioning to leader"
       transitionToLeader effs msg
  where
   persistM = getPersistM effs
-  debugM = getDebugM effs
+  DebugM debug = getDebugM effs
   serverM = getServerM effs
 
 handleCandidateResponse _ _ _ = return ()
