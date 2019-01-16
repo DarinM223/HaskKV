@@ -9,13 +9,10 @@ import Control.Concurrent.STM (newEmptyTMVarIO)
 import Control.Monad.Except
 import Control.Monad.State (MonadState, gets)
 import Data.Aeson (FromJSON, ToJSON)
-import Data.IORef
 import Data.Proxy (Proxy(Proxy))
-import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
-import HaskKV.Monad
 import HaskKV.Raft.State
 import HaskKV.Server.All
 import HaskKV.Store.Types
@@ -69,7 +66,7 @@ convertApp :: Run m -> ExceptT ServantErr m a -> Handler a
 convertApp run = Handler . ExceptT . run . runExceptT
 
 server
-  :: ( KeyClass k, ValueClass v, FromHttpApiData k, FromJSON v, ToJSON v
+  :: ( FromHttpApiData k, FromJSON v, ToJSON v
      , MonadState RaftState m, MonadIO m )
   => StorageM k v m
   -> ServerM msg ServerEvent m

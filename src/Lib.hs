@@ -35,43 +35,44 @@ setLogging sid = do
   updateGlobalLogger sid       (addHandler h)
   updateGlobalLogger "conduit" (addHandler h)
 
-handleArgs :: [String] -> IO ()
-handleArgs (path : sid : _) = do
-  setLogging sid
+handleArgs = undefined
+{-handleArgs :: [String] -> IO ()-}
+{-handleArgs (path : sid : _) = do-}
+{-  setLogging sid-}
 
-  let
-    sid'   = SID $ read sid
-    config = Config
-      { _backpressure     = Capacity 100
-      , _electionTimeout  = 2000000
-      , _heartbeatTimeout = 1000000
-      , _serverData       = []
-      }
-  config <- readConfig config path
-  let
-    raftPort = configRaftPort sid' config
-    apiPort  = configAPIPort sid' config
-    settings = configToSettings config
-  initAppConfig <-
-    InitAppConfig
-    <$> loadBinary logFilename             sid'
-    <*> loadBinary persistentStateFilename sid'
-    <*> configToServerState sid' config
-    <*> pure (configSnapshotDirectory sid' config)
-  appConfig <- newAppConfig initAppConfig :: IO MyConfig
-  _run appConfig $ runMaybeT $ do
-    (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
-    snapshot         <- lift (readSnapshot index) >>= MaybeT . pure
-    lift $ loadSnapshot index term snapshot
+{-  let-}
+{-    sid'   = SID $ read sid-}
+{-    config = Config-}
+{-      { _backpressure     = Capacity 100-}
+{-      , _electionTimeout  = 2000000-}
+{-      , _heartbeatTimeout = 1000000-}
+{-      , _serverData       = []-}
+{-      }-}
+{-  config <- readConfig config path-}
+{-  let-}
+{-    raftPort = configRaftPort sid' config-}
+{-    apiPort  = configAPIPort sid' config-}
+{-    settings = configToSettings config-}
+{-  initAppConfig <--}
+{-    InitAppConfig-}
+{-    <$> loadBinary logFilename             sid'-}
+{-    <*> loadBinary persistentStateFilename sid'-}
+{-    <*> configToServerState sid' config-}
+{-    <*> pure (configSnapshotDirectory sid' config)-}
+{-  appConfig <- newAppConfig initAppConfig :: IO MyConfig-}
+{-  _run appConfig $ runMaybeT $ do-}
+{-    (index, term, _) <- lift snapshotInfo >>= MaybeT . pure-}
+{-    snapshot         <- lift (readSnapshot index) >>= MaybeT . pure-}
+{-    lift $ loadSnapshot index term snapshot-}
 
-  -- Run Raft server and handler.
-  let serverState = getField @"_serverState" appConfig
-  mapM_ (\p -> runServer p "*" settings serverState) raftPort
-  forkIO $ forever $ _run appConfig run
+{-  -- Run Raft server and handler.-}
+{-  let serverState = getField @"_serverState" appConfig-}
+{-  mapM_ (\p -> runServer p "*" settings serverState) raftPort-}
+{-  forkIO $ forever $ _run appConfig run-}
 
-  -- Run API server.
-  mapM_ (flip Warp.run (serve api (server appConfig))) apiPort
-handleArgs _ = do
-  putStrLn "Invalid arguments passed"
-  putStrLn "Arguments are:"
-  putStrLn "[config path] [server id]"
+{-  -- Run API server.-}
+{-  mapM_ (flip Warp.run (serve api (server appConfig))) apiPort-}
+{-handleArgs _ = do-}
+{-  putStrLn "Invalid arguments passed"-}
+{-  putStrLn "Arguments are:"-}
+{-  putStrLn "[config path] [server id]"-}

@@ -6,11 +6,9 @@ import Data.Binary
 import Data.Binary.Orphans ()
 import Data.IORef
 import GHC.Records
-import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
 import HaskKV.Log.Temp
-import HaskKV.Raft.Class
 import HaskKV.Raft.State
 import HaskKV.Server.All
 import HaskKV.Snapshot.All
@@ -59,7 +57,7 @@ runApp :: App msg k v e a -> AppConfig msg k v e -> IO a
 runApp m config = flip runReaderT config . unApp $ m
 
 newAppConfig
-  :: (KeyClass k, ValueClass v, e ~ LogEntry k v)
+  :: e ~ LogEntry k v
   => InitAppConfig msg e
   -> IO (AppConfig msg k v e)
 newAppConfig config = do

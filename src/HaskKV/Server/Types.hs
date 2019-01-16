@@ -1,7 +1,6 @@
 module HaskKV.Server.Types where
 
 import Control.Concurrent.STM
-import Control.Monad.Reader
 import HaskKV.Types
 
 import qualified Data.IntMap as IM

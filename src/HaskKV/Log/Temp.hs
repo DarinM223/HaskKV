@@ -4,7 +4,6 @@ import Control.Applicative ((<|>))
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
-import Control.Monad.Reader
 import Data.Maybe (fromJust)
 import GHC.Records
 import HaskKV.Log.Class

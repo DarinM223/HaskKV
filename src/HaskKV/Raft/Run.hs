@@ -15,17 +15,18 @@ import HaskKV.Snapshot.Types
 import HaskKV.Store.Types
 
 run
-  :: ( DebugM m
-     , MonadState RaftState m
-     , ServerM (RaftMessage (LogEntry k v)) ServerEvent m
-     , ApplyEntryM k v (LogEntry k v) m
-     , TempLogM (LogEntry k v) m
-     , SnapshotM s m
-     , LoadSnapshotM s m
-     , PersistM m
-     )
-  => m ()
-run = do
+  :: ( MonadState RaftState m
+     , HasDebugM m effs
+     , HasServerM (RaftMessage (LogEntry k v)) ServerEvent m effs
+     , HasApplyEntryM (LogEntry k v) m effs
+     , HasTempLogM (LogEntry k v) m effs
+     , HasSnapshotM s m effs
+     , HasLogM (LogEntry k v) m effs
+     , HasLoadSnapshotM s m effs
+     , HasPersistM m effs
+     , KeyClass k, ValueClass v )
+  => effs -> m ()
+run effs = do
   commitIndex' <- use commitIndex
   lastApplied' <- use lastApplied
   when (commitIndex' > lastApplied') $ do
@@ -35,6 +36,10 @@ run = do
     mapM_ applyEntry entry
 
   use stateType >>= \case
-    Follower    -> runFollower
-    Candidate _ -> runCandidate
-    Leader    _ -> runLeader
+    Follower    -> runFollower effs
+    Candidate _ -> runCandidate effs
+    Leader    _ -> runLeader effs
+ where
+  LogM { loadEntry } = getLogM effs
+  DebugM debug = getDebugM effs
+  ApplyEntryM applyEntry = getApplyEntryM effs

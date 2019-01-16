@@ -110,7 +110,6 @@ handleAppendEntries effs ae s
     Response (_serverID s) $ AppendResponse (getField @"_currTerm" s) False 0
 
 handleInstallSnapshot :: ( Monad m
-                         , HasStorageM k v m effs
                          , HasLogM e m effs
                          , HasServerM (RaftMessage e) ServerEvent m effs
                          , HasSnapshotM s m effs

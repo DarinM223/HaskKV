@@ -13,30 +13,32 @@ import HaskKV.Snapshot.Types
 import HaskKV.Store.Types
 
 runFollower
-  :: ( DebugM m
-     , MonadState RaftState m
-     , LogM e m
-     , ServerM (RaftMessage e) ServerEvent m
-     , StorageM k v m
-     , SnapshotM s m
-     , LoadSnapshotM s m
-     , PersistM m
-     , Entry e
-     )
-  => m ()
-runFollower = recv >>= \case
+  :: ( MonadState RaftState m
+     , HasDebugM m effs
+     , HasLogM e m effs
+     , HasServerM (RaftMessage e) ServerEvent m effs
+     , HasSnapshotM s m effs
+     , HasLoadSnapshotM s m effs
+     , HasPersistM m effs
+     , Entry e )
+  => effs -> m ()
+runFollower effs = recv serverM >>= \case
   Left ElectionTimeout -> do
-    debug "Starting election"
-    reset ElectionTimeout
-    startElection
-  Left  HeartbeatTimeout     -> reset HeartbeatTimeout
-  Right rv@RequestVote{}     -> get >>= handleRequestVote rv
-  Right ae@AppendEntries{}   -> get >>= handleAppendEntries ae
-  Right is@InstallSnapshot{} -> get >>= handleInstallSnapshot is
-  Right (Response _ resp)    -> get >>= handleFollowerResponse resp
+    debug debugM "Starting election"
+    reset serverM ElectionTimeout
+    startElection effs
+  Left  HeartbeatTimeout     -> reset serverM HeartbeatTimeout
+  Right rv@RequestVote{}     -> get >>= handleRequestVote effs rv
+  Right ae@AppendEntries{}   -> get >>= handleAppendEntries effs ae
+  Right is@InstallSnapshot{} -> get >>= handleInstallSnapshot effs is
+  Right (Response _ resp)    -> get >>= handleFollowerResponse persistM resp
+ where
+  serverM = getServerM effs
+  debugM = getDebugM effs
+  persistM = getPersistM effs
 
-handleFollowerResponse msg@(VoteResponse term _) s
-  | term > getField @"_currTerm" s = transitionToFollower msg
+handleFollowerResponse persistM msg@(VoteResponse term _) s
+  | term > getField @"_currTerm" s = transitionToFollower persistM msg
   | otherwise                      = return ()
 
-handleFollowerResponse _ _ = return ()
+handleFollowerResponse _ _ _ = return ()

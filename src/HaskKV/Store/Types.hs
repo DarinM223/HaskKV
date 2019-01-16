@@ -1,14 +1,12 @@
 module HaskKV.Store.Types where
 
 import Control.Concurrent.STM
-import Control.Monad.Reader
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Binary
 import Data.Binary.Orphans ()
 import Data.Maybe (fromMaybe)
 import Data.Time
 import GHC.Generics
-import HaskKV.Log.Class
 import HaskKV.Log.InMem
 import HaskKV.Types
 

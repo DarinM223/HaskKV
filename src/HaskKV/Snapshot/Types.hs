@@ -1,7 +1,6 @@
 module HaskKV.Snapshot.Types where
 
 import Control.Concurrent.STM
-import Control.Monad.Reader
 import Data.Binary (Binary)
 import GHC.IO.Handle
 import GHC.Records

@@ -71,6 +71,7 @@ default-extensions:
 - KindSignatures
 - LambdaCase
 - MultiParamTypeClasses
+- NamedFieldPuns
 - NumericUnderscores
 - OverloadedStrings
 - PatternSynonyms
