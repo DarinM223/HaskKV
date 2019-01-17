@@ -19,10 +19,10 @@ transitionToFollower
   => PersistM m
   -> msg
   -> m ()
-transitionToFollower persistM msg = do
+transitionToFollower (PersistM persist) msg = do
   stateType .= Follower
   setCurrTerm $ getField @"_term" msg
-  get >>= persist persistM
+  get >>= persist
 
 type Msg k v = RaftMessage (LogEntry k v)
 
@@ -35,24 +35,21 @@ transitionToLeader
   -> msg
   -> m ()
 transitionToLeader effs msg = do
-  let serverM = getServerM effs
-      logM    = getLogM effs
-  reset serverM HeartbeatTimeout
+  reset HeartbeatTimeout
 
-  prevLastIndex <- lastIndex logM
+  prevLastIndex <- lastIndex
   currTerm'     <- use currTerm
-  let
-    noop = LogEntry
-      { _term      = currTerm'
-      , _index     = prevLastIndex + 1
-      , _data      = Noop
-      , _completed = Completed Nothing
-      }
-  storeEntries logM [noop]
+  let noop = LogEntry
+        { _term      = currTerm'
+        , _index     = prevLastIndex + 1
+        , _data      = Noop
+        , _completed = Completed Nothing
+        }
+  storeEntries [noop]
 
   sid          <- use serverID
-  prevLastTerm <- fromMaybe 0 <$> termFromIndex logM prevLastIndex
-  broadcast serverM $ AppendEntries
+  prevLastTerm <- fromMaybe 0 <$> termFromIndex prevLastIndex
+  broadcast $ AppendEntries
     { _term        = getField @"_term" msg
     , _leaderId    = sid
     , _prevLogIdx  = prevLastIndex
@@ -61,14 +58,16 @@ transitionToLeader effs msg = do
     , _commitIdx   = 0
     }
 
-  ids           <- fmap unSID <$> serverIds serverM
-  initNextIndex <- (+ 1) <$> lastIndex logM
-  let
-    nextIndexes  = IM.fromList . fmap (, initNextIndex) $ ids
-    matchIndexes = IM.fromList . fmap (, 0) $ ids
-    leaderState =
-      LeaderState {_nextIndex = nextIndexes, _matchIndex = matchIndexes}
+  ids           <- fmap unSID <$> serverIds
+  initNextIndex <- (+ 1) <$> lastIndex
+  let nextIndexes  = IM.fromList . fmap (, initNextIndex) $ ids
+      matchIndexes = IM.fromList . fmap (, 0) $ ids
+      leaderState  =
+        LeaderState {_nextIndex = nextIndexes, _matchIndex = matchIndexes}
   stateType .= Leader leaderState
+ where
+  ServerM { broadcast, reset, serverIds } = getServerM effs
+  LogM { lastIndex, storeEntries, termFromIndex } = getLogM effs
 
 quorumSize :: Monad m => ServerM msg e m -> m Int
 quorumSize serverM = do
@@ -81,25 +80,26 @@ startElection :: ( MonadState RaftState m
                  , HasPersistM m effs )
               => effs -> m ()
 startElection effs = do
-  let persistM = getPersistM effs
-      logM     = getLogM effs
-      serverM  = getServerM effs
   sid <- use serverID
   stateType .= Candidate 1
   updateCurrTerm (+ 1)
   votedFor .= Just sid
-  get >>= persist persistM
+  get >>= persist
 
-  lastIndex' <- lastIndex logM
-  lastTerm   <- fromMaybe 0 <$> termFromIndex logM lastIndex'
+  lastIndex' <- lastIndex
+  lastTerm   <- fromMaybe 0 <$> termFromIndex lastIndex'
 
   term       <- use currTerm
-  broadcast serverM RequestVote
+  broadcast RequestVote
     { _candidateID = sid
     , _term        = term
     , _lastLogIdx  = lastIndex'
     , _lastLogTerm = lastTerm
     }
+ where
+  PersistM persist = getPersistM effs
+  LogM { lastIndex, termFromIndex } = getLogM effs
+  ServerM { broadcast } = getServerM effs
 
 setCurrTerm :: MonadState RaftState m => LogTerm -> m ()
 setCurrTerm term = do

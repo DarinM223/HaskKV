@@ -14,6 +14,6 @@ import HaskKV.Raft.Run as M
 import HaskKV.Raft.State as M
 import HaskKV.Server.All as M
 import HaskKV.Snapshot.All as M
-import HaskKV.Store.Types as M (newStore, StoreValue)
+import HaskKV.Store.Types as M (mkStore, StoreValue)
 import HaskKV.Types as M
 import HaskKV.Utils as M

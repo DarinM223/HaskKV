@@ -33,8 +33,8 @@ data ServerState msg = ServerState
 class HasServerState msg cfg | cfg -> msg where
   getServerState :: cfg -> ServerState msg
 
-newServerState :: Capacity -> Timeout -> Timeout -> SID -> IO (ServerState msg)
-newServerState backpressure electionTimeout heartbeatTimeout sid = do
+mkServerState :: Capacity -> Timeout -> Timeout -> SID -> IO (ServerState msg)
+mkServerState backpressure electionTimeout heartbeatTimeout sid = do
   messages       <- newTBQueueIO $ fromIntegral $ unCapacity backpressure
   electionTimer  <- Timer.newIO
   heartbeatTimer <- Timer.newIO

@@ -87,8 +87,8 @@ newtype Store k v e = Store { unStore :: TVar (StoreData k v e) }
 class HasStore k v e cfg | cfg -> k v e where
   getStore :: cfg -> Store k v e
 
-newStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
-newStoreValue seconds version val = do
+mkStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
+mkStoreValue seconds version val = do
   currTime <- getCurrentTime
   let newTime = addUTCTime diff currTime
   return StoreValue
@@ -98,11 +98,11 @@ newStoreValue seconds version val = do
     }
   where diff = fromRational . toRational . secondsToDiffTime $ seconds
 
-newStore :: SID -> Maybe (Log e) -> IO (Store k v e)
-newStore sid log = fmap Store . newTVarIO $ newStoreData sid log
+mkStore :: SID -> Maybe (Log e) -> IO (Store k v e)
+mkStore sid log = fmap Store . newTVarIO $ mkStoreData sid log
 
-newStoreData :: SID -> Maybe (Log e) -> StoreData k v e
-newStoreData sid log = StoreData
+mkStoreData :: SID -> Maybe (Log e) -> StoreData k v e
+mkStoreData sid log = StoreData
   { _map         = M.empty
   , _heap        = H.empty
   , _log         = fromMaybe emptyLog log

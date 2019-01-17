@@ -14,8 +14,8 @@ import qualified HaskKV.Timer as Timer
 
 newtype TempLog e = TempLog { unTempLog :: MVar [e] }
 
-newTempLog :: IO (TempLog e)
-newTempLog = TempLog <$> newMVar []
+mkTempLog :: IO (TempLog e)
+mkTempLog = TempLog <$> newMVar []
 
 maxTempEntries :: Int
 maxTempEntries = 1000

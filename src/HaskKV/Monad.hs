@@ -61,11 +61,11 @@ mkAppConfig :: InitAppConfig msg (LogEntry k v)
 mkAppConfig config = do
   let serverState = getField @"_serverState" config
       sid         = getField @"_sid" serverState
-      raftState   = newRaftState sid $ _initState config
+      raftState   = mkRaftState sid $ _initState config
   raftStateRef <- newIORef raftState
-  store        <- newStore sid $ _initLog config
-  tempLog      <- newTempLog
-  snapManager  <- newSnapshotManager $ _snapDirectory config
+  store        <- mkStore sid $ _initLog config
+  tempLog      <- mkTempLog
+  snapManager  <- mkSnapshotManager $ _snapDirectory config
   return AppConfig
     { _state       = raftStateRef
     , _store       = store

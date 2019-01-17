@@ -40,19 +40,17 @@ handleArgs :: [String] -> IO ()
 handleArgs (path : sid : _) = do
   setLogging sid
 
-  let
-    sid'   = SID $ read sid
-    config = Config
-      { _backpressure     = Capacity 100
-      , _electionTimeout  = 2000000
-      , _heartbeatTimeout = 1000000
-      , _serverData       = []
-      }
+  let sid'   = SID $ read sid
+      config = Config
+        { _backpressure     = Capacity 100
+        , _electionTimeout  = 2000000
+        , _heartbeatTimeout = 1000000
+        , _serverData       = []
+        }
   config <- readConfig config path
-  let
-    raftPort = configRaftPort sid' config
-    apiPort  = configAPIPort sid' config
-    settings = configToSettings config
+  let raftPort = configRaftPort sid' config
+      apiPort  = configAPIPort sid' config
+      settings = configToSettings config
   initAppConfig <-
     InitAppConfig
     <$> loadBinary logFilename             sid'

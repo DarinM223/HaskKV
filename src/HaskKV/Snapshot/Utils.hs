@@ -14,8 +14,8 @@ import Text.Read (readMaybe)
 
 import qualified Data.IntMap as IM
 
-newSnapshotManager :: Maybe FilePath -> IO SnapshotManager
-newSnapshotManager path = do
+mkSnapshotManager :: Maybe FilePath -> IO SnapshotManager
+mkSnapshotManager path = do
   let directoryPath = fromMaybe "" path
   snapshots <- loadSnapshots directoryPath
   return SnapshotManager

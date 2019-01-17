@@ -68,11 +68,9 @@ configToSettings = foldl' insert IM.empty . _serverData
 configToServerState :: SID -> Config -> IO (ServerState msg)
 configToServerState sid config@Config { _backpressure = backpressure, _electionTimeout = eTimeout, _heartbeatTimeout = hTimeout }
   = do
-    initServerState <- newServerState backpressure eTimeout hTimeout sid
-    outgoing'       <-
-      foldM (insert backpressure) (_outgoing initServerState)
-      . _serverData
-      $ config
+    initServerState <- mkServerState backpressure eTimeout hTimeout sid
+    outgoing' <- foldM (insert backpressure) (_outgoing initServerState)
+               $ _serverData config
     return initServerState { _outgoing = outgoing' }
  where
   insert backpressure outgoing ServerData { _id = sid } = do

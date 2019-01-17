@@ -36,7 +36,7 @@ class HasPersistM m effs | effs -> m where
 persist' state = void <$> liftIO $ persistBinary
   persistentStateFilename
   (_serverID state)
-  (newPersistentState state)
+  (mkPersistentState state)
 
 data Effs k v e s msg event m = Effs
   { _storageM      :: StorageM k v m

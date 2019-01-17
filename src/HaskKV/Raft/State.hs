@@ -48,14 +48,14 @@ instance Binary PersistentState
 persistentStateFilename :: SID -> FilePath
 persistentStateFilename (SID sid) = show sid ++ ".state"
 
-newPersistentState :: RaftState -> PersistentState
-newPersistentState s = PersistentState
+mkPersistentState :: RaftState -> PersistentState
+mkPersistentState s = PersistentState
   { _currTerm = getField @"_currTerm" s
   , _votedFor = getField @"_votedFor" s
   }
 
-newRaftState :: SID -> Maybe PersistentState -> RaftState
-newRaftState sid s = RaftState
+mkRaftState :: SID -> Maybe PersistentState -> RaftState
+mkRaftState sid s = RaftState
   { _stateType   = Follower
   , _currTerm    = fromMaybe 0 . fmap (getField @"_currTerm") $ s
   , _votedFor    = s >>= getField @"_votedFor"
