@@ -21,93 +21,83 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.IntMap as IM
 import qualified Data.Map as M
 
-type StoreClass k v e cfg m =
+type StoreClass k v e m =
   ( MonadIO m
-  , HasStore k v e cfg
   , MonadState RaftState m
   , KeyClass k
   , ValueClass v
   , Entry e
   )
 
-mkStorageM :: StoreClass k v e cfg m => cfg -> StorageM k v m
-mkStorageM cfg = StorageM
-  { getValue       = getValue' cfg
-  , setValue       = setValue' cfg
-  , replaceValue   = replaceValue' cfg
-  , deleteValue    = deleteValue' cfg
-  , cleanupExpired = cleanupExpired' cfg
+mkStorageM :: StoreClass k v e m => Store k v e -> StorageM k v m
+mkStorageM store = StorageM
+  { getValue       = getValue' store
+  , setValue       = setValue' store
+  , replaceValue   = replaceValue' store
+  , deleteValue    = deleteValue' store
+  , cleanupExpired = cleanupExpired' store
   }
 
-mkLogM :: StoreClass k v e cfg m
-       => SnapshotM s m -> TakeSnapshotM m -> cfg -> LogM e m
-mkLogM snapM takeSnapM cfg = LogM
-  { firstIndex    = firstIndex' cfg
-  , lastIndex     = lastIndex' cfg
-  , loadEntry     = loadEntry' cfg
-  , termFromIndex = termFromIndex' cfg
-  , deleteRange   = deleteRange' cfg
-  , storeEntries  = storeEntries' snapM takeSnapM cfg
+mkLogM :: StoreClass k v e m
+       => SnapshotM s m -> TakeSnapshotM m -> Store k v e -> LogM e m
+mkLogM snapM takeSnapM store = LogM
+  { firstIndex    = firstIndex' store
+  , lastIndex     = lastIndex' store
+  , loadEntry     = loadEntry' store
+  , termFromIndex = termFromIndex' store
+  , deleteRange   = deleteRange' store
+  , storeEntries  = storeEntries' snapM takeSnapM store
   }
 
-type SClass k v e cfg m = (HasStore k v e cfg, MonadIO m)
+getValue' :: (MonadIO m, Ord k) => Store k v e -> k -> m (Maybe v)
+getValue' (Store store) k = fmap (getKey k) $ liftIO $ readTVarIO store
 
-getValue' :: (SClass k v e cfg m, Ord k) => cfg -> k -> m (Maybe v)
-getValue' cfg k =
-  fmap (getKey k) . liftIO . readTVarIO . unStore . getStore $ cfg
+setValue' :: (MonadIO m, Ord k, Storable v) => Store k v e -> k -> v -> m ()
+setValue' (Store store) k v = liftIO $ modifyTVarIO (setKey k v) store
 
-setValue' :: (SClass k v e cfg m, Ord k, Storable v) => cfg -> k -> v -> m ()
-setValue' cfg k v =
-  liftIO . modifyTVarIO (setKey k v) . unStore . getStore $ cfg
+replaceValue' :: (MonadIO m, Ord k, Storable v)
+              => Store k v e -> k -> v -> m (Maybe CAS)
+replaceValue' (Store store) k v = liftIO $ stateTVarIO (replaceKey k v) store
 
-replaceValue' :: (SClass k v e cfg m, Ord k, Storable v)
-              => cfg -> k -> v -> m (Maybe CAS)
-replaceValue' cfg k v =
-  liftIO . stateTVarIO (replaceKey k v) . unStore . getStore $ cfg
+deleteValue' :: (MonadIO m, Ord k) => Store k v e -> k -> m ()
+deleteValue' (Store store) k = liftIO $ modifyTVarIO (deleteKey k) store
 
-deleteValue' :: (SClass k v e cfg m, Ord k) => cfg -> k -> m ()
-deleteValue' cfg k =
-  liftIO . modifyTVarIO (deleteKey k) . unStore . getStore $ cfg
+cleanupExpired' :: (MonadIO m, Show k, Ord k, Storable v)
+                => Store k v e -> Time -> m ()
+cleanupExpired' (Store store) t = liftIO $ modifyTVarIO (cleanupStore t) store
 
-cleanupExpired' :: (SClass k v e cfg m, Show k, Ord k, Storable v)
-                => cfg -> Time -> m ()
-cleanupExpired' cfg t =
-  liftIO . modifyTVarIO (cleanupStore t) . unStore . getStore $ cfg
+firstIndex' :: MonadIO m => Store k v e -> m LogIndex
+firstIndex' (Store store) = fmap (_lowIdx . _log) $ liftIO $ readTVarIO store
 
-firstIndex' :: SClass k v e cfg m => cfg -> m LogIndex
-firstIndex' cfg =
-  fmap (_lowIdx . _log) . liftIO . readTVarIO . unStore . getStore $ cfg
+lastIndex' :: MonadIO m => Store k v e -> m LogIndex
+lastIndex' (Store store) =
+  fmap (lastIndexLog . _log) $ liftIO $ readTVarIO store
 
-lastIndex' :: SClass k v e cfg m => cfg -> m LogIndex
-lastIndex' cfg =
-  fmap (lastIndexLog . _log) . liftIO . readTVarIO . unStore . getStore $ cfg
+loadEntry' :: MonadIO m => Store k v e -> LogIndex -> m (Maybe e)
+loadEntry' (Store store) (LogIndex k) = fmap (IM.lookup k . _entries . _log)
+                                      $ liftIO $ readTVarIO store
 
-loadEntry' :: SClass k v e cfg m => cfg -> LogIndex -> m (Maybe e)
-loadEntry' cfg (LogIndex k) = fmap (IM.lookup k . _entries . _log)
-                            . liftIO . readTVarIO . unStore . getStore $ cfg
+termFromIndex' :: (MonadIO m, Entry e)
+               => Store k v e -> LogIndex -> m (Maybe LogTerm)
+termFromIndex' (Store store) i =
+  fmap (entryTermLog i . _log) $ liftIO $ readTVarIO store
 
-termFromIndex' :: (SClass k v e cfg m, Entry e)
-               => cfg -> LogIndex -> m (Maybe LogTerm)
-termFromIndex' cfg i =
-  fmap (entryTermLog i . _log) . liftIO . readTVarIO . unStore . getStore $ cfg
-
-storeEntries' :: (SClass k v e cfg m, Entry e)
+storeEntries' :: (MonadIO m, Entry e)
               => SnapshotM s m
               -> TakeSnapshotM m
-              -> cfg
+              -> Store k v e
               -> [e]
               -> m ()
-storeEntries' snapM (TakeSnapshotM takeSnapshot) cfg es = do
-  let store = getStore cfg
+storeEntries' snapM (TakeSnapshotM takeSnapshot) store es = do
   logSize <- liftIO $ persistAfter (modifyLog (storeEntriesLog es)) store
   snapshotInfo snapM >>= \case
     Just (_, _, snapSize) | logSize > snapSize * 4 -> takeSnapshot
     _ -> return ()
 
-deleteRange' :: (SClass k v e cfg m, Binary e)
-             => cfg -> LogIndex -> LogIndex -> m ()
-deleteRange' cfg a b =
-  liftIO $ void $ persistAfter (modifyLog (deleteRangeLog a b)) $ getStore cfg
+deleteRange' :: (MonadIO m, Binary e)
+             => Store k v e -> LogIndex -> LogIndex -> m ()
+deleteRange' store a b =
+  liftIO $ void $ persistAfter (modifyLog (deleteRangeLog a b)) store
 
 applyEntry' :: MonadIO m => StorageM k v m -> LogEntry k v -> m ()
 applyEntry' storeM LogEntry { _data = entry, _completed = Completed lock } = do
@@ -118,27 +108,25 @@ applyEntry' storeM LogEntry { _data = entry, _completed = Completed lock } = do
   applyStore (Delete _ k  ) = deleteValue storeM k
   applyStore _              = return ()
 
-loadSnapshot' :: (SClass k v e cfg m, Ord k, Storable v)
-              => cfg
+loadSnapshot' :: (MonadIO m, Ord k, Storable v)
+              => Store k v e
               -> LogIndex
               -> LogTerm
               -> M.Map k v
               -> m ()
-loadSnapshot' cfg lastIndex lastTerm map
-  = liftIO . atomically
+loadSnapshot' (Store store) lastIndex lastTerm map
+  = liftIO
+  . atomically
   . flip modifyTVar' (loadSnapshotStore lastIndex lastTerm map)
-  . unStore
-  $ getStore cfg
+  $ store
 
-takeSnapshot' :: ( SClass k v e cfg m
-                 , KeyClass k, ValueClass v, Entry e
-                 , MonadState RaftState m )
+takeSnapshot' :: ( MonadIO m, MonadState RaftState m
+                 , KeyClass k, ValueClass v, Entry e )
               => SnapshotM (M.Map k v) m
               -> (forall a. m a -> IO a)
-              -> cfg
+              -> Store k v e
               -> m ()
-takeSnapshot' snapM run cfg = do
-  let store = getStore cfg
+takeSnapshot' snapM run store = do
   lastApplied <- gets _lastApplied
   storeData <- liftIO $ readTVarIO $ unStore store
   let firstIndex = _lowIdx $ _log storeData

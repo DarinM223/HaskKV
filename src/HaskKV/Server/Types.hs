@@ -30,8 +30,6 @@ data ServerState msg = ServerState
   , _electionTimeout  :: Timeout
   , _heartbeatTimeout :: Timeout
   }
-class HasServerState msg cfg | cfg -> msg where
-  getServerState :: cfg -> ServerState msg
 
 mkServerState :: Capacity -> Timeout -> Timeout -> SID -> IO (ServerState msg)
 mkServerState backpressure electionTimeout heartbeatTimeout sid = do

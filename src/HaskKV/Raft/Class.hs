@@ -2,9 +2,11 @@ module HaskKV.Raft.Class where
 
 import Control.Lens
 import Control.Monad.State
+import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp
+import HaskKV.Monad
 import HaskKV.Raft.State
 import HaskKV.Server.Instances
 import HaskKV.Server.Types
@@ -68,26 +70,22 @@ instance HasPersistM m (Effs k v e s msg event m) where
 instance HasDebugM m (Effs k v e s msg event m) where
   getDebugM = _debugM
 
-mkEffs :: ( HasSnapshotManager cfg
-          , HasStore k v (LogEntry k v) cfg
-          , HasTempLog (LogEntry k v) cfg
-          , HasServerState msg cfg
-          , KeyClass k, ValueClass v, MonadState RaftState m, MonadIO m )
-       => cfg
+mkEffs :: (MonadIO m, MonadState RaftState m, KeyClass k, ValueClass v)
+       => AppConfig msg k v (LogEntry k v)
        -> (forall a. m a -> IO a)
        -> Effs k v (LogEntry k v) (M.Map k v) msg ServerEvent m
 mkEffs cfg run = Effs
   { _storageM      = storeM
-  , _logM          = mkLogM snapM takeSnapM cfg
-  , _tempLogM      = mkTempLogM cfg
+  , _logM          = mkLogM snapM takeSnapM $ _store cfg
+  , _tempLogM      = mkTempLogM $ _tempLog cfg
   , _applyEntryM   = ApplyEntryM $ applyEntry' storeM
-  , _serverM       = mkServerM cfg
+  , _serverM       = mkServerM $ getField @"_serverState" cfg
   , _snapshotM     = snapM
-  , _loadSnapshotM = LoadSnapshotM $ loadSnapshot' cfg
+  , _loadSnapshotM = LoadSnapshotM $ loadSnapshot' $ _store cfg
   , _persistM      = PersistM persist'
   , _debugM        = DebugM debug'
   }
  where
-  snapM = mkSnapshotM cfg
-  takeSnapM = TakeSnapshotM $ takeSnapshot' snapM run cfg
-  storeM = mkStorageM cfg
+  snapM = mkSnapshotM $ _snapManager cfg
+  takeSnapM = TakeSnapshotM $ takeSnapshot' snapM run $ _store cfg
+  storeM = mkStorageM $ _store cfg

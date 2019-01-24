@@ -20,30 +20,24 @@ mkTempLog = TempLog <$> newMVar []
 maxTempEntries :: Int
 maxTempEntries = 1000
 
-class HasTempLog e cfg | cfg -> e where
-  getTempLog :: cfg -> TempLog e
-
-type TLClass e cfg m = (HasTempLog e cfg, MonadIO m)
-
-mkTempLogM :: TLClass e cfg m => cfg -> TempLogM e m
-mkTempLogM cfg = TempLogM
-  { addTemporaryEntry = addTemporaryEntry' cfg
-  , temporaryEntries  = temporaryEntries' cfg
+mkTempLogM :: MonadIO m => TempLog e -> TempLogM e m
+mkTempLogM log = TempLogM
+  { addTemporaryEntry = addTemporaryEntry' log
+  , temporaryEntries  = temporaryEntries' log
   }
 
-addTemporaryEntry' :: TLClass e cfg m => cfg -> e -> m ()
-addTemporaryEntry' cfg e =
-  liftIO . flip modifyMVar_ (pure . addEntry e) . unTempLog . getTempLog $ cfg
+addTemporaryEntry' :: MonadIO m => TempLog e -> e -> m ()
+addTemporaryEntry' (TempLog log) e =
+  liftIO $ modifyMVar_ log (pure . addEntry e)
  where
   addEntry e es
     | length es + 1 > maxTempEntries = es
     | otherwise                      = e : es
 
-temporaryEntries' :: TLClass e cfg m => cfg -> m [e]
-temporaryEntries' cfg = liftIO $ do
-  let (TempLog var) = getTempLog cfg
-  entries <- reverse <$> takeMVar var
-  putMVar var []
+temporaryEntries' :: MonadIO m => TempLog e -> m [e]
+temporaryEntries' (TempLog log) = liftIO $ do
+  entries <- reverse <$> takeMVar log
+  putMVar log []
   return entries
 
 applyTimeout :: Timeout
