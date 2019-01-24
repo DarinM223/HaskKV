@@ -28,8 +28,8 @@ type Msg k v = RaftMessage (LogEntry k v)
 
 transitionToLeader
   :: ( MonadState RaftState m
-     , HasLogM (LogEntry k v) m effs
-     , HasServerM (RaftMessage (LogEntry k v)) ServerEvent m effs
+     , HasLogM effs (LogM (LogEntry k v) m)
+     , HasServerM effs (ServerM (RaftMessage (LogEntry k v)) ServerEvent m)
      , HasField "_term" msg LogTerm )
   => effs
   -> msg
@@ -66,8 +66,8 @@ transitionToLeader effs msg = do
         LeaderState {_nextIndex = nextIndexes, _matchIndex = matchIndexes}
   stateType .= Leader leaderState
  where
-  ServerM { broadcast, reset, serverIds } = getServerM effs
-  LogM { lastIndex, storeEntries, termFromIndex } = getLogM effs
+  ServerM { broadcast, reset, serverIds } = effs ^. serverM
+  LogM { lastIndex, storeEntries, termFromIndex } = effs ^. logM
 
 quorumSize :: Monad m => ServerM msg e m -> m Int
 quorumSize serverM = do
@@ -75,9 +75,9 @@ quorumSize serverM = do
   return $ servers `quot` 2 + 1
 
 startElection :: ( MonadState RaftState m
-                 , HasLogM e m effs
-                 , HasServerM (RaftMessage e) event m effs
-                 , HasPersistM m effs )
+                 , HasLogM effs (LogM e m)
+                 , HasServerM effs (ServerM (RaftMessage e) event m)
+                 , HasPersistM effs (PersistM m) )
               => effs -> m ()
 startElection effs = do
   sid <- use serverID
@@ -97,9 +97,9 @@ startElection effs = do
     , _lastLogTerm = lastTerm
     }
  where
-  PersistM persist = getPersistM effs
-  LogM { lastIndex, termFromIndex } = getLogM effs
-  ServerM { broadcast } = getServerM effs
+  PersistM persist = effs ^. persistM
+  LogM { lastIndex, termFromIndex } = effs ^. logM
+  ServerM { broadcast } = effs ^. serverM
 
 setCurrTerm :: MonadState RaftState m => LogTerm -> m ()
 setCurrTerm term = do

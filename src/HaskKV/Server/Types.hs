@@ -14,8 +14,6 @@ data ServerM msg e m = ServerM
   , inject    :: e -> m ()
   , serverIds :: m [SID]
   }
-class HasServerM msg e m effs | effs -> msg e m where
-  getServerM :: effs -> ServerM msg e m
 
 data ServerEvent = ElectionTimeout
                  | HeartbeatTimeout

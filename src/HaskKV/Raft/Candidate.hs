@@ -17,12 +17,12 @@ import HaskKV.Store.Types
 
 runCandidate
   :: ( MonadState RaftState m
-     , HasDebugM m effs
-     , HasLogM (LogEntry k v) m effs
-     , HasServerM (RaftMessage (LogEntry k v)) ServerEvent m effs
-     , HasSnapshotM s m effs
-     , HasLoadSnapshotM s m effs
-     , HasPersistM m effs
+     , HasDebugM effs (DebugM m)
+     , HasLogM effs (LogM (LogEntry k v) m)
+     , HasServerM effs (ServerM (RaftMessage (LogEntry k v)) ServerEvent m)
+     , HasSnapshotM effs (SnapshotM s m)
+     , HasLoadSnapshotM effs (LoadSnapshotM s m)
+     , HasPersistM effs (PersistM m)
      , KeyClass k, ValueClass v)
   => effs -> m ()
 runCandidate effs = recv >>= \case
@@ -36,24 +36,24 @@ runCandidate effs = recv >>= \case
   Right is@InstallSnapshot{} -> get >>= handleInstallSnapshot effs is
   Right (Response _ resp)    -> get >>= handleCandidateResponse effs resp
  where
-  ServerM { recv, reset } = getServerM effs
-  DebugM debug = getDebugM effs
+  ServerM { recv, reset } = effs ^. serverM
+  DebugM debug = effs ^. debugM
 
 handleCandidateResponse effs msg@(VoteResponse term success) s
   | term > getField @"_currTerm" s = do
     debug "Transitioning to follower"
-    transitionToFollower persistM msg
+    transitionToFollower persistM' msg
   | success = do
     stateType . _Candidate %= (+ 1)
     votes <- fromMaybe 0 <$> preuse (stateType . _Candidate)
     debug $ "Received " ++ show votes ++ " votes"
-    quorumSize' <- quorumSize serverM
+    quorumSize' <- quorumSize serverM'
     when (votes >= quorumSize') $ do
       debug "Transitioning to leader"
       transitionToLeader effs msg
  where
-  persistM = getPersistM effs
-  DebugM debug = getDebugM effs
-  serverM = getServerM effs
+  persistM' = effs ^. persistM
+  DebugM debug = effs ^. debugM
+  serverM' = effs ^. serverM
 
 handleCandidateResponse _ _ _ = return ()

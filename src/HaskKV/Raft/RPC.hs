@@ -15,10 +15,10 @@ import HaskKV.Snapshot.Types
 import HaskKV.Store.Types
 
 handleRequestVote :: ( MonadState RaftState m
-                     , HasServerM (RaftMessage e) ServerEvent m effs
-                     , HasLogM e m effs
-                     , HasDebugM m effs
-                     , HasPersistM m effs
+                     , HasServerM effs (ServerM (RaftMessage e) ServerEvent m)
+                     , HasLogM effs (LogM e m)
+                     , HasDebugM effs (DebugM m)
+                     , HasPersistM effs (PersistM m)
                      , Entry e )
                   => effs -> RaftMessage e -> RaftState -> m ()
 handleRequestVote effs rv s
@@ -26,7 +26,7 @@ handleRequestVote effs rv s
   | getField @"_term" rv < getField @"_currTerm" s = fail rv s
   | getField @"_term" rv > getField @"_currTerm" s = do
     debug "Transitioning to follower"
-    transitionToFollower persistM rv
+    transitionToFollower persistM' rv
     get >>= handleRequestVote effs rv
   | canVote (_candidateID rv) s = do
     index <- lastIndex
@@ -36,16 +36,16 @@ handleRequestVote effs rv s
       then do
         debug $ "Sending vote to " ++ show (_candidateID rv)
         votedFor .= Just (_candidateID rv)
-        get >>= persist persistM
+        get >>= persist persistM'
         send (_candidateID rv) $ successResponse s
         reset ElectionTimeout
       else fail rv s
   | otherwise = fail rv s
  where
-  ServerM { reset, send } = getServerM effs
-  LogM { lastIndex, termFromIndex } = getLogM effs
-  DebugM debug = getDebugM effs
-  persistM = getPersistM effs
+  ServerM { reset, send } = effs ^. serverM
+  LogM { lastIndex, termFromIndex } = effs ^. logM
+  DebugM debug = effs ^. debugM
+  persistM' = effs ^. persistM
 
   successResponse s =
     Response (_serverID s) $ VoteResponse (getField @"_currTerm" s) True
@@ -60,10 +60,10 @@ handleRequestVote effs rv s
   fail rv = send (_candidateID rv) . failResponse
 
 handleAppendEntries :: ( MonadState RaftState m
-                       , HasServerM (RaftMessage e) ServerEvent m effs
-                       , HasLogM e m effs
-                       , HasPersistM m effs
-                       , HasDebugM m effs
+                       , HasServerM effs (ServerM (RaftMessage e) ServerEvent m)
+                       , HasLogM effs (LogM e m)
+                       , HasPersistM effs (PersistM m)
+                       , HasDebugM effs (DebugM m)
                        , Entry e )
                     => effs -> RaftMessage e -> RaftState -> m ()
 handleAppendEntries effs ae s
@@ -71,7 +71,7 @@ handleAppendEntries effs ae s
     send (_leaderId ae) $ failResponse s
   | getField @"_term" ae > getField @"_currTerm" s = do
     debug "Transitioning to follower"
-    transitionToFollower persistM ae
+    transitionToFollower persistM' ae
     get >>= handleAppendEntries effs ae
   | otherwise = do
     leader .= Just (_leaderId ae)
@@ -81,7 +81,7 @@ handleAppendEntries effs ae s
     if prevLogTerm == Just (_prevLogTerm ae)
       then do
         lastLogIndex <- lastIndex
-        newEntries <- diffEntriesWithLog logM lastLogIndex
+        newEntries <- diffEntriesWithLog logM' lastLogIndex
                     $ getField @"_entries" ae
         storeEntries newEntries
 
@@ -99,23 +99,24 @@ handleAppendEntries effs ae s
         send (_leaderId ae) $ successResponse lastEntryIndex s
       else send (_leaderId ae) $ failResponse s
  where
-  ServerM { reset, send } = getServerM effs
-  persistM = getPersistM effs
-  logM@LogM { lastIndex, storeEntries, termFromIndex } = getLogM effs
-  DebugM debug = getDebugM effs
+  ServerM { reset, send } = effs ^. serverM
+  persistM' = effs ^. persistM
+  logM'@LogM { lastIndex, storeEntries, termFromIndex } = effs ^. logM
+  DebugM debug = effs ^. debugM
 
   successResponse lastIndex s = Response (_serverID s)
     $ AppendResponse (getField @"_currTerm" s) True lastIndex
   failResponse s =
     Response (_serverID s) $ AppendResponse (getField @"_currTerm" s) False 0
 
-handleInstallSnapshot :: ( Monad m
-                         , HasLogM e m effs
-                         , HasServerM (RaftMessage e) ServerEvent m effs
-                         , HasSnapshotM s m effs
-                         , HasLoadSnapshotM s m effs
-                         , Entry e )
-                      => effs -> RaftMessage e -> RaftState -> m ()
+handleInstallSnapshot
+  :: ( Monad m
+     , HasLogM effs (LogM e m)
+     , HasServerM effs (ServerM (RaftMessage e) ServerEvent m)
+     , HasSnapshotM effs (SnapshotM s m)
+     , HasLoadSnapshotM effs (LoadSnapshotM s m)
+     , Entry e )
+  => effs -> RaftMessage e -> RaftState -> m ()
 handleInstallSnapshot effs is s
   | getField @"_term" is < getField @"_currTerm" s =
     send (_leaderId is) $ failResponse s
@@ -145,11 +146,11 @@ handleInstallSnapshot effs is s
 
     send (_leaderId is) $ successResponse s
  where
-  ServerM { send } = getServerM effs
+  ServerM { send } = effs ^. serverM
   SnapshotM { createSnapshot, readSnapshot, saveSnapshot, writeSnapshot }
-    = getSnapshotM effs
-  LoadSnapshotM loadSnapshot = getLoadSnapshotM effs
-  LogM { deleteRange, firstIndex, lastIndex, loadEntry }= getLogM effs
+    = effs ^. snapshotM
+  LoadSnapshotM loadSnapshot = effs ^. loadSnapshotM
+  LogM { deleteRange, firstIndex, lastIndex, loadEntry } = effs ^. logM
 
   successResponse s =
     Response (_serverID s) $ InstallSnapshotResponse (getField @"_currTerm" s)

@@ -1,5 +1,6 @@
 module HaskKV.Raft.Follower where
 
+import Control.Lens
 import Control.Monad.State
 import GHC.Records
 import HaskKV.Log.Class
@@ -14,12 +15,12 @@ import HaskKV.Store.Types
 
 runFollower
   :: ( MonadState RaftState m
-     , HasDebugM m effs
-     , HasLogM e m effs
-     , HasServerM (RaftMessage e) ServerEvent m effs
-     , HasSnapshotM s m effs
-     , HasLoadSnapshotM s m effs
-     , HasPersistM m effs
+     , HasDebugM effs (DebugM m)
+     , HasLogM effs (LogM e m)
+     , HasServerM effs (ServerM (RaftMessage e) ServerEvent m)
+     , HasSnapshotM effs (SnapshotM s m)
+     , HasLoadSnapshotM effs (LoadSnapshotM s m)
+     , HasPersistM effs (PersistM m)
      , Entry e )
   => effs -> m ()
 runFollower effs = recv >>= \case
@@ -31,11 +32,11 @@ runFollower effs = recv >>= \case
   Right rv@RequestVote{}     -> get >>= handleRequestVote effs rv
   Right ae@AppendEntries{}   -> get >>= handleAppendEntries effs ae
   Right is@InstallSnapshot{} -> get >>= handleInstallSnapshot effs is
-  Right (Response _ resp)    -> get >>= handleFollowerResponse persistM resp
+  Right (Response _ resp)    -> get >>= handleFollowerResponse persistM' resp
  where
-  ServerM { recv, reset } = getServerM effs
-  DebugM debug = getDebugM effs
-  persistM = getPersistM effs
+  ServerM { recv, reset } = effs ^. serverM
+  DebugM debug = effs ^. debugM
+  persistM' = effs ^. persistM
 
 handleFollowerResponse persistM msg@(VoteResponse term _) s
   | term > getField @"_currTerm" s = transitionToFollower persistM msg

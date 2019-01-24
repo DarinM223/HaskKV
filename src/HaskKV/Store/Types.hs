@@ -39,21 +39,11 @@ data StorageM k v m = StorageM
   , cleanupExpired :: Time -> m ()
   -- ^ Deletes all values that passed the expiration time.
   }
-class HasStorageM k v m effs | effs -> k v m where
-  getStorageM :: effs -> StorageM k v m
 
 newtype LoadSnapshotM s m = LoadSnapshotM
   { loadSnapshot :: LogIndex -> LogTerm -> s -> m () }
-class HasLoadSnapshotM s m effs | effs -> s m where
-  getLoadSnapshotM :: effs -> LoadSnapshotM s m
-
 newtype ApplyEntryM e m = ApplyEntryM { applyEntry :: e -> m () }
-class HasApplyEntryM e m effs | effs -> e m where
-  getApplyEntryM :: effs -> ApplyEntryM e m
-
 newtype TakeSnapshotM m = TakeSnapshotM { takeSnapshot :: m () }
-class HasTakeSnapshotM m effs | effs -> m where
-  getTakeSnapshotM :: effs -> TakeSnapshotM m
 
 data StoreValue v = StoreValue
   { _expireTime :: Maybe Time

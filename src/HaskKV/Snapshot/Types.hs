@@ -30,8 +30,6 @@ data SnapshotM s m = SnapshotM
   , readChunk      :: Int -> SID -> m (Maybe SnapshotChunk)
   , snapshotInfo   :: m (Maybe (LogIndex, LogTerm, FileSize))
   }
-class HasSnapshotM s m effs | effs -> s m where
-  getSnapshotM :: effs -> SnapshotM s m
 
 data Snapshot = Snapshot
   { _file     :: Handle

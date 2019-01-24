@@ -16,14 +16,14 @@ import HaskKV.Store.Types
 
 run
   :: ( MonadState RaftState m
-     , HasDebugM m effs
-     , HasServerM (RaftMessage (LogEntry k v)) ServerEvent m effs
-     , HasApplyEntryM (LogEntry k v) m effs
-     , HasTempLogM (LogEntry k v) m effs
-     , HasSnapshotM s m effs
-     , HasLogM (LogEntry k v) m effs
-     , HasLoadSnapshotM s m effs
-     , HasPersistM m effs
+     , HasDebugM effs (DebugM m)
+     , HasServerM effs (ServerM (RaftMessage (LogEntry k v)) ServerEvent m)
+     , HasApplyEntryM effs (ApplyEntryM (LogEntry k v) m)
+     , HasTempLogM effs (TempLogM (LogEntry k v) m)
+     , HasSnapshotM effs (SnapshotM s m)
+     , HasLogM effs (LogM (LogEntry k v) m)
+     , HasLoadSnapshotM effs (LoadSnapshotM s m)
+     , HasPersistM effs (PersistM m)
      , KeyClass k, ValueClass v )
   => effs -> m ()
 run effs = do
@@ -40,6 +40,6 @@ run effs = do
     Candidate _ -> runCandidate effs
     Leader    _ -> runLeader effs
  where
-  LogM { loadEntry } = getLogM effs
-  DebugM debug = getDebugM effs
-  ApplyEntryM applyEntry = getApplyEntryM effs
+  LogM { loadEntry } = effs ^. logM
+  DebugM debug = effs ^. debugM
+  ApplyEntryM applyEntry = effs ^. applyEntryM
