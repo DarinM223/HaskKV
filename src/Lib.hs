@@ -57,10 +57,11 @@ handleArgs (path : sid : _) = do
     <*> configToServerState sid' config
     <*> pure (configSnapshotDirectory sid' config)
   appConfig <- mkAppConfig initAppConfig :: IO MyConfig
-  let effs = mkEffs appConfig (flip runApp appConfig)
+  appState <- mkAppState initAppConfig
+  let effs = mkEffs appConfig (flip runApp appState)
       SnapshotM { readSnapshot, snapshotInfo } = _snapshotM effs
       LoadSnapshotM loadSnapshot = _loadSnapshotM effs
-  flip runApp appConfig $ runMaybeT $ do
+  flip runApp appState $ runMaybeT $ do
     (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
     snapshot         <- lift (readSnapshot index) >>= MaybeT . pure
     lift $ loadSnapshot index term snapshot
@@ -68,14 +69,14 @@ handleArgs (path : sid : _) = do
   -- Run Raft server and handler.
   let serverState = getField @"_serverState" appConfig
   mapM_ (\p -> runServer p "*" settings serverState) raftPort
-  forkIO $ forever $ runApp (run effs) appConfig
+  forkIO $ forever $ runApp (run effs) appState
 
   -- Run API server.
   let server' = server
         (_storageM effs)
         (_serverM effs)
         (_tempLogM effs)
-        (flip runApp appConfig)
+        (flip runApp appState)
   mapM_ (flip Warp.run (serve api server')) apiPort
 handleArgs _ = do
   putStrLn "Invalid arguments passed"
