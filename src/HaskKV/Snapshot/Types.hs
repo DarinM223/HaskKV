@@ -1,15 +1,12 @@
 module HaskKV.Snapshot.Types where
 
 import Control.Concurrent.STM
-import Data.Binary (Binary)
 import GHC.IO.Handle
 import GHC.Records
 import HaskKV.Types
 
 import qualified Data.ByteString as B
 import qualified Data.IntMap as IM
-
-class (Binary s) => HasSnapshotType s (m :: * -> *) | m -> s
 
 data SnapshotChunkType = FullChunk | EndChunk deriving (Show, Eq)
 

@@ -14,7 +14,7 @@ import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
 import HaskKV.Raft.State
-import HaskKV.Server.All
+import HaskKV.Server.Types
 import HaskKV.Store.Types
 import Servant.API
 import Servant.Server

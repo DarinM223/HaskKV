@@ -6,6 +6,7 @@ import Data.Conduit.Network (ClientSettings, clientSettings)
 import Data.Foldable (find, foldl')
 import Data.Maybe (catMaybes)
 import HaskKV.Server.Types
+import HaskKV.Server (mkServerState)
 import HaskKV.Types
 import Text.Read (readMaybe)
 

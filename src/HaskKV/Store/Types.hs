@@ -4,7 +4,6 @@ import Control.Concurrent.STM
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Binary
 import Data.Binary.Orphans ()
-import Data.Maybe (fromMaybe)
 import Data.Time
 import GHC.Generics
 import HaskKV.Log.InMem
@@ -74,26 +73,3 @@ data StoreData k v e = StoreData
   } deriving (Show)
 
 newtype Store k v e = Store { unStore :: TVar (StoreData k v e) }
-
-mkStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
-mkStoreValue seconds version val = do
-  currTime <- getCurrentTime
-  let newTime = addUTCTime diff currTime
-  return StoreValue
-    { _version    = version
-    , _expireTime = Just newTime
-    , _value      = val
-    }
-  where diff = fromRational . toRational . secondsToDiffTime $ seconds
-
-mkStore :: SID -> Maybe (Log e) -> IO (Store k v e)
-mkStore sid log = fmap Store . newTVarIO $ mkStoreData sid log
-
-mkStoreData :: SID -> Maybe (Log e) -> StoreData k v e
-mkStoreData sid log = StoreData
-  { _map         = M.empty
-  , _heap        = H.empty
-  , _log         = fromMaybe emptyLog log
-  , _tempEntries = []
-  , _sid         = sid
-  }

@@ -10,11 +10,11 @@ import HaskKV.Log.Entry
 import HaskKV.Log.Temp
 import HaskKV.Monad
 import HaskKV.Raft.State
-import HaskKV.Server.Instances
 import HaskKV.Server.Types
-import HaskKV.Snapshot.Instances
+import HaskKV.Server
 import HaskKV.Snapshot.Types
-import HaskKV.Store.Instances
+import HaskKV.Snapshot
+import HaskKV.Store
 import HaskKV.Store.Types
 import HaskKV.Utils
 import System.Log.Logger

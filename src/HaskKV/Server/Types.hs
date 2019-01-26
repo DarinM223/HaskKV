@@ -28,22 +28,3 @@ data ServerState msg = ServerState
   , _electionTimeout  :: Timeout
   , _heartbeatTimeout :: Timeout
   }
-
-mkServerState :: Capacity -> Timeout -> Timeout -> SID -> IO (ServerState msg)
-mkServerState backpressure electionTimeout heartbeatTimeout sid = do
-  messages       <- newTBQueueIO $ fromIntegral $ unCapacity backpressure
-  electionTimer  <- Timer.newIO
-  heartbeatTimer <- Timer.newIO
-
-  Timer.reset electionTimer electionTimeout
-  Timer.reset heartbeatTimer heartbeatTimeout
-
-  return ServerState
-    { _messages         = messages
-    , _outgoing         = IM.empty
-    , _sid              = sid
-    , _electionTimer    = electionTimer
-    , _heartbeatTimer   = heartbeatTimer
-    , _electionTimeout  = electionTimeout
-    , _heartbeatTimeout = heartbeatTimeout
-    }

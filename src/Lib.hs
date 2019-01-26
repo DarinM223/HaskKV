@@ -6,7 +6,6 @@ import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import GHC.Records
 import HaskKV
-import HaskKV.Store.All
 import HaskKV.Raft.Class
 import Servant.Server (serve)
 import System.Environment (getArgs)

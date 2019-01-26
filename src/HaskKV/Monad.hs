@@ -2,17 +2,17 @@ module HaskKV.Monad where
 
 import Control.Monad.Reader
 import Control.Monad.State.Strict
-import Data.Binary
-import Data.Binary.Orphans ()
 import Data.IORef
 import GHC.Records
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
 import HaskKV.Log.Temp
 import HaskKV.Raft.State
-import HaskKV.Server.All
-import HaskKV.Snapshot.All
-import HaskKV.Store.All
+import HaskKV.Server.Types
+import HaskKV.Snapshot
+import HaskKV.Snapshot.Types
+import HaskKV.Store
+import HaskKV.Store.Types
 import qualified Data.Map as M
 
 type SnapshotType k v = M.Map k v
@@ -35,9 +35,6 @@ data InitAppConfig msg e = InitAppConfig
 instance MonadState RaftState (App msg k v e) where
   get = App $ ReaderT $ liftIO . readIORef . _state
   put x = App $ ReaderT $ liftIO . flip writeIORef x . _state
-
-instance (Binary k, Binary v) =>
-  HasSnapshotType (SnapshotType k v) (App msg k v e)
 
 newtype App msg k v e a = App
   { unApp :: ReaderT (AppConfig msg k v e) IO a }
