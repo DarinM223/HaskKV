@@ -4,3 +4,4 @@ haskv.cabal
 *.log
 *.out
 *.state
+stack.yaml.lock

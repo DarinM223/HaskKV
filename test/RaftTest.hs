@@ -105,17 +105,17 @@ testSplitElection = testCase "Test split election" $ do
   let
     servers     = setupServers [1, 2, 3, 4, 5]
     (result, _) = flip runMockT servers $ do
-      runServer 2 $ MockT (electionTimer .= True) >> run
+      runServer 2 $ MockT (electionTimer .= True) >> runRaft
       flushMessages 2
-      runServer 3 $ MockT (electionTimer .= True) >> run
+      runServer 3 $ MockT (electionTimer .= True) >> runRaft
       flushMessages 3
 
       -- Server 1 sends vote to Server 2, Server 4 sends vote to
       -- Server 3, Server 5 doesn't send any vote.
       replicateM_ 2 (dropMessage 5)
-      runServer 4 $ MockT (receivingMsgs %= reverse) >> run
+      runServer 4 $ MockT (receivingMsgs %= reverse) >> runRaft
       flushMessages 4
-      runServer 1 run
+      runServer 1 runRaft
       flushMessages 1
 
       replicateM_ 4 runServers
@@ -164,11 +164,11 @@ testLeaderSendsAppendEntries
 
           -- Check that the leader broadcasts the correct
           -- AppendEntries messages
-          runServer 1 run
+          runServer 1 runRaft
           flushMessages 1
           msgs <- forM [2, 3, 4, 5] $ \i -> do
             msgs <- MockT $ preuse $ ix i . receivingMsgs
-            runServer i run
+            runServer i runRaft
             flushMessages i
             return msgs
 
@@ -177,7 +177,7 @@ testLeaderSendsAppendEntries
             MockT $ do
               mapM_ addTemporaryEntry added
               heartbeatTimer .= True
-            run
+            runRaft
           flushMessages 1
 
           -- Check that leader replicates the entries
@@ -186,7 +186,7 @@ testLeaderSendsAppendEntries
           -- The entries added at the beginning should
           -- have been replaced.
           stores <- forM [2, 3, 4, 5] $ \i -> do
-            runServer i run
+            runServer i runRaft
             flushMessages i
             runServer i $ MockT $ use store
 
@@ -297,10 +297,10 @@ testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
 
       runServer 1 $ do
         MockT $ heartbeatTimer .= True
-        run
+        runRaft
       flushMessages 1
       forM_ [2, 3, 4] $ \i -> do
-        runServer i run
+        runServer i runRaft
         flushMessages i
       dropMessage 5
       replicateM_ 7 runServers

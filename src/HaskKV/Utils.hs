@@ -59,8 +59,7 @@ persistBinary filename sid binary =
     FileSize . fromIntegral <$> hFileSize file
 
 loadBinary :: (Binary b) => (SID -> FilePath) -> SID -> IO (Maybe b)
-loadBinary filename =
-  handle (\(_ :: SomeException) -> pure Nothing)
-    . fmap (either (const Nothing) Just)
-    . decodeFileOrFail
-    . filename
+loadBinary filename = handle (\(_ :: SomeException) -> pure Nothing)
+                    . fmap (either (const Nothing) Just)
+                    . decodeFileOrFail
+                    . filename

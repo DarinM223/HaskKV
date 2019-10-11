@@ -101,7 +101,7 @@ handleLeaderResponse _ _ _ = return ()
 quorumIndex :: (MonadState RaftState m, ServerM msg event m) => m LogIndex
 quorumIndex = do
   matchIndexes <- maybe [] IM.elems
-    <$> preuse (stateType . _Leader . matchIndex)
+              <$> preuse (stateType . _Leader . matchIndex)
   let sorted = sortBy (flip compare) matchIndexes
   quorumSize' <- quorumSize
   return $ sorted !! (quorumSize' - 1)
@@ -151,16 +151,14 @@ sendAppendEntries lastIndex commitIndex id = do
   sendAppend id prevIndex prevTerm entries commitIndex = do
     term <- use currTerm
     sid  <- use serverID
-    send
-      id
-      AppendEntries
-        { _term        = term
-        , _leaderId    = sid
-        , _prevLogIdx  = prevIndex
-        , _prevLogTerm = fromMaybe 0 prevTerm
-        , _entries     = entries
-        , _commitIdx   = commitIndex
-        }
+    send id AppendEntries
+      { _term        = term
+      , _leaderId    = sid
+      , _prevLogIdx  = prevIndex
+      , _prevLogTerm = fromMaybe 0 prevTerm
+      , _entries     = entries
+      , _commitIdx   = commitIndex
+      }
   tryInstallSnapshot id pi pt commitIndex =
     readChunk snapshotChunkSize id >>= \case
       Just chunk -> sendSnapshotChunk id chunk
@@ -174,20 +172,17 @@ sendSnapshotChunk
 sendSnapshotChunk id chunk = do
   term <- use currTerm
   sid  <- use serverID
-  let
-    done      = _type chunk == EndChunk
-    lastIndex = getField @"_index" chunk
-    lastTerm  = getField @"_term" chunk
-    offset    = getField @"_offset" chunk
-    snapData  = getField @"_data" chunk
-  send
-    id
-    InstallSnapshot
-      { _term              = term
-      , _leaderId          = sid
-      , _lastIncludedIndex = lastIndex
-      , _lastIncludedTerm  = lastTerm
-      , _offset            = offset
-      , _data              = snapData
-      , _done              = done
-      }
+  let done      = _type chunk == EndChunk
+      lastIndex = getField @"_index" chunk
+      lastTerm  = getField @"_term" chunk
+      offset    = getField @"_offset" chunk
+      snapData  = getField @"_data" chunk
+  send id InstallSnapshot
+    { _term              = term
+    , _leaderId          = sid
+    , _lastIncludedIndex = lastIndex
+    , _lastIncludedTerm  = lastTerm
+    , _offset            = offset
+    , _data              = snapData
+    , _done              = done
+    }

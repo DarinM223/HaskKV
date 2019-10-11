@@ -4,7 +4,7 @@ import Control.Concurrent.STM (newTBQueueIO)
 import Control.Monad (foldM)
 import Data.Conduit.Network (ClientSettings, clientSettings)
 import Data.Foldable (find, foldl')
-import Data.Maybe (catMaybes)
+import Data.Maybe (mapMaybe)
 import HaskKV.Server.Types
 import HaskKV.Types
 import Text.Read (readMaybe)
@@ -28,7 +28,7 @@ data Config = Config
   } deriving (Show, Eq)
 
 parseConfig :: Config -> [String] -> Config
-parseConfig c = setData c . catMaybes . fmap attrsToServerData . splitInto 5
+parseConfig c = setData c . mapMaybe attrsToServerData . splitInto 5
  where
   splitInto :: Int -> [String] -> [[String]]
   splitInto amount l
@@ -66,14 +66,13 @@ configToSettings = foldl' insert IM.empty . _serverData
     IM.insert (unSID sid) (clientSettings port $ C.pack host) settings
 
 configToServerState :: SID -> Config -> IO (ServerState msg)
-configToServerState sid config@Config { _backpressure = backpressure, _electionTimeout = eTimeout, _heartbeatTimeout = hTimeout }
-  = do
-    initServerState <- newServerState backpressure eTimeout hTimeout sid
-    outgoing'       <-
-      foldM (insert backpressure) (_outgoing initServerState)
-      . _serverData
-      $ config
-    return initServerState { _outgoing = outgoing' }
+configToServerState sid config@Config { _backpressure     = backpressure
+                                      , _electionTimeout  = eTimeout
+                                      , _heartbeatTimeout = hTimeout } = do
+  initServerState <- newServerState backpressure eTimeout hTimeout sid
+  outgoing'       <- foldM (insert backpressure) (_outgoing initServerState)
+                   $ _serverData config
+  return initServerState { _outgoing = outgoing' }
  where
   insert backpressure outgoing ServerData { _id = sid } = do
     bq <- newTBQueueIO $ fromIntegral $ unCapacity backpressure

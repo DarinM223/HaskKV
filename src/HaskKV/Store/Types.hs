@@ -1,6 +1,7 @@
 module HaskKV.Store.Types where
 
 import Control.Concurrent.STM
+import Control.Lens
 import Control.Monad.Reader
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Binary
@@ -86,7 +87,7 @@ data StoreData k v e = StoreData
 newtype Store k v e = Store { unStore :: TVar (StoreData k v e) }
 
 class HasStore k v e r | r -> k v e where
-  getStore :: r -> Store k v e
+  storeL :: Lens' r (Store k v e)
 
 newtype StoreT m a = StoreT { unStoreT :: m a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)

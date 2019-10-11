@@ -36,13 +36,12 @@ transitionToLeader msg = do
 
   prevLastIndex <- lastIndex
   currTerm'     <- use currTerm
-  let
-    noop = LogEntry
-      { _term      = currTerm'
-      , _index     = prevLastIndex + 1
-      , _data      = Noop
-      , _completed = Completed Nothing
-      }
+  let noop = LogEntry
+        { _term      = currTerm'
+        , _index     = prevLastIndex + 1
+        , _data      = Noop
+        , _completed = Completed Nothing
+        }
   storeEntries [noop]
 
   sid          <- use serverID
@@ -58,11 +57,10 @@ transitionToLeader msg = do
 
   ids           <- fmap unSID <$> serverIds
   initNextIndex <- (+ 1) <$> lastIndex
-  let
-    nextIndexes  = IM.fromList . fmap (, initNextIndex) $ ids
-    matchIndexes = IM.fromList . fmap (, 0) $ ids
-    leaderState =
-      LeaderState {_nextIndex = nextIndexes, _matchIndex = matchIndexes}
+  let nextIndexes  = IM.fromList . fmap (, initNextIndex) $ ids
+      matchIndexes = IM.fromList . fmap (, 0) $ ids
+      leaderState  = LeaderState { _nextIndex  = nextIndexes
+                                 , _matchIndex = matchIndexes }
   stateType .= Leader leaderState
 
 quorumSize :: (ServerM msg e m) => m Int

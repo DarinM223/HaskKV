@@ -15,21 +15,15 @@ randTimeout :: Timeout -> IO Timeout
 randTimeout = fmap Timeout . getStdRandom . randomR . timeoutRange
 
 data Timer = Timer
-    { _thread :: TMVar ThreadId
-    , _var    :: TMVar ()
-    }
+  { _thread :: TMVar ThreadId
+  , _var    :: TMVar ()
+  }
 
 new :: STM Timer
-new = do
-  thread <- newEmptyTMVar
-  var    <- newEmptyTMVar
-  return $ Timer thread var
+new = Timer <$> newEmptyTMVar <*> newEmptyTMVar
 
 newIO :: IO Timer
-newIO = do
-  thread <- newEmptyTMVarIO
-  var    <- newEmptyTMVarIO
-  return $ Timer thread var
+newIO = Timer <$> newEmptyTMVarIO <*> newEmptyTMVarIO
 
 reset :: (MonadIO m) => Timer -> Timeout -> m ()
 reset t (Timeout timeout) = liftIO $ do

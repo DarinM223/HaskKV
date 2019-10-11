@@ -45,7 +45,7 @@ testCreateSnapshot =
     testCase "Creates snapshot" $ do
       path    <- getPath
       manager <- newSnapshotManager $ Just path
-      createSnapshotImpl 100 1 manager
+      createSnapshot' 100 1 manager
       doesFileExist (path </> partialFilename 100 1)
         >>= (@? "File doesn't exist")
 
@@ -54,15 +54,15 @@ testWriteAndSave = withResource (openFolder "test2") closeFolder $ \getPath ->
   testCase "Writes to snapshot" $ do
     path    <- getPath
     manager <- newSnapshotManager $ Just path
-    createSnapshotImpl 101 1 manager
+    createSnapshot' 101 1 manager
     let
       snapData   = "Sample text"
       snapData'  = "This overrides snapData"
       snapData'' = "This doesn't override and gets ignored instead"
-    writeSnapshotImpl 0  (C.pack snapData)   101 manager
-    writeSnapshotImpl 0  (C.pack snapData')  101 manager
-    writeSnapshotImpl 20 (C.pack snapData'') 101 manager
-    saveSnapshotImpl 101 manager
+    writeSnapshot' 0  (C.pack snapData)   101 manager
+    writeSnapshot' 0  (C.pack snapData')  101 manager
+    writeSnapshot' 20 (C.pack snapData'') 101 manager
+    saveSnapshot' 101 manager
     s <- readFile (path </> completedFilename 101 1)
     s @?= snapData'
 
@@ -72,13 +72,13 @@ testSaveRemovesOlderSnapshots =
     testCase "Save removes older snapshots" $ do
       path    <- getPath
       manager <- newSnapshotManager $ Just path
-      createSnapshotImpl 102 1 manager
-      createSnapshotImpl 103 1 manager
-      createSnapshotImpl 104 1 manager
-      createSnapshotImpl 106 1 manager
-      saveSnapshotImpl 104 manager
-      createSnapshotImpl 105 1 manager
-      saveSnapshotImpl 105 manager
+      createSnapshot' 102 1 manager
+      createSnapshot' 103 1 manager
+      createSnapshot' 104 1 manager
+      createSnapshot' 106 1 manager
+      saveSnapshot' 104 manager
+      createSnapshot' 105 1 manager
+      saveSnapshot' 105 manager
       doesFileExist (path </> partialFilename 102 1)
         >>= (@? "File exists")
         .   not
@@ -99,14 +99,14 @@ testReadSnapshotMultipleTimes =
     testCase "Can read snapshots multiple times" $ do
       path    <- getPath
       manager <- newSnapshotManager $ Just path
-      createSnapshotImpl 101 1 manager
+      createSnapshot' 101 1 manager
       let
         text        = "Sample text" :: String
         encodedData = B.concat . BL.toChunks . encode $ text
-      writeSnapshotImpl 0 encodedData 101 manager
-      saveSnapshotImpl 101 manager
-      snap  <- readSnapshotImpl 101 manager :: IO (Maybe String)
-      snap' <- readSnapshotImpl 101 manager :: IO (Maybe String)
+      writeSnapshot' 0 encodedData 101 manager
+      saveSnapshot' 101 manager
+      snap  <- readSnapshot' 101 manager :: IO (Maybe String)
+      snap' <- readSnapshot' 101 manager :: IO (Maybe String)
       snap @?= snap'
 
 testSnapshotLoading :: TestTree
@@ -115,13 +115,13 @@ testSnapshotLoading =
     testCase "Tests snapshot loading from directory" $ do
       path    <- getPath
       manager <- newSnapshotManager $ Just path
-      createSnapshotImpl 103 1 manager
-      createSnapshotImpl 104 1 manager
-      createSnapshotImpl 102 1 manager
+      createSnapshot' 103 1 manager
+      createSnapshot' 104 1 manager
+      createSnapshot' 102 1 manager
       let snapData = "Sample text"
-      writeSnapshotImpl 0 (C.pack snapData) 102 manager
-      saveSnapshotImpl 102 manager
-      createSnapshotImpl 105 1 manager
+      writeSnapshot' 0 (C.pack snapData) 102 manager
+      saveSnapshot' 102 manager
+      createSnapshot' 105 1 manager
 
       atomically $ modifyTVar (_snapshots manager) $ \s ->
         s { _partial = sort (_partial s) }
@@ -145,12 +145,12 @@ testReadChunks =
       path    <- getPath
       manager <- newSnapshotManager $ Just path
       let snapData = replicate 1000 'a'
-      createSnapshotImpl 101 1 manager
-      writeSnapshotImpl 0 (C.pack snapData) 101 manager
-      saveSnapshotImpl 101 manager
+      createSnapshot' 101 1 manager
+      writeSnapshot' 0 (C.pack snapData) 101 manager
+      saveSnapshot' 101 manager
 
       let sids = [1, 2, 3, 4] :: [SID]
-      mapM_ (\sid -> createSnapshotImpl (sidToIdx sid) 1 manager) sids
+      mapM_ (\sid -> createSnapshot' (sidToIdx sid) 1 manager) sids
       readLoop sids manager
       closeSnapshotManager manager
       files <- mapM (readSID path) sids
@@ -161,9 +161,9 @@ testReadChunks =
   readSID path = readFile . (path </>) . flip partialFilename 1 . sidToIdx
   readLoop []           _       = return ()
   readLoop (sid : sids) manager = do
-    chunk <- readChunkImpl 9 sid manager
+    chunk <- readChunk' 9 sid manager
     forM_ chunk
-      $ \c -> writeSnapshotImpl
+      $ \c -> writeSnapshot'
           (getField @"_offset" c)
           (_data c)
           (sidToIdx sid)

@@ -61,9 +61,8 @@ cleanupStore
   :: (Show k, Ord k, Storable v) => Time -> StoreData k v e -> StoreData k v e
 cleanupStore curr s = case minHeapMaybe (_heap s) of
   Just (HeapVal (t, k)) | diff t curr <= 0 ->
-    let
-      (_, h') = fromJust . H.viewMin $ _heap s
-      v       = getKey k s
+    let (_, h') = fromJust . H.viewMin $ _heap s
+        v       = getKey k s
     in 
        -- Only delete key from store if it hasn't been
        -- replaced/removed after it was set.
@@ -80,17 +79,16 @@ loadSnapshotStore
   -> M.Map k v
   -> StoreData k v e
   -> StoreData k v e
-loadSnapshotStore lastIncludedIndex lastIncludedTerm map store =
-  modifyLog (truncateLog lastIncludedIndex)
-    . modifyLog
-        (\l -> l
-          { _snapshotLastIndex = Just lastIncludedIndex
-          , _snapshotLastTerm  = Just lastIncludedTerm
-          }
-        )
-    . foldl' (\store (k, v) -> setKey k v store) clearedStore
-    . M.assocs
-    $ map
+loadSnapshotStore lastIncludedIndex lastIncludedTerm map store
+  = modifyLog (truncateLog lastIncludedIndex)
+  . modifyLog
+      (\l -> l
+        { _snapshotLastIndex = Just lastIncludedIndex
+        , _snapshotLastTerm  = Just lastIncludedTerm
+        }
+      )
+  . foldl' (\store (k, v) -> setKey k v store) clearedStore
+  $ M.assocs map
  where
   clearedStore = store { _map = M.empty, _heap = H.empty }
   truncateLog lastIncludedIndex log

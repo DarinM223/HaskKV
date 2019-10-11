@@ -70,8 +70,8 @@ handleAppendEntries
   -> RaftState
   -> m ()
 handleAppendEntries ae s
-  | getField @"_term" ae < getField @"_currTerm" s = send (_leaderId ae)
-  $ failResponse s
+  | getField @"_term" ae < getField @"_currTerm" s =
+    send (_leaderId ae) $ failResponse s
   | getField @"_term" ae > getField @"_currTerm" s = do
     debug "Transitioning to follower"
     transitionToFollower ae
@@ -84,30 +84,26 @@ handleAppendEntries ae s
     if prevLogTerm == Just (_prevLogTerm ae)
       then do
         lastLogIndex <- lastIndex
-        newEntries   <-
-          diffEntriesWithLog lastLogIndex . getField @"_entries" $ ae
+        newEntries   <- diffEntriesWithLog lastLogIndex
+                      $ getField @"_entries" ae
         storeEntries newEntries
 
-        let
-          lastEntryIndex = if (null newEntries)
-            then lastLogIndex
-            else entryIndex $ last newEntries
+        let lastEntryIndex = if (null newEntries)
+              then lastLogIndex
+              else entryIndex $ last newEntries
 
-        when (lastEntryIndex /= lastLogIndex)
-          $  debug
-          $  "Storing entries to index "
-          ++ show lastEntryIndex
+        when (lastEntryIndex /= lastLogIndex) $
+          debug $ "Storing entries to index " ++ show lastEntryIndex
 
         commitIndex' <- use commitIndex
-        when (_commitIdx ae > commitIndex')
-          $  commitIndex
-          .= (min lastEntryIndex $ _commitIdx ae)
+        when (_commitIdx ae > commitIndex') $
+          commitIndex .= (min lastEntryIndex $ _commitIdx ae)
 
         send (_leaderId ae) $ successResponse lastEntryIndex s
       else send (_leaderId ae) $ failResponse s
  where
-  successResponse lastIndex s = Response (_serverID s)
-    $ AppendResponse (getField @"_currTerm" s) True lastIndex
+  successResponse lastIndex s = Response (_serverID s) $
+    AppendResponse (getField @"_currTerm" s) True lastIndex
   failResponse s =
     Response (_serverID s) $ AppendResponse (getField @"_currTerm" s) False 0
 
@@ -123,13 +119,12 @@ handleInstallSnapshot
   -> RaftState
   -> m ()
 handleInstallSnapshot is s
-  | getField @"_term" is < getField @"_currTerm" s = send (_leaderId is)
-  $ failResponse s
+  | getField @"_term" is < getField @"_currTerm" s =
+    send (_leaderId is) $ failResponse s
   | otherwise = do
-    let
-      snapIndex = _lastIncludedIndex is
-      snapTerm  = _lastIncludedTerm is
-      offset    = getField @"_offset" is
+    let snapIndex = _lastIncludedIndex is
+        snapTerm  = _lastIncludedTerm is
+        offset    = getField @"_offset" is
     when (offset == 0) $ createSnapshot snapIndex snapTerm
     writeSnapshot offset (getField @"_data" is) snapIndex
 

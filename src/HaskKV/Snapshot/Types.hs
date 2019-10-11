@@ -1,6 +1,7 @@
 module HaskKV.Snapshot.Types where
 
 import Control.Concurrent.STM
+import Control.Lens
 import Control.Monad.Reader
 import Data.Binary (Binary)
 import GHC.IO.Handle
@@ -54,7 +55,7 @@ data SnapshotManager = SnapshotManager
   }
 
 class HasSnapshotManager r where
-  getSnapshotManager :: r -> SnapshotManager
+  snapshotManagerL :: Lens' r SnapshotManager
 
 newtype SnapshotT m a = SnapshotT { unSnapshotT :: m a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)

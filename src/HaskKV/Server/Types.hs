@@ -1,6 +1,7 @@
 module HaskKV.Server.Types where
 
 import Control.Concurrent.STM
+import Control.Lens
 import Control.Monad.Reader
 import HaskKV.Types
 
@@ -29,7 +30,7 @@ data ServerState msg = ServerState
   }
 
 class HasServerState msg r | r -> msg where
-  getServerState :: r -> ServerState msg
+  serverStateL :: Lens' r (ServerState msg)
 
 newtype ServerT m a = ServerT { unServerT :: m a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)

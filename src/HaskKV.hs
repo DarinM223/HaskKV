@@ -5,6 +5,7 @@ where
 
 import HaskKV.API as M
 import HaskKV.Config as M
+import HaskKV.Constr as M (run)
 import HaskKV.Log.Class as M
 import HaskKV.Log.Entry as M
 import HaskKV.Log.InMem as M

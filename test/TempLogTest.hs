@@ -32,17 +32,17 @@ testAddEntries = testCase "addTemporaryEntry adds entries to _tempEntries" $ do
     unChange _              = undefined
 
   -- Tests order of entries.
-  mapM_ (flip addTemporaryEntryImpl tempLog <=< createEntry) [1 .. 3]
-  entries <- temporaryEntriesImpl tempLog
+  mapM_ (flip addTemporaryEntry' tempLog <=< createEntry) [1 .. 3]
+  entries <- temporaryEntries' tempLog
   fmap (_value . unChange . _data) entries @?= [1, 2, 3]
 
   -- Tests that entries are cleared after getting temporary entries.
-  entries <- temporaryEntriesImpl tempLog
+  entries <- temporaryEntries' tempLog
   length entries @?= 0
 
   -- Tests entries bounded to maxTempEntries
   forM_ [1 .. maxTempEntries + 500] $ \n -> do
     entry <- createEntry n
-    addTemporaryEntryImpl entry tempLog
-  entries <- temporaryEntriesImpl tempLog
+    addTemporaryEntry' entry tempLog
+  entries <- temporaryEntries' tempLog
   length entries @?= maxTempEntries

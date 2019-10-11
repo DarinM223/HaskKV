@@ -56,7 +56,7 @@ runServers = serverKeys >>= (go IM.empty)
     if not $ null candidates
       then do
         let sid = head candidates
-        runServer sid run
+        runServer sid runRaft
         flushMessages sid
         go (IM.insert sid () marked) keys
       else return ()

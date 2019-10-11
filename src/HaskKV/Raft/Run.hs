@@ -14,7 +14,7 @@ import HaskKV.Server.Types
 import HaskKV.Snapshot.Types
 import HaskKV.Store.Types
 
-run
+runRaft
   :: ( DebugM m
      , MonadState RaftState m
      , ServerM (RaftMessage (LogEntry k v)) ServerEvent m
@@ -25,7 +25,7 @@ run
      , PersistM m
      )
   => m ()
-run = do
+runRaft = do
   commitIndex' <- use commitIndex
   lastApplied' <- use lastApplied
   when (commitIndex' > lastApplied') $ do

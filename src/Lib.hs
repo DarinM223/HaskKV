@@ -1,10 +1,10 @@
 module Lib where
 
 import Control.Concurrent (forkIO)
+import Control.Lens
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
-import GHC.Records
 import HaskKV
 import HaskKV.Store.All
 import Servant.Server (serve)
@@ -59,15 +59,14 @@ handleArgs (path : sid : _) = do
     <*> configToServerState sid' config
     <*> pure (configSnapshotDirectory sid' config)
   appConfig <- newAppConfig initAppConfig :: IO MyConfig
-  _run appConfig $ runMaybeT $ do
+  run appConfig $ runMaybeT $ do
     (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
     snapshot         <- lift (readSnapshot index) >>= MaybeT . pure
     lift $ loadSnapshot index term snapshot
 
   -- Run Raft server and handler.
-  let serverState = getField @"_serverState" appConfig
-  mapM_ (\p -> runServer p "*" settings serverState) raftPort
-  forkIO $ forever $ _run appConfig run
+  mapM_ (\p -> runServer p "*" settings (appConfig ^. serverStateL)) raftPort
+  forkIO $ forever $ run appConfig runRaft
 
   -- Run API server.
   mapM_ (flip Warp.run (serve api (server appConfig))) apiPort

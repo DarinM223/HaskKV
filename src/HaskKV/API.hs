@@ -6,13 +6,13 @@ where
 
 import Control.Concurrent.Async (async, wait)
 import Control.Concurrent.STM (newEmptyTMVarIO)
+import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.State (gets)
 import Data.Aeson (FromJSON, ToJSON)
-import Data.IORef
 import Data.Proxy (Proxy(Proxy))
-import GHC.Records
-import HaskKV.Constr (Constr)
+import HaskKV.Constr (Constr, run)
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
 import HaskKV.Monad
@@ -32,27 +32,19 @@ type MyHandler msg k v e a = ExceptT ServantErr (App msg k v e) a
 api :: Proxy (StoreAPI k v)
 api = Proxy
 
-get :: (Constr k v e) => k -> MyHandler msg k v e (Maybe v)
-get key = checkLeader $ getValue key
+getRoute :: (Constr k v e) => k -> MyHandler msg k v e (Maybe v)
+getRoute key = checkLeader $ getValue key
 
-set :: k -> v -> MyHandler msg k v (LogEntry k v) ()
-set key value = checkLeader $ applyEntryData $ Change (TID 0) key value
+setRoute :: k -> v -> MyHandler msg k v (LogEntry k v) ()
+setRoute key value = checkLeader $ applyEntryData $ Change (TID 0) key value
 
-delete :: k -> MyHandler msg k v (LogEntry k v) ()
-delete key = checkLeader $ applyEntryData $ Delete (TID 0) key
-
-isLeader :: App msg k v e Bool
-isLeader = do
-  ref   <- asks _state
-  state <- liftIO $ readIORef ref
-  case _stateType state of
-    Leader _ -> return True
-    _        -> return False
+deleteRoute :: k -> MyHandler msg k v (LogEntry k v) ()
+deleteRoute key = checkLeader $ applyEntryData $ Delete (TID 0) key
 
 checkLeader :: App msg k v e r -> MyHandler msg k v e r
-checkLeader handler = lift isLeader >>= \case
-  True  -> lift handler
-  False -> throwError err404
+checkLeader handler = lift (gets _stateType) >>= \case
+  Leader _  -> lift handler
+  _         -> throwError err404
 
 convertApp :: AppConfig msg k v e -> MyHandler msg k v e a -> Handler a
 convertApp config = Handler . ExceptT . flip runApp config . runExceptT
@@ -62,18 +54,16 @@ server
   => AppConfig msg k v (LogEntry k v)
   -> Server (StoreAPI k v)
 server config = hoistServer api (convertApp config) server
-  where server = get :<|> set :<|> delete
+  where server = getRoute :<|> setRoute :<|> deleteRoute
 
 applyEntryData :: LogEntryData k v -> App msg k v (LogEntry k v) ()
 applyEntryData entryData = ask >>= \config -> liftIO $ do
   completed <- Completed . Just <$> newEmptyTMVarIO
-  let
-    entry = LogEntry
-      { _term      = 0
-      , _index     = 0
-      , _data      = entryData
-      , _completed = completed
-      }
-  f <- async $ _run config $ waitApplyEntry entry
-  inject HeartbeatTimeout $ getField @"_serverState" config
+  let entry = LogEntry { _term      = 0
+                       , _index     = 0
+                       , _data      = entryData
+                       , _completed = completed
+                       }
+  f <- async $ run config $ waitApplyEntry entry
+  inject HeartbeatTimeout $ config ^. serverStateL
   wait f

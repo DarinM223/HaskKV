@@ -2,7 +2,7 @@ module HaskKV.Snapshot.Utils where
 
 import Control.Concurrent.STM
 import Control.Exception
-import Data.List (findIndex)
+import Data.List (elemIndex)
 import Data.Maybe
 import GHC.IO.Handle
 import HaskKV.Snapshot.Types
@@ -32,7 +32,7 @@ closeSnapshotManager manager = do
 loadSnapshots :: FilePath -> IO (TVar Snapshots)
 loadSnapshots path = do
   files <- catch (getDirectoryContents path)
-    $ \(_ :: SomeException) -> return []
+         $ \(_ :: SomeException) -> return []
   partial   <- mapM (toPartial . (path </>)) . filter isPartial $ files
   completed <- mapM (toCompleted . (path </>)) . filter isCompleted $ files
   newTVarIO Snapshots
@@ -61,10 +61,10 @@ loadSnapshots path = do
   isCompleted = (== ".completed.snap") . fileExt
 
 partialFilename :: LogIndex -> LogTerm -> String
-partialFilename i t = (show i) ++ "_" ++ (show t) ++ ".partial.snap"
+partialFilename i t = show i ++ "_" ++ show t ++ ".partial.snap"
 
 completedFilename :: LogIndex -> LogTerm -> String
-completedFilename i t = (show i) ++ "_" ++ (show t) ++ ".completed.snap"
+completedFilename i t = show i ++ "_" ++ show t ++ ".completed.snap"
 
 fileBase :: FilePath -> String
 fileBase path
@@ -84,6 +84,6 @@ getPos (HandlePosn _ pos) = FilePos $ fromIntegral pos
 fileSnapInfo :: String -> Maybe (LogIndex, LogTerm)
 fileSnapInfo s = (,) <$> index <*> term
  where
-  i     = findIndex (== '_') s
+  i     = elemIndex '_' s
   index = fmap LogIndex . readMaybe =<< flip take s <$> i
   term  = fmap LogTerm . readMaybe =<< flip drop s . (+ 1) <$> i

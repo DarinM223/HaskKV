@@ -44,19 +44,19 @@ testReceiveMessage :: TestTree
 testReceiveMessage = testCase "Receives message" $ do
   state <- S.newServerState backpressure timeout longer 1
   sourceMessages (["a", "b"] :: [ByteString]) state
-  msg1 <- S.recvImpl state
+  msg1 <- S.recv' state
   msg1 @?= Right "a"
-  msg2 <- S.recvImpl state
+  msg2 <- S.recv' state
   msg2 @?= Right "b"
-  msg3 <- S.recvImpl state
+  msg3 <- S.recv' state
   msg3 @?= Left S.ElectionTimeout
 
 testSendMessage :: TestTree
 testSendMessage = testCase "Sends message" $ do
   state <- S.newServerState backpressure timeout timeout 1
   state <- buildClientMap state [1 .. 2]
-  S.sendImpl 1 "a" state
-  S.sendImpl 2 "b" state
+  S.send' 1 "a" state
+  S.send' 2 "b" state
   results <- sinkClients state
   results @?= [["a"], ["b"]]
 
@@ -64,7 +64,7 @@ testBroadcastMessage :: TestTree
 testBroadcastMessage = testCase "Broadcasts message" $ do
   state <- S.newServerState backpressure timeout timeout 1
   state <- buildClientMap state [1 .. 3]
-  S.broadcastImpl "a" state
+  S.broadcast' "a" state
   results <- sinkClients state
   results @?= [[], ["a"], ["a"]]
 
@@ -75,10 +75,10 @@ testResetElection = testCase "Resets election timer" $ do
       (S.ServerState ByteString)
   forkIO $ do
     threadDelay 400000
-    S.resetImpl S.ElectionTimeout state
-  msg1 <- S.recvImpl state
+    S.reset' S.ElectionTimeout state
+  msg1 <- S.recv' state
   msg1 @?= Left S.HeartbeatTimeout
-  msg2 <- S.recvImpl state
+  msg2 <- S.recv' state
   msg2 @?= Left S.ElectionTimeout
 
 testResetHearbeat :: TestTree
@@ -88,10 +88,10 @@ testResetHearbeat = testCase "Resets heartbeat timer" $ do
       (S.ServerState ByteString)
   forkIO $ do
     threadDelay 400000
-    S.resetImpl S.HeartbeatTimeout state
-  msg1 <- S.recvImpl state
+    S.reset' S.HeartbeatTimeout state
+  msg1 <- S.recv' state
   msg1 @?= Left S.ElectionTimeout
-  msg2 <- S.recvImpl state
+  msg2 <- S.recv' state
   msg2 @?= Left S.HeartbeatTimeout
 
 testInject :: TestTree
@@ -99,9 +99,9 @@ testInject = testCase "Inject takes priority" $ do
   state <-
     S.newServerState backpressure 5000 10000 1 :: IO (S.ServerState ByteString)
   S.inject S.HeartbeatTimeout state
-  msg1 <- S.recvImpl state
+  msg1 <- S.recv' state
   msg1 @?= Left S.HeartbeatTimeout
-  msg2 <- S.recvImpl state
+  msg2 <- S.recv' state
   msg2 @?= Left S.ElectionTimeout
 
 sourceMessages l s =

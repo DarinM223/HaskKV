@@ -14,7 +14,7 @@ import qualified Data.Map as M
 type Constr k v e = (KeyClass k, ValueClass v, Entry e)
 
 class HasRun msg k v e c | c -> msg k v e where
-  getRun :: c -> Fn msg k v e
+  run :: c -> Fn msg k v e
 
 type SnapshotType k v = Map k v
 

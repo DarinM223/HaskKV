@@ -4,6 +4,7 @@ module HaskKV.Store.Instances where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
+import Control.Lens
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Binary
@@ -37,86 +38,81 @@ type SnapFn k v =
   forall a. (forall m. (MonadIO m, SnapshotM (M.Map k v) m) => m a) -> IO a
 
 instance (StoreClass k v e r m) => StorageM k v (StoreT m) where
-  getValue k = liftIO . getValueImpl k =<< asks getStore
-  setValue k v = liftIO . setValueImpl k v =<< asks getStore
-  replaceValue k v = liftIO . replaceValueImpl k v =<< asks getStore
-  deleteValue k = liftIO . deleteValueImpl k =<< asks getStore
-  cleanupExpired t = liftIO . cleanupExpiredImpl t =<< asks getStore
+  getValue k = view storeL >>= liftIO . getValue' k
+  setValue k v = view storeL >>= liftIO . setValue' k v
+  replaceValue k v = view storeL >>= liftIO . replaceValue' k v
+  deleteValue k = view storeL >>= liftIO . deleteValue' k
+  cleanupExpired t = view storeL >>= liftIO . cleanupExpired' t
 
 instance (StoreClass k v e r m, SnapshotM s m, TakeSnapshotM m)
   => LogM e (StoreT m) where
-  firstIndex = liftIO . firstIndexImpl =<< asks getStore
-  lastIndex = liftIO . lastIndexImpl =<< asks getStore
-  loadEntry k = liftIO . loadEntryImpl k =<< asks getStore
-  termFromIndex i = liftIO . termFromIndexImpl i =<< asks getStore
-  deleteRange a b = liftIO . deleteRangeImpl a b =<< asks getStore
-  storeEntries es = lift . storeEntriesImpl es =<< asks getStore
+  firstIndex = view storeL >>= liftIO . firstIndex'
+  lastIndex = view storeL >>= liftIO . lastIndex'
+  loadEntry k = view storeL >>= liftIO . loadEntry' k
+  termFromIndex i = view storeL >>= liftIO . termFromIndex' i
+  deleteRange a b = view storeL >>= liftIO . deleteRange' a b
+  storeEntries es = view storeL >>= lift . storeEntries' es
 
 instance ( StoreClass k v e r m
          , SnapshotM s m
          , TakeSnapshotM m
          , e ~ LogEntry k v
          ) => ApplyEntryM k v e (StoreT m) where
-  applyEntry = applyEntryImpl
+  applyEntry = applyEntry'
 
 instance (StoreClass k v e r m) => LoadSnapshotM (M.Map k v) (StoreT m) where
-  loadSnapshot i t map = liftIO . loadSnapshotImpl i t map =<< asks getStore
+  loadSnapshot i t map = view storeL >>= liftIO . loadSnapshot' i t map
 
 instance (StoreClass k v e r m, HasRun msg k v e r)
   => TakeSnapshotM (StoreT m) where
   takeSnapshot = do
-    store <- asks getStore
+    store <- view storeL
     lastApplied <- lift $ gets _lastApplied
     config <- ask
-    liftIO $ takeSnapshotImpl (getRun config) lastApplied store
+    liftIO $ takeSnapshot' (run config) lastApplied store
 
-getValueImpl :: (Ord k) => k -> Store k v e -> IO (Maybe v)
-getValueImpl k = fmap (getKey k) . readTVarIO . unStore
+getValue' :: (Ord k) => k -> Store k v e -> IO (Maybe v)
+getValue' k = fmap (getKey k) . readTVarIO . unStore
 
-setValueImpl :: (Ord k, Storable v) => k -> v -> Store k v e -> IO ()
-setValueImpl k v = modifyTVarIO (setKey k v) . unStore
+setValue' :: (Ord k, Storable v) => k -> v -> Store k v e -> IO ()
+setValue' k v = modifyTVarIO (setKey k v) . unStore
 
-replaceValueImpl
-  :: (Ord k, Storable v) => k -> v -> Store k v e -> IO (Maybe CAS)
-replaceValueImpl k v = stateTVarIO (replaceKey k v) . unStore
+replaceValue' :: (Ord k, Storable v) => k -> v -> Store k v e -> IO (Maybe CAS)
+replaceValue' k v = stateTVarIO (replaceKey k v) . unStore
 
-deleteValueImpl :: (Ord k) => k -> Store k v e -> IO ()
-deleteValueImpl k = modifyTVarIO (deleteKey k) . unStore
+deleteValue' :: (Ord k) => k -> Store k v e -> IO ()
+deleteValue' k = modifyTVarIO (deleteKey k) . unStore
 
-cleanupExpiredImpl
-  :: (Show k, Ord k, Storable v) => Time -> Store k v e -> IO ()
-cleanupExpiredImpl t = modifyTVarIO (cleanupStore t) . unStore
+cleanupExpired' :: (Show k, Ord k, Storable v) => Time -> Store k v e -> IO ()
+cleanupExpired' t = modifyTVarIO (cleanupStore t) . unStore
 
-firstIndexImpl :: Store k v e -> IO LogIndex
-firstIndexImpl = fmap (_lowIdx . _log) . readTVarIO . unStore
+firstIndex' :: Store k v e -> IO LogIndex
+firstIndex' = fmap (_lowIdx . _log) . readTVarIO . unStore
 
-lastIndexImpl :: Store k v e -> IO LogIndex
-lastIndexImpl = fmap (lastIndexLog . _log) . readTVarIO . unStore
+lastIndex' :: Store k v e -> IO LogIndex
+lastIndex' = fmap (lastIndexLog . _log) . readTVarIO . unStore
 
-loadEntryImpl :: LogIndex -> Store k v e -> IO (Maybe e)
-loadEntryImpl (LogIndex k) =
+loadEntry' :: LogIndex -> Store k v e -> IO (Maybe e)
+loadEntry' (LogIndex k) =
   fmap (IM.lookup k . _entries . _log) . readTVarIO . unStore
 
-termFromIndexImpl :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe LogTerm)
-termFromIndexImpl i = fmap (entryTermLog i . _log) . readTVarIO . unStore
+termFromIndex' :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe LogTerm)
+termFromIndex' i = fmap (entryTermLog i . _log) . readTVarIO . unStore
 
-storeEntriesImpl
+storeEntries'
   :: (Entry e, MonadIO m, SnapshotM s m, TakeSnapshotM m)
-  => [e]
-  -> Store k v e
-  -> m ()
-storeEntriesImpl es store = do
+  => [e] -> Store k v e -> m ()
+storeEntries' es store = do
   logSize <- liftIO $ persistAfter (modifyLog (storeEntriesLog es)) store
   snapshotInfo >>= \case
     Just (_, _, snapSize) | logSize > snapSize * 4 -> takeSnapshot
     _ -> return ()
 
-deleteRangeImpl :: (Binary e) => LogIndex -> LogIndex -> Store k v e -> IO ()
-deleteRangeImpl a b store =
-  void $ persistAfter (modifyLog (deleteRangeLog a b)) store
+deleteRange' :: (Binary e) => LogIndex -> LogIndex -> Store k v e -> IO ()
+deleteRange' a b = void . persistAfter (modifyLog (deleteRangeLog a b))
 
-applyEntryImpl :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
-applyEntryImpl LogEntry { _data = entry, _completed = Completed lock } = do
+applyEntry' :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
+applyEntry' LogEntry { _data = entry, _completed = Completed lock } = do
   mapM_ (liftIO . atomically . flip putTMVar ()) lock
   applyStore entry
  where
@@ -124,47 +120,33 @@ applyEntryImpl LogEntry { _data = entry, _completed = Completed lock } = do
   applyStore (Delete _ k  ) = deleteValue k
   applyStore _              = return ()
 
-loadSnapshotImpl
+loadSnapshot'
   :: (Ord k, Storable v)
-  => LogIndex
-  -> LogTerm
-  -> M.Map k v
-  -> Store k v e
-  -> IO ()
-loadSnapshotImpl lastIndex lastTerm map (Store store) =
+  => LogIndex -> LogTerm -> M.Map k v -> Store k v e -> IO ()
+loadSnapshot' lastIndex lastTerm map (Store store) =
   atomically $ modifyTVar' store (loadSnapshotStore lastIndex lastTerm map)
 
-takeSnapshotImpl
+takeSnapshot'
   :: (KeyClass k, ValueClass v, Entry e)
-  => SnapFn k v
-  -> LogIndex
-  -> Store k v e
-  -> IO ()
-takeSnapshotImpl run lastApplied store = do
+  => SnapFn k v -> LogIndex -> Store k v e -> IO ()
+takeSnapshot' run lastApplied store = do
   storeData <- readTVarIO $ unStore store
-  let
-    firstIndex = _lowIdx $ _log storeData
-    lastTerm =
-      entryTerm
-        . fromJust
-        . IM.lookup (unLogIndex lastApplied)
-        . _entries
-        . _log
-        $ storeData
-  void
-    $ forkIO
-    $ run
-    $ do
-        createSnapshot lastApplied lastTerm
-        let snapData = B.concat . BL.toChunks . encode . _map $ storeData
-        -- FIXME(DarinM223): maybe write a version of writeSnapshot
-        -- that takes in a lazy bytestring instead of a strict bytestring?
-        writeSnapshot 0 snapData lastApplied
-        saveSnapshot lastApplied
+  let firstIndex = _lowIdx $ _log storeData
+      lastTerm   = entryTerm
+                 . fromJust
+                 . IM.lookup (unLogIndex lastApplied)
+                 $ _entries (_log storeData)
+  void $ forkIO $ run $ do
+    createSnapshot lastApplied lastTerm
+    let snapData = B.concat . BL.toChunks . encode . _map $ storeData
+    -- FIXME(DarinM223): maybe write a version of writeSnapshot
+    -- that takes in a lazy bytestring instead of a strict bytestring?
+    writeSnapshot 0 snapData lastApplied
+    saveSnapshot lastApplied
 
-        snap <- readSnapshot lastApplied
-        forM_ snap $ \snap ->
-          liftIO
-            $ flip persistAfter store
-            $ loadSnapshotStore lastApplied lastTerm snap
-            . modifyLog (deleteRangeLog firstIndex lastApplied)
+    snap <- readSnapshot lastApplied
+    forM_ snap $ \snap ->
+      liftIO
+        $ flip persistAfter store
+        $ loadSnapshotStore lastApplied lastTerm snap
+        . modifyLog (deleteRangeLog firstIndex lastApplied)

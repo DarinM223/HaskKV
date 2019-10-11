@@ -1,5 +1,6 @@
 module HaskKV.Monad where
 
+import Control.Lens (lens)
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Binary
@@ -18,24 +19,24 @@ import HaskKV.Snapshot.All
 import HaskKV.Store.All
 
 data AppConfig msg k v e = AppConfig
-  { _state       :: IORef RaftState
-  , _store       :: Store k v e
-  , _tempLog     :: TempLog e
-  , _serverState :: ServerState msg
-  , _snapManager :: SnapshotManager
-  , _run         :: Fn msg k v e
+  { cState       :: IORef RaftState
+  , cStore       :: Store k v e
+  , cTempLog     :: TempLog e
+  , cServerState :: ServerState msg
+  , cSnapManager :: SnapshotManager
+  , cRun         :: Fn msg k v e
   }
 
 instance HasServerState msg (AppConfig msg k v e) where
-  getServerState = _serverState
+  serverStateL = lens cServerState (\s t -> s { cServerState = t })
 instance HasStore k v e (AppConfig msg k v e) where
-  getStore = _store
+  storeL = lens cStore (\s t -> s { cStore = t })
 instance HasTempLog e (AppConfig msg k v e) where
-  getTempLog = _tempLog
+  tempLogL = lens cTempLog (\s t -> s { cTempLog = t })
 instance HasSnapshotManager (AppConfig msg k v e) where
-  getSnapshotManager = _snapManager
+  snapshotManagerL = lens cSnapManager (\s t -> s { cSnapManager = t })
 instance HasRun msg k v e (AppConfig msg k v e) where
-  getRun = _run
+  run = cRun
 
 data InitAppConfig msg e = InitAppConfig
   { _initLog       :: Maybe (Log e)
@@ -45,8 +46,8 @@ data InitAppConfig msg e = InitAppConfig
   }
 
 instance MonadState RaftState (App msg k v e) where
-  get = App $ ReaderT $ liftIO . readIORef . _state
-  put x = App $ ReaderT $ liftIO . flip writeIORef x . _state
+  get = App $ ReaderT $ liftIO . readIORef . cState
+  put x = App $ ReaderT $ liftIO . flip writeIORef x . cState
 
 instance (Binary k, Binary v) =>
   HasSnapshotType (SnapshotType k v) (App msg k v e)
@@ -54,13 +55,12 @@ instance (Binary k, Binary v) =>
 newtype App msg k v e a = App
   { unApp :: ReaderT (AppConfig msg k v e) IO a }
   deriving ( Functor, Applicative, Monad, MonadIO
-           , MonadReader (AppConfig msg k v e)
-           )
+           , MonadReader (AppConfig msg k v e) )
   deriving (ServerM msg ServerEvent) via ServerT (App msg k v e)
-  deriving (StorageM k v) via StoreT (App msg k v e)
-  deriving (LogM e) via StoreT (App msg k v e)
-  deriving (LoadSnapshotM (SnapshotType k v)) via StoreT (App msg k v e)
-  deriving TakeSnapshotM via StoreT (App msg k v e)
+  deriving ( StorageM k v
+           , LogM e
+           , LoadSnapshotM (SnapshotType k v)
+           , TakeSnapshotM ) via StoreT (App msg k v e)
   deriving (TempLogM e) via TempLogT (App msg k v e)
   deriving (SnapshotM (SnapshotType k v)) via SnapshotT (App msg k v e)
   deriving DebugM via PrintDebugT (App msg k v e)
@@ -77,21 +77,19 @@ newAppConfig
   => InitAppConfig msg e
   -> IO (AppConfig msg k v e)
 newAppConfig config = do
-  let
-    serverState = getField @"_serverState" config
-    sid         = getField @"_sid" serverState
-    raftState   = newRaftState sid $ _initState config
+  let serverState = getField @"_serverState" config
+      sid         = getField @"_sid" serverState
+      raftState   = newRaftState sid $ _initState config
   raftStateRef <- newIORef raftState
   store        <- newStore sid $ _initLog config
   tempLog      <- newTempLog
   snapManager  <- newSnapshotManager $ _snapDirectory config
-  let
-    config = AppConfig
-      { _state       = raftStateRef
-      , _store       = store
-      , _tempLog     = tempLog
-      , _serverState = serverState
-      , _snapManager = snapManager
-      , _run         = flip runApp config
-      }
+  let config = AppConfig
+        { cState       = raftStateRef
+        , cStore       = store
+        , cTempLog     = tempLog
+        , cServerState = serverState
+        , cSnapManager = snapManager
+        , cRun         = flip runApp config
+        }
   return config

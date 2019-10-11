@@ -42,15 +42,11 @@ runServer port host clients s = do
   thrd t = let (_, _, a) = t in a
 
   connectClient settings bq = do
-    let
-      connect appData =
-        putStrLn "Connected to server" >> connectStream bq appData
+    let connect appData =
+          putStrLn "Connected to server" >> connectStream bq appData
 
-    debugM "conduit"
-      $  "Connecting to host "
-      ++ show (clientHost settings)
-      ++ " and port "
-      ++ show (clientPort settings)
+    debugM "conduit" $ "Connecting to host " ++ show (clientHost settings)
+                    ++ " and port " ++ show (clientPort settings)
 
     catch (runTCPClient settings connect) $ \(_ :: SomeException) -> do
       putStrLn "Error connecting to server, retrying"

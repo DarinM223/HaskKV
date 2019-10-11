@@ -5,6 +5,7 @@ module HaskKV.Log.Temp where
 import Control.Applicative ((<|>))
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
+import Control.Lens
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.Maybe (fromJust)
@@ -18,7 +19,7 @@ import qualified HaskKV.Timer as Timer
 newtype TempLog e = TempLog { unTempLog :: MVar [e] }
 
 class HasTempLog e r | r -> e where
-  getTempLog :: r -> TempLog e
+  tempLogL :: Lens' r (TempLog e)
 
 newTempLog :: IO (TempLog e)
 newTempLog = TempLog <$> newMVar []
@@ -32,18 +33,18 @@ newtype TempLogT m a = TempLogT { unTempLogT :: m a }
 instance (MonadIO m, MonadReader r m, HasTempLog e r)
   => TempLogM e (TempLogT m) where
 
-  addTemporaryEntry e = liftIO . addTemporaryEntryImpl e =<< asks getTempLog
-  temporaryEntries = liftIO . temporaryEntriesImpl =<< asks getTempLog
+  addTemporaryEntry e = view tempLogL >>= liftIO . addTemporaryEntry' e
+  temporaryEntries = view tempLogL >>= liftIO . temporaryEntries'
 
-addTemporaryEntryImpl :: e -> TempLog e -> IO ()
-addTemporaryEntryImpl e = flip modifyMVar_ (pure . addEntry e) . unTempLog
+addTemporaryEntry' :: e -> TempLog e -> IO ()
+addTemporaryEntry' e = flip modifyMVar_ (pure . addEntry e) . unTempLog
  where
   addEntry e es
     | length es + 1 > maxTempEntries = es
     | otherwise                      = e : es
 
-temporaryEntriesImpl :: TempLog e -> IO [e]
-temporaryEntriesImpl (TempLog var) = do
+temporaryEntries' :: TempLog e -> IO [e]
+temporaryEntries' (TempLog var) = do
   entries <- reverse <$> takeMVar var
   putMVar var []
   return entries
