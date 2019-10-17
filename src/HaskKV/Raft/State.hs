@@ -49,8 +49,8 @@ persistentStateFilename (SID sid) = show sid ++ ".state"
 
 newPersistentState :: RaftState -> PersistentState
 newPersistentState s = PersistentState
-  { _currTerm = s^.currTerm
-  , _votedFor = s^.votedFor
+  { _currTerm = s ^. currTerm
+  , _votedFor = s ^. votedFor
   }
 
 newRaftState :: SID -> Maybe PersistentState -> RaftState

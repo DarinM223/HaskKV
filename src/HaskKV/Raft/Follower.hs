@@ -36,7 +36,7 @@ runFollower = recv >>= \case
   Right (Response _ resp)    -> get >>= handleFollowerResponse resp
 
 handleFollowerResponse msg@(VoteResponse term _) s
-  | term > s^.currTerm = transitionToFollower msg
-  | otherwise          = return ()
+  | term > s ^. currTerm = transitionToFollower msg
+  | otherwise            = return ()
 
 handleFollowerResponse _ _ = return ()

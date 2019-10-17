@@ -73,6 +73,7 @@ default-extensions:
 - LambdaCase
 - MultiParamTypeClasses
 - NumericUnderscores
+- OverloadedLabels
 - OverloadedStrings
 - PatternSynonyms
 - QuantifiedConstraints

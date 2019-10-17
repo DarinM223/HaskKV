@@ -5,7 +5,6 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Binary
 import Data.Binary.Orphans ()
-import Data.Generics.Product.Fields
 import Data.IORef
 import GHC.Generics
 import HaskKV.Constr
@@ -40,10 +39,10 @@ instance HasRun msg k v e (AppConfig msg k v e) where
   run = cRun
 
 data InitAppConfig msg e = InitAppConfig
-  { _initLog       :: Maybe (Log e)
-  , _initState     :: Maybe PersistentState
-  , _serverState   :: ServerState msg
-  , _snapDirectory :: Maybe FilePath
+  { initLog       :: Maybe (Log e)
+  , initState     :: Maybe PersistentState
+  , serverState   :: ServerState msg
+  , snapDirectory :: Maybe FilePath
   } deriving Generic
 
 instance MonadState RaftState (App msg k v e) where
@@ -78,13 +77,13 @@ newAppConfig
   => InitAppConfig msg e
   -> IO (AppConfig msg k v e)
 newAppConfig config = do
-  let serverState = config^.field' @"_serverState"
-      sid         = serverState^.field' @"_sid"
-      raftState   = newRaftState sid $ _initState config
+  let serverState = config ^. #serverState
+      sid         = serverState ^. #_sid
+      raftState   = newRaftState sid $ config ^. #initState
   raftStateRef <- newIORef raftState
-  store        <- newStore sid $ _initLog config
+  store        <- newStore sid $ config ^. #initLog
   tempLog      <- newTempLog
-  snapManager  <- newSnapshotManager $ _snapDirectory config
+  snapManager  <- newSnapshotManager $ config ^. #snapDirectory
   let config = AppConfig
         { cState       = raftStateRef
         , cStore       = store

@@ -65,5 +65,5 @@ applyEntryData entryData = ask >>= \config -> liftIO $ do
                        , _completed = completed
                        }
   f <- async $ run config $ waitApplyEntry entry
-  inject HeartbeatTimeout $ config^.serverStateL
+  inject HeartbeatTimeout $ config ^. serverStateL
   wait f

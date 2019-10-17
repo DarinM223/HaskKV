@@ -2,7 +2,7 @@ module HaskKV.Raft.Utils where
 
 import Control.Lens
 import Control.Monad.State
-import Data.Generics.Product.Fields
+import Data.Generics.Labels (Field')
 import Data.Maybe
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
@@ -15,19 +15,19 @@ import HaskKV.Types
 import qualified Data.IntMap as IM
 
 transitionToFollower
-  :: (MonadState RaftState m, HasField' "_term" msg LogTerm, PersistM m)
+  :: (MonadState RaftState m, Field' "_term" msg LogTerm, PersistM m)
   => msg
   -> m ()
 transitionToFollower msg = do
   stateType .= Follower
-  setCurrTerm $ msg^.field' @"_term"
+  setCurrTerm $ msg ^. #_term
   get >>= persist
 
 transitionToLeader
   :: ( LogM (LogEntry k v) m
      , MonadState RaftState m
      , ServerM (RaftMessage (LogEntry k v)) ServerEvent m
-     , HasField' "_term" msg LogTerm
+     , Field' "_term" msg LogTerm
      )
   => msg
   -> m ()
@@ -47,7 +47,7 @@ transitionToLeader msg = do
   sid          <- use serverID
   prevLastTerm <- fromMaybe 0 <$> termFromIndex prevLastIndex
   broadcast $ AppendEntries $ AppendEntries'
-    { _term        = msg^.field' @"_term"
+    { _term        = msg ^. #_term
     , _leaderId    = sid
     , _prevLogIdx  = prevLastIndex
     , _prevLogTerm = prevLastTerm

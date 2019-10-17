@@ -2,7 +2,6 @@ module HaskKV.Raft.Leader where
 
 import Control.Lens
 import Control.Monad.State
-import Data.Generics.Product.Fields
 import Data.List (sortBy)
 import Data.Maybe
 import HaskKV.Log.Class
@@ -63,8 +62,8 @@ handleLeaderResponse
   -> RaftState
   -> m ()
 handleLeaderResponse (SID sender) msg@(AppendResponse term success lastIndex) s
-  | term < s^.currTerm = return ()
-  | term > s^.currTerm = transitionToFollower msg
+  | term < s ^. currTerm = return ()
+  | term > s ^. currTerm = transitionToFollower msg
   | not success = do
     debug $ "Decrementing next index for server " ++ show sender
     stateType._Leader.nextIndex %= IM.adjust prevIndex sender
@@ -80,12 +79,12 @@ handleLeaderResponse (SID sender) msg@(AppendResponse term success lastIndex) s
     term <- fromMaybe 0 <$> termFromIndex n
     debug $ "N: " ++ show n
     debug $ "Commit Index: " ++ show (_commitIndex s)
-    when (n > _commitIndex s && term == s^.currTerm) $ do
+    when (n > _commitIndex s && term == s ^. currTerm) $ do
       debug $ "Updating commit index to " ++ show n
       commitIndex .= n
 handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
-  | term < s^.currTerm = return ()
-  | term > s^.currTerm = transitionToFollower msg
+  | term < s ^. currTerm = return ()
+  | term > s ^. currTerm = transitionToFollower msg
   | otherwise = do
     hasRemaining <- hasChunk sender
     if hasRemaining
@@ -175,9 +174,9 @@ sendSnapshotChunk id chunk = do
   send id $ InstallSnapshot $ InstallSnapshot'
     { _term              = term
     , _leaderId          = sid
-    , _lastIncludedIndex = chunk^.field' @"_index"
-    , _lastIncludedTerm  = chunk^.field' @"_term"
-    , _offset            = chunk^.field' @"_offset"
-    , _data              = chunk^.field' @"_data"
-    , _done              = _type chunk == EndChunk
+    , _lastIncludedIndex = chunk ^. #_index
+    , _lastIncludedTerm  = chunk ^. #_term
+    , _offset            = chunk ^. #_offset
+    , _data              = chunk ^. #_data
+    , _done              = chunk ^. #_type == EndChunk
     }

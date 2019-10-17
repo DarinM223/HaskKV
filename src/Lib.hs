@@ -65,11 +65,11 @@ handleArgs (path : sid : _) = do
     lift $ loadSnapshot index term snapshot
 
   -- Run Raft server and handler.
-  mapM_ (\p -> runServer p "*" settings (appConfig^.serverStateL)) raftPort
+  mapM_ (\p -> runServer p "*" settings (appConfig ^. serverStateL)) raftPort
   forkIO $ forever $ run appConfig runRaft
 
   -- Run API server.
-  mapM_ (flip Warp.run (serve api (server appConfig))) apiPort
+  mapM_ (`Warp.run` serve api (server appConfig)) apiPort
 handleArgs _ = do
   putStrLn "Invalid arguments passed"
   putStrLn "Arguments are:"

@@ -2,7 +2,6 @@ module HaskKV.Raft.RPC where
 
 import Control.Lens
 import Control.Monad.State
-import Data.Generics.Product.Fields
 import Data.Maybe
 import HaskKV.Log.Class
 import HaskKV.Log.Utils
@@ -27,8 +26,8 @@ handleRequestVote
   -> m ()
 handleRequestVote rv s
   | existingLeader rv s               = fail rv s
-  | rv^.field' @"_term" < s^.currTerm = fail rv s
-  | rv^.field' @"_term" > s^.currTerm = do
+  | rv ^. #_term < s ^. currTerm = fail rv s
+  | rv ^. #_term > s ^. currTerm = do
     debug "Transitioning to follower"
     transitionToFollower rv
     get >>= handleRequestVote rv
@@ -47,13 +46,13 @@ handleRequestVote rv s
   | otherwise = fail rv s
  where
   successResponse s =
-    Response (_serverID s) $ VoteResponse (s^.currTerm) True
+    Response (_serverID s) $ VoteResponse (s ^. currTerm) True
   failResponse s =
-    Response (_serverID s) $ VoteResponse (s^.currTerm) False
+    Response (_serverID s) $ VoteResponse (s ^. currTerm) False
 
   existingLeader rv s =
-    _leader s /= Nothing && _leader s /= Just (_candidateID rv)
-  canVote cid s = s^.votedFor == Nothing || s^.votedFor == Just cid
+    isJust (_leader s) && _leader s /= Just (_candidateID rv)
+  canVote cid s = isNothing (s ^. votedFor) || s ^. votedFor == Just cid
   checkValid rv i t = _lastLogIdx rv >= i && _lastLogTerm rv >= t
   fail rv = send (_candidateID rv) . failResponse
 
@@ -69,24 +68,24 @@ handleAppendEntries
   -> RaftState
   -> m ()
 handleAppendEntries ae s
-  | ae^.field' @"_term" < s^.currTerm =
-    send (ae^.field' @"_leaderId") $ failResponse s
-  | ae^.field' @"_term" > s^.currTerm = do
+  | ae ^. #_term < s ^. currTerm =
+    send (ae ^. #_leaderId) $ failResponse s
+  | ae ^. #_term > s ^. currTerm = do
     debug "Transitioning to follower"
     transitionToFollower ae
     get >>= handleAppendEntries ae
   | otherwise = do
-    leader .= Just (ae^.field' @"_leaderId")
+    leader .= Just (ae ^. #_leaderId)
     reset ElectionTimeout
 
     prevLogTerm <- termFromIndex $ _prevLogIdx ae
     if prevLogTerm == Just (_prevLogTerm ae)
       then do
         lastLogIndex <- lastIndex
-        newEntries <- diffEntriesWithLog lastLogIndex $ ae^.field' @"_entries"
+        newEntries <- diffEntriesWithLog lastLogIndex $ ae ^. #_entries
         storeEntries newEntries
 
-        let lastEntryIndex = if (null newEntries)
+        let lastEntryIndex = if null newEntries
               then lastLogIndex
               else entryIndex $ last newEntries
 
@@ -95,15 +94,15 @@ handleAppendEntries ae s
 
         commitIndex' <- use commitIndex
         when (_commitIdx ae > commitIndex') $
-          commitIndex .= (min lastEntryIndex $ _commitIdx ae)
+          commitIndex .= min lastEntryIndex (_commitIdx ae)
 
-        send (ae^.field' @"_leaderId") $ successResponse lastEntryIndex s
-      else send (ae^.field' @"_leaderId") $ failResponse s
+        send (ae ^. #_leaderId) $ successResponse lastEntryIndex s
+      else send (ae ^. #_leaderId) $ failResponse s
  where
   successResponse lastIndex s = Response (_serverID s) $
-    AppendResponse (s^.currTerm) True lastIndex
+    AppendResponse (s ^. currTerm) True lastIndex
   failResponse s =
-    Response (_serverID s) $ AppendResponse (s^.currTerm) False 0
+    Response (_serverID s) $ AppendResponse (s ^. currTerm) False 0
 
 handleInstallSnapshot
   :: ( StorageM k v m
@@ -117,14 +116,14 @@ handleInstallSnapshot
   -> RaftState
   -> m ()
 handleInstallSnapshot is s
-  | is^.field' @"_term" < s^.currTerm =
-    send (is^.field' @"_leaderId") $ failResponse s
+  | is ^. #_term < s ^. currTerm =
+    send (is ^. #_leaderId) $ failResponse s
   | otherwise = do
     let snapIndex = _lastIncludedIndex is
         snapTerm  = _lastIncludedTerm is
-        offset    = is^.field' @"_offset"
+        offset    = is ^. #_offset
     when (offset == 0) $ createSnapshot snapIndex snapTerm
-    writeSnapshot offset (is^.field' @"_data") snapIndex
+    writeSnapshot offset (is ^. #_data) snapIndex
 
     when (_done is) $ do
       saveSnapshot snapIndex
@@ -143,9 +142,9 @@ handleInstallSnapshot is s
           snap <- readSnapshot snapIndex
           mapM_ (loadSnapshot snapIndex snapTerm) snap
 
-    send (is^.field' @"_leaderId") $ successResponse s
+    send (is ^. #_leaderId) $ successResponse s
  where
   successResponse s =
-    Response (_serverID s) $ InstallSnapshotResponse $ s^.currTerm
+    Response (_serverID s) $ InstallSnapshotResponse $ s ^. currTerm
   failResponse s =
-    Response (_serverID s) $ InstallSnapshotResponse $ s^.currTerm
+    Response (_serverID s) $ InstallSnapshotResponse $ s ^. currTerm

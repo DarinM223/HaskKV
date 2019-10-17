@@ -191,7 +191,7 @@ saveSnapshotImpl i = do
   let i' = unLogIndex i
   snap <- fromJust <$> preuse (snapshotManager.partial.ix i')
   snapshotManager.completed %= \case
-    Just s | s^.sIndex < i -> Just snap
+    Just s | s ^. sIndex < i -> Just snap
     Nothing                -> Just snap
     s                      -> s
   snapshotManager.partial %= IM.filter ((> i) . (^. sIndex))
@@ -244,10 +244,10 @@ broadcastImpl msg = do
 recvImpl = S.get >>= go
  where
   go s
-    | s^.electionTimer = do
+    | s ^. electionTimer = do
       electionTimer .= False
       return (Left ElectionTimeout)
-    | s^.heartbeatTimer = do
+    | s ^. heartbeatTimer = do
       heartbeatTimer .= False
       return (Left HeartbeatTimeout)
     | otherwise = do

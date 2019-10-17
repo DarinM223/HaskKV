@@ -7,7 +7,6 @@ import Control.Concurrent.STM
 import Control.Lens
 import Control.Monad
 import Data.Binary
-import Data.Generics.Product.Fields
 import Data.List (nub, sort)
 import HaskKV.Snapshot.All
 import HaskKV.Types
@@ -165,7 +164,7 @@ testReadChunks =
     chunk <- readChunk' 9 sid manager
     forM_ chunk
       $ \c -> writeSnapshot'
-          (c^.field' @"_offset")
+          (c ^. #_offset)
           (_data c)
           (sidToIdx sid)
           manager
