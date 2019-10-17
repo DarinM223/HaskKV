@@ -4,10 +4,10 @@ module Mock.Instances where
 
 import Control.Lens
 import Control.Monad.State.Strict
+import Data.Binary
+import Data.Generics.Product.Fields
 import Data.Maybe
 import Data.Monoid
-import Data.Binary
-import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
@@ -142,7 +142,7 @@ instance TakeSnapshotM (State MockConfig) where
   takeSnapshot = takeSnapshotImpl
 
 takeSnapshotImpl = do
-  lastIndex <- use (raftState . lastApplied)
+  lastIndex <- use $ raftState.lastApplied
   storeData <- gets _store
   let
     firstIndex = _lowIdx $ _log storeData
@@ -184,32 +184,32 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
 
 createSnapshotImpl i t = do
   let snapshot = MockSnapshot {_file = "", _sIndex = i, _term = t}
-  (snapshotManager . partial) %= (IM.insert (unLogIndex i) snapshot)
+  snapshotManager.partial %= IM.insert (unLogIndex i) snapshot
 writeSnapshotImpl _ snapData (LogIndex i) =
-  (snapshotManager . partial . ix i . file) %= (++ (C.unpack snapData))
+  snapshotManager.partial.ix i.file %= (++ (C.unpack snapData))
 saveSnapshotImpl i = do
   let i' = unLogIndex i
-  snap <- fromJust <$> preuse (snapshotManager . partial . ix i')
-  (snapshotManager . completed) %= \case
-    Just s | getField @"_sIndex" s < i -> Just snap
-    Nothing                            -> Just snap
-    s                                  -> s
-  (snapshotManager . partial) %= IM.filter ((> i) . getField @"_sIndex")
+  snap <- fromJust <$> preuse (snapshotManager.partial.ix i')
+  snapshotManager.completed %= \case
+    Just s | s^.sIndex < i -> Just snap
+    Nothing                -> Just snap
+    s                      -> s
+  snapshotManager.partial %= IM.filter ((> i) . (^. sIndex))
 readSnapshotImpl _ = do
-  snapData <- preuse (snapshotManager . completed . _Just . file)
+  snapData <- preuse $ snapshotManager.completed._Just.file
   return . fmap (decode . CL.pack) $ snapData
 hasChunkImpl (SID sid) =
-  preuse (snapshotManager . chunks . ix sid) >>= pure . \case
+  preuse (snapshotManager.chunks.ix sid) >>= pure . \case
     Just (s, _) | s == "" -> False
     Nothing               -> False
     _                     -> True
 readChunkImpl amount (SID sid) = snapshotInfo >>= \case
   Just (i, t, _) -> do
-    temp <- preuse (snapshotManager . chunks . ix sid)
+    temp <- preuse $ snapshotManager.chunks.ix sid
     when (isNothing temp || fmap fst temp == Just "") $ do
-      file' <- use (snapshotManager . completed . _Just . file)
-      (snapshotManager . chunks) %= (IM.insert sid (file', 0))
-    prezoom (snapshotManager . chunks . ix sid) $ S.state $ \(s, f) ->
+      file' <- use $ snapshotManager.completed._Just.file
+      snapshotManager.chunks %= IM.insert sid (file', 0)
+    prezoom (snapshotManager.chunks.ix sid) $ S.state $ \(s, f) ->
       let
         (chunkData, remainder) = splitAt amount s
         chunkType              = if null remainder then EndChunk else FullChunk
@@ -223,9 +223,9 @@ readChunkImpl amount (SID sid) = snapshotInfo >>= \case
       in (chunk, (remainder, f + 1))
   _ -> return Nothing
 snapshotInfoImpl = do
-  snapIndex <- preuse (snapshotManager . completed . _Just . sIndex)
-  snapTerm  <- preuse (snapshotManager . completed . _Just . term)
-  file      <- preuse (snapshotManager . completed . _Just . file)
+  snapIndex <- preuse $ snapshotManager.completed._Just.sIndex
+  snapTerm  <- preuse $ snapshotManager.completed._Just.term
+  file      <- preuse $ snapshotManager.completed._Just.file
   let snapSize = fmap (fromIntegral . length) file
   return $ (,,) <$> snapIndex <*> snapTerm <*> snapSize
 
@@ -244,10 +244,10 @@ broadcastImpl msg = do
 recvImpl = S.get >>= go
  where
   go s
-    | getField @"_electionTimer" s = do
+    | s^.electionTimer = do
       electionTimer .= False
       return (Left ElectionTimeout)
-    | getField @"_heartbeatTimer" s = do
+    | s^.heartbeatTimer = do
       heartbeatTimer .= False
       return (Left HeartbeatTimeout)
     | otherwise = do

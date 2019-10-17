@@ -2,8 +2,8 @@ module HaskKV.Raft.Utils where
 
 import Control.Lens
 import Control.Monad.State
+import Data.Generics.Product.Fields
 import Data.Maybe
-import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Raft.Class
@@ -15,19 +15,19 @@ import HaskKV.Types
 import qualified Data.IntMap as IM
 
 transitionToFollower
-  :: (MonadState RaftState m, HasField "_term" msg LogTerm, PersistM m)
+  :: (MonadState RaftState m, HasField' "_term" msg LogTerm, PersistM m)
   => msg
   -> m ()
 transitionToFollower msg = do
   stateType .= Follower
-  setCurrTerm $ getField @"_term" msg
+  setCurrTerm $ msg^.field' @"_term"
   get >>= persist
 
 transitionToLeader
   :: ( LogM (LogEntry k v) m
      , MonadState RaftState m
      , ServerM (RaftMessage (LogEntry k v)) ServerEvent m
-     , HasField "_term" msg LogTerm
+     , HasField' "_term" msg LogTerm
      )
   => msg
   -> m ()
@@ -46,8 +46,8 @@ transitionToLeader msg = do
 
   sid          <- use serverID
   prevLastTerm <- fromMaybe 0 <$> termFromIndex prevLastIndex
-  broadcast $ AppendEntries
-    { _term        = getField @"_term" msg
+  broadcast $ AppendEntries $ AppendEntries'
+    { _term        = msg^.field' @"_term"
     , _leaderId    = sid
     , _prevLogIdx  = prevLastIndex
     , _prevLogTerm = prevLastTerm
@@ -86,7 +86,7 @@ startElection = do
   lastTerm   <- fromMaybe 0 <$> termFromIndex lastIndex'
 
   term       <- use currTerm
-  broadcast RequestVote
+  broadcast $ RequestVote $ RequestVote'
     { _candidateID = sid
     , _term        = term
     , _lastLogIdx  = lastIndex'

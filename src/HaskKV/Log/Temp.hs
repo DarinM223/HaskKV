@@ -8,8 +8,8 @@ import Control.Concurrent.STM
 import Control.Lens
 import Control.Monad.IO.Class
 import Control.Monad.Reader
+import Data.Generics.Product.Fields
 import Data.Maybe (fromJust)
-import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Types
@@ -54,7 +54,7 @@ applyTimeout = 5000000
 
 -- | Stores entry in the log and then blocks until log entry is committed.
 waitApplyEntry
-  :: (MonadIO m, TempLogM e m, HasField "_completed" e Completed) => e -> m ()
+  :: (MonadIO m, TempLogM e m, HasField' "_completed" e Completed) => e -> m ()
 waitApplyEntry entry = do
   addTemporaryEntry entry
 
@@ -66,4 +66,4 @@ waitApplyEntry entry = do
     atomically $ Timer.await timer <|> awaitCompleted
  where
   awaitCompleted =
-    takeTMVar . fromJust . unCompleted . getField @"_completed" $ entry
+    takeTMVar . fromJust . unCompleted $ entry^.field' @"_completed"

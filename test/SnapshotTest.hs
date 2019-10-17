@@ -4,10 +4,11 @@ module SnapshotTest
 where
 
 import Control.Concurrent.STM
+import Control.Lens
 import Control.Monad
 import Data.Binary
+import Data.Generics.Product.Fields
 import Data.List (nub, sort)
-import GHC.Records
 import HaskKV.Snapshot.All
 import HaskKV.Types
 import Test.Tasty
@@ -164,7 +165,7 @@ testReadChunks =
     chunk <- readChunk' 9 sid manager
     forM_ chunk
       $ \c -> writeSnapshot'
-          (getField @"_offset" c)
+          (c^.field' @"_offset")
           (_data c)
           (sidToIdx sid)
           manager

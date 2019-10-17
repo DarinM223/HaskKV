@@ -2,8 +2,8 @@ module HaskKV.Raft.RPC where
 
 import Control.Lens
 import Control.Monad.State
+import Data.Generics.Product.Fields
 import Data.Maybe
-import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Utils
 import HaskKV.Raft.Class
@@ -22,13 +22,13 @@ handleRequestVote
      , PersistM m
      , Entry e
      )
-  => RaftMessage e
+  => RequestVote'
   -> RaftState
   -> m ()
 handleRequestVote rv s
-  | existingLeader rv s = fail rv s
-  | getField @"_term" rv < getField @"_currTerm" s = fail rv s
-  | getField @"_term" rv > getField @"_currTerm" s = do
+  | existingLeader rv s               = fail rv s
+  | rv^.field' @"_term" < s^.currTerm = fail rv s
+  | rv^.field' @"_term" > s^.currTerm = do
     debug "Transitioning to follower"
     transitionToFollower rv
     get >>= handleRequestVote rv
@@ -47,14 +47,13 @@ handleRequestVote rv s
   | otherwise = fail rv s
  where
   successResponse s =
-    Response (_serverID s) $ VoteResponse (getField @"_currTerm" s) True
+    Response (_serverID s) $ VoteResponse (s^.currTerm) True
   failResponse s =
-    Response (_serverID s) $ VoteResponse (getField @"_currTerm" s) False
+    Response (_serverID s) $ VoteResponse (s^.currTerm) False
 
   existingLeader rv s =
     _leader s /= Nothing && _leader s /= Just (_candidateID rv)
-  canVote cid s =
-    getField @"_votedFor" s == Nothing || getField @"_votedFor" s == Just cid
+  canVote cid s = s^.votedFor == Nothing || s^.votedFor == Just cid
   checkValid rv i t = _lastLogIdx rv >= i && _lastLogTerm rv >= t
   fail rv = send (_candidateID rv) . failResponse
 
@@ -66,26 +65,25 @@ handleAppendEntries
      , PersistM m
      , Entry e
      )
-  => RaftMessage e
+  => AppendEntries' e
   -> RaftState
   -> m ()
 handleAppendEntries ae s
-  | getField @"_term" ae < getField @"_currTerm" s =
-    send (_leaderId ae) $ failResponse s
-  | getField @"_term" ae > getField @"_currTerm" s = do
+  | ae^.field' @"_term" < s^.currTerm =
+    send (ae^.field' @"_leaderId") $ failResponse s
+  | ae^.field' @"_term" > s^.currTerm = do
     debug "Transitioning to follower"
     transitionToFollower ae
     get >>= handleAppendEntries ae
   | otherwise = do
-    leader .= Just (_leaderId ae)
+    leader .= Just (ae^.field' @"_leaderId")
     reset ElectionTimeout
 
     prevLogTerm <- termFromIndex $ _prevLogIdx ae
     if prevLogTerm == Just (_prevLogTerm ae)
       then do
         lastLogIndex <- lastIndex
-        newEntries   <- diffEntriesWithLog lastLogIndex
-                      $ getField @"_entries" ae
+        newEntries <- diffEntriesWithLog lastLogIndex $ ae^.field' @"_entries"
         storeEntries newEntries
 
         let lastEntryIndex = if (null newEntries)
@@ -99,13 +97,13 @@ handleAppendEntries ae s
         when (_commitIdx ae > commitIndex') $
           commitIndex .= (min lastEntryIndex $ _commitIdx ae)
 
-        send (_leaderId ae) $ successResponse lastEntryIndex s
-      else send (_leaderId ae) $ failResponse s
+        send (ae^.field' @"_leaderId") $ successResponse lastEntryIndex s
+      else send (ae^.field' @"_leaderId") $ failResponse s
  where
   successResponse lastIndex s = Response (_serverID s) $
-    AppendResponse (getField @"_currTerm" s) True lastIndex
+    AppendResponse (s^.currTerm) True lastIndex
   failResponse s =
-    Response (_serverID s) $ AppendResponse (getField @"_currTerm" s) False 0
+    Response (_serverID s) $ AppendResponse (s^.currTerm) False 0
 
 handleInstallSnapshot
   :: ( StorageM k v m
@@ -115,18 +113,18 @@ handleInstallSnapshot
      , LoadSnapshotM s m
      , Entry e
      )
-  => RaftMessage e
+  => InstallSnapshot'
   -> RaftState
   -> m ()
 handleInstallSnapshot is s
-  | getField @"_term" is < getField @"_currTerm" s =
-    send (_leaderId is) $ failResponse s
+  | is^.field' @"_term" < s^.currTerm =
+    send (is^.field' @"_leaderId") $ failResponse s
   | otherwise = do
     let snapIndex = _lastIncludedIndex is
         snapTerm  = _lastIncludedTerm is
-        offset    = getField @"_offset" is
+        offset    = is^.field' @"_offset"
     when (offset == 0) $ createSnapshot snapIndex snapTerm
-    writeSnapshot offset (getField @"_data" is) snapIndex
+    writeSnapshot offset (is^.field' @"_data") snapIndex
 
     when (_done is) $ do
       saveSnapshot snapIndex
@@ -145,9 +143,9 @@ handleInstallSnapshot is s
           snap <- readSnapshot snapIndex
           mapM_ (loadSnapshot snapIndex snapTerm) snap
 
-    send (_leaderId is) $ successResponse s
+    send (is^.field' @"_leaderId") $ successResponse s
  where
   successResponse s =
-    Response (_serverID s) $ InstallSnapshotResponse (getField @"_currTerm" s)
+    Response (_serverID s) $ InstallSnapshotResponse $ s^.currTerm
   failResponse s =
-    Response (_serverID s) $ InstallSnapshotResponse (getField @"_currTerm" s)
+    Response (_serverID s) $ InstallSnapshotResponse $ s^.currTerm

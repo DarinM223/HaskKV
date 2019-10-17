@@ -3,7 +3,6 @@ module HaskKV.Raft.Candidate where
 import Control.Lens
 import Control.Monad.State
 import Data.Maybe
-import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Raft.Class
@@ -32,18 +31,18 @@ runCandidate = recv >>= \case
     reset ElectionTimeout
     startElection
   Left  HeartbeatTimeout     -> reset HeartbeatTimeout
-  Right rv@RequestVote{}     -> get >>= handleRequestVote rv
-  Right ae@AppendEntries{}   -> get >>= handleAppendEntries ae
-  Right is@InstallSnapshot{} -> get >>= handleInstallSnapshot is
+  Right (RequestVote rv)     -> get >>= handleRequestVote rv
+  Right (AppendEntries ae)   -> get >>= handleAppendEntries ae
+  Right (InstallSnapshot is) -> get >>= handleInstallSnapshot is
   Right (Response _ resp)    -> get >>= handleCandidateResponse resp
 
 handleCandidateResponse msg@(VoteResponse term success) s
-  | term > getField @"_currTerm" s = do
+  | term > s^.currTerm = do
     debug "Transitioning to follower"
     transitionToFollower msg
   | success = do
-    stateType . _Candidate %= (+ 1)
-    votes <- fromMaybe 0 <$> preuse (stateType . _Candidate)
+    stateType._Candidate %= (+ 1)
+    votes <- fromMaybe 0 <$> preuse (stateType._Candidate)
     debug $ "Received " ++ show votes ++ " votes"
     quorumSize' <- quorumSize
     when (votes >= quorumSize') $ do

@@ -1,7 +1,7 @@
 module HaskKV.Raft.Follower where
 
+import Control.Lens
 import Control.Monad.State
-import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Raft.Class
 import HaskKV.Raft.Message
@@ -30,13 +30,13 @@ runFollower = recv >>= \case
     reset ElectionTimeout
     startElection
   Left  HeartbeatTimeout     -> reset HeartbeatTimeout
-  Right rv@RequestVote{}     -> get >>= handleRequestVote rv
-  Right ae@AppendEntries{}   -> get >>= handleAppendEntries ae
-  Right is@InstallSnapshot{} -> get >>= handleInstallSnapshot is
+  Right (RequestVote rv)     -> get >>= handleRequestVote rv
+  Right (AppendEntries ae)   -> get >>= handleAppendEntries ae
+  Right (InstallSnapshot is) -> get >>= handleInstallSnapshot is
   Right (Response _ resp)    -> get >>= handleFollowerResponse resp
 
 handleFollowerResponse msg@(VoteResponse term _) s
-  | term > getField @"_currTerm" s = transitionToFollower msg
-  | otherwise                      = return ()
+  | term > s^.currTerm = transitionToFollower msg
+  | otherwise          = return ()
 
 handleFollowerResponse _ _ = return ()

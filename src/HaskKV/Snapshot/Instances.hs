@@ -9,8 +9,8 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Binary (Binary, decode)
 import Data.Foldable (find)
+import Data.Generics.Product.Fields
 import GHC.IO.Handle
-import GHC.Records
 import HaskKV.Snapshot.Types
 import HaskKV.Snapshot.Utils
 import HaskKV.Types
@@ -60,14 +60,14 @@ writeSnapshot' offset snapData index manager = do
  where
   putAndUpdate offset snapData index snap
     | matchesIndexAndOffset index offset snap = putAndReturnOffset snapData snap
-    | index == getField @"_index" snap && offset == 0 = do
+    | index == snap^.field' @"_index" && offset == 0 = do
       hSetFileSize (_file snap) 0
       hSetPosn $ HandlePosn (_file snap) 0
       putAndReturnOffset snapData snap
     | otherwise = return snap
    where
     matchesIndexAndOffset index offset snap =
-      index == getField @"_index" snap && offset == getField @"_offset" snap
+      index == snap^.field' @"_index" && offset == snap^.field' @"_offset"
 
     putAndReturnOffset snapData snap = do
       B.hPut (_file snap) snapData
@@ -115,8 +115,8 @@ readChunk' amount (SID sid) manager = do
           { _data   = chunk
           , _type   = chunkType
           , _offset = offset
-          , _index  = getField @"_index" snap
-          , _term   = getField @"_term" snap
+          , _index  = snap^.field' @"_index"
+          , _term   = snap^.field' @"_term"
           }
       atomically $ modifyTVar (_snapshots manager) $ \snaps ->
         snaps { _chunks = chunks' }
@@ -131,8 +131,8 @@ saveSnapshot' index manager = do
   forM_ snap $ \snap -> do
     -- Close and rename snapshot file as completed.
     hClose $ _file snap
-    let index = getField @"_index" snap
-        term  = getField @"_term" snap
+    let index = snap^.field' @"_index"
+        term  = snap^.field' @"_term"
         path' = replaceFileName (_filepath snap) (completedFilename index term)
     renameFile (_filepath snap) path'
     reopened <- openFile path' ReadMode

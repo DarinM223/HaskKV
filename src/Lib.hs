@@ -65,7 +65,7 @@ handleArgs (path : sid : _) = do
     lift $ loadSnapshot index term snapshot
 
   -- Run Raft server and handler.
-  mapM_ (\p -> runServer p "*" settings (appConfig ^. serverStateL)) raftPort
+  mapM_ (\p -> runServer p "*" settings (appConfig^.serverStateL)) raftPort
   forkIO $ forever $ run appConfig runRaft
 
   -- Run API server.

@@ -4,10 +4,8 @@ module HaskKV.Raft.State where
 
 import Control.Lens
 import Data.Binary
-import Data.Maybe
 import Data.Time
 import GHC.Generics
-import GHC.Records
 import HaskKV.Types
 
 import qualified Data.IntMap as IM
@@ -42,6 +40,7 @@ data PersistentState = PersistentState
   { _currTerm :: LogTerm
   , _votedFor :: Maybe SID
   } deriving (Show, Eq, Generic)
+makeFieldsNoPrefix ''PersistentState
 
 instance Binary PersistentState
 
@@ -50,15 +49,15 @@ persistentStateFilename (SID sid) = show sid ++ ".state"
 
 newPersistentState :: RaftState -> PersistentState
 newPersistentState s = PersistentState
-  { _currTerm = getField @"_currTerm" s
-  , _votedFor = getField @"_votedFor" s
+  { _currTerm = s^.currTerm
+  , _votedFor = s^.votedFor
   }
 
 newRaftState :: SID -> Maybe PersistentState -> RaftState
 newRaftState sid s = RaftState
   { _stateType   = Follower
-  , _currTerm    = fromMaybe 0 . fmap (getField @"_currTerm") $ s
-  , _votedFor    = s >>= getField @"_votedFor"
+  , _currTerm    = maybe 0 (^. currTerm) s
+  , _votedFor    = s >>= (^. votedFor)
   , _leader      = Nothing
   , _commitIndex = 0
   , _lastApplied = 0

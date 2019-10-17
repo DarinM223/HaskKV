@@ -1,12 +1,13 @@
 module HaskKV.Monad where
 
-import Control.Lens (lens)
+import Control.Lens (lens, (^.))
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Binary
 import Data.Binary.Orphans ()
+import Data.Generics.Product.Fields
 import Data.IORef
-import GHC.Records
+import GHC.Generics
 import HaskKV.Constr
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
@@ -43,7 +44,7 @@ data InitAppConfig msg e = InitAppConfig
   , _initState     :: Maybe PersistentState
   , _serverState   :: ServerState msg
   , _snapDirectory :: Maybe FilePath
-  }
+  } deriving Generic
 
 instance MonadState RaftState (App msg k v e) where
   get = App $ ReaderT $ liftIO . readIORef . cState
@@ -77,8 +78,8 @@ newAppConfig
   => InitAppConfig msg e
   -> IO (AppConfig msg k v e)
 newAppConfig config = do
-  let serverState = getField @"_serverState" config
-      sid         = getField @"_sid" serverState
+  let serverState = config^.field' @"_serverState"
+      sid         = serverState^.field' @"_sid"
       raftState   = newRaftState sid $ _initState config
   raftStateRef <- newIORef raftState
   store        <- newStore sid $ _initLog config

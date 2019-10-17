@@ -4,8 +4,9 @@ import Control.Concurrent.STM
 import Control.Lens
 import Control.Monad.Reader
 import Data.Binary (Binary)
+import Data.Generics.Product.Fields
 import GHC.IO.Handle
-import GHC.Records
+import GHC.Generics
 import HaskKV.Types
 
 import qualified Data.ByteString as B
@@ -21,7 +22,7 @@ data SnapshotChunk = SnapshotChunk
   , _offset :: FilePos
   , _index  :: LogIndex
   , _term   :: LogTerm
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
 
 class (Binary s) => SnapshotM s m | m -> s where
   createSnapshot :: LogIndex -> LogTerm -> m ()
@@ -38,10 +39,10 @@ data Snapshot = Snapshot
   , _term     :: LogTerm
   , _filepath :: FilePath
   , _offset   :: FilePos
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
 
 instance Ord Snapshot where
-  compare s1 s2 = compare (getField @"_index" s1) (getField @"_index" s2)
+  compare s1 s2 = compare (s1^.field' @"_index") (s2^.field' @"_index")
 
 data Snapshots = Snapshots
   { _completed :: Maybe Snapshot

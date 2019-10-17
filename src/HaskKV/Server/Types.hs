@@ -3,6 +3,7 @@ module HaskKV.Server.Types where
 import Control.Concurrent.STM
 import Control.Lens
 import Control.Monad.Reader
+import GHC.Generics
 import HaskKV.Types
 
 import qualified Data.IntMap as IM
@@ -27,7 +28,7 @@ data ServerState msg = ServerState
   , _heartbeatTimer   :: Timer.Timer
   , _electionTimeout  :: Timeout
   , _heartbeatTimeout :: Timeout
-  }
+  } deriving Generic
 
 class HasServerState msg r | r -> msg where
   serverStateL :: Lens' r (ServerState msg)

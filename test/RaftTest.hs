@@ -5,12 +5,11 @@ where
 
 import Control.Lens
 import Control.Monad
+import Data.Generics.Product.Fields
 import Data.List (nub)
 import Data.Maybe
-import GHC.Records
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
-import HaskKV.Log.InMem
 import HaskKV.Raft.Message
 import HaskKV.Raft.Run
 import HaskKV.Raft.State
@@ -198,7 +197,7 @@ testLeaderSendsAppendEntries
           commitIdx <- runServer 1 $ MockT $ use (raftState . commitIndex)
           return (msgs, catMaybes stores, join leaderState, commitIdx)
         (msgs, stores, state, commitIdx) = result
-        blankAE                          = AppendEntries
+        blankAE                          = AppendEntries $ AppendEntries'
           { _term        = 1
           , _leaderId    = 1
           , _prevLogIdx  = 0
