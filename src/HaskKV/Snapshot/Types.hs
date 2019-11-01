@@ -4,7 +4,7 @@ import Control.Concurrent.STM
 import Control.Lens
 import Control.Monad.Reader
 import Data.Binary (Binary)
-import Data.Generics.Labels ()
+import Data.Generics.Product.Fields
 import GHC.IO.Handle
 import GHC.Generics
 import HaskKV.Types
@@ -42,7 +42,7 @@ data Snapshot = Snapshot
   } deriving (Show, Eq, Generic)
 
 instance Ord Snapshot where
-  compare s1 s2 = compare (s1 ^. #_index) (s2 ^. #_index)
+  compare s1 s2 = compare (s1 ^. field @"_index") (s2 ^. field @"_index")
 
 data Snapshots = Snapshots
   { _completed :: Maybe Snapshot

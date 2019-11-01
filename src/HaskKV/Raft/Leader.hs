@@ -2,6 +2,7 @@ module HaskKV.Raft.Leader where
 
 import Control.Lens
 import Control.Monad.State
+import Data.Generics.Product.Fields
 import Data.List (sortBy)
 import Data.Maybe
 import HaskKV.Log.Class
@@ -174,9 +175,9 @@ sendSnapshotChunk id chunk = do
   send id $ InstallSnapshot $ InstallSnapshot'
     { _term              = term
     , _leaderId          = sid
-    , _lastIncludedIndex = chunk ^. #_index
-    , _lastIncludedTerm  = chunk ^. #_term
-    , _offset            = chunk ^. #_offset
-    , _data              = chunk ^. #_data
-    , _done              = chunk ^. #_type == EndChunk
+    , _lastIncludedIndex = chunk ^. field @"_index"
+    , _lastIncludedTerm  = chunk ^. field @"_term"
+    , _offset            = chunk ^. field @"_offset"
+    , _data              = chunk ^. field @"_data"
+    , _done              = chunk ^. field @"_type" == EndChunk
     }

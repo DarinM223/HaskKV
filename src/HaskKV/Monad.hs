@@ -5,6 +5,7 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Binary
 import Data.Binary.Orphans ()
+import Data.Generics.Product.Fields
 import Data.IORef
 import GHC.Generics
 import HaskKV.Constr
@@ -77,13 +78,13 @@ newAppConfig
   => InitAppConfig msg e
   -> IO (AppConfig msg k v e)
 newAppConfig config = do
-  let serverState = config ^. #serverState
-      sid         = serverState ^. #_sid
-      raftState   = newRaftState sid $ config ^. #initState
+  let serverState = config ^. field @"serverState"
+      sid         = serverState ^. field @"_sid"
+      raftState   = newRaftState sid $ config ^. field @"initState"
   raftStateRef <- newIORef raftState
-  store        <- newStore sid $ config ^. #initLog
+  store        <- newStore sid $ config ^. field @"initLog"
   tempLog      <- newTempLog
-  snapManager  <- newSnapshotManager $ config ^. #snapDirectory
+  snapManager  <- newSnapshotManager $ config ^. field @"snapDirectory"
   let config = AppConfig
         { cState       = raftStateRef
         , cStore       = store

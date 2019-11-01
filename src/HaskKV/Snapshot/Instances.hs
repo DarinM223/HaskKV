@@ -9,6 +9,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Data.Binary (Binary, decode)
 import Data.Foldable (find)
+import Data.Generics.Product.Fields
 import GHC.IO.Handle
 import HaskKV.Snapshot.Types
 import HaskKV.Snapshot.Utils
@@ -59,14 +60,14 @@ writeSnapshot' offset snapData index manager = do
  where
   putAndUpdate offset snapData index snap
     | matchesIndexAndOffset index offset snap = putAndReturnOffset snapData snap
-    | index == snap ^. #_index && offset == 0 = do
+    | index == snap ^. field @"_index" && offset == 0 = do
       hSetFileSize (_file snap) 0
       hSetPosn $ HandlePosn (_file snap) 0
       putAndReturnOffset snapData snap
     | otherwise = return snap
    where
     matchesIndexAndOffset index offset snap =
-      index == snap ^. #_index && offset == snap ^. #_offset
+      index == snap ^. field @"_index" && offset == snap ^. field @"_offset"
 
     putAndReturnOffset snapData snap = do
       B.hPut (_file snap) snapData
@@ -114,8 +115,8 @@ readChunk' amount (SID sid) manager = do
           { _data   = chunk
           , _type   = chunkType
           , _offset = offset
-          , _index  = snap ^. #_index
-          , _term   = snap ^. #_term
+          , _index  = snap ^. field @"_index"
+          , _term   = snap ^. field @"_term"
           }
       atomically $ modifyTVar (_snapshots manager) $ \snaps ->
         snaps { _chunks = chunks' }
@@ -125,13 +126,13 @@ readChunk' amount (SID sid) manager = do
 saveSnapshot' :: LogIndex -> SnapshotManager -> IO ()
 saveSnapshot' index manager = do
   snapshots <- readTVarIO $ _snapshots manager
-  let snap = find ((== index) . (^. #_index)) . _partial $ snapshots
+  let snap = find ((== index) . getField @"_index") . _partial $ snapshots
 
   forM_ snap $ \snap -> do
     -- Close and rename snapshot file as completed.
     hClose $ _file snap
-    let index = snap ^. #_index
-        term  = snap ^. #_term
+    let index = snap ^. field @"_index"
+        term  = snap ^. field @"_term"
         path' = replaceFileName (_filepath snap) (completedFilename index term)
     renameFile (_filepath snap) path'
     reopened <- openFile path' ReadMode
@@ -167,6 +168,6 @@ snapshotInfo' manager = do
   snapshots <- readTVarIO $ _snapshots manager
   size <- maybe (pure Nothing) (fmap (Just . fromIntegral) . hFileSize . _file)
         $ _completed snapshots
-  let index = (^. #_index) <$> _completed snapshots
-      term  = (^. #_term) <$> _completed snapshots
+  let index = getField @"_index" <$> _completed snapshots
+      term  = getField @"_term" <$> _completed snapshots
   return $ (,,) <$> index <*> term <*> size
