@@ -1,6 +1,5 @@
 module HaskKV.Raft.Candidate where
 
-import Control.Lens
 import Control.Monad.State
 import Data.Maybe
 import HaskKV.Log.Class
@@ -13,6 +12,8 @@ import HaskKV.Raft.Utils
 import HaskKV.Server.Types
 import HaskKV.Snapshot.Types
 import HaskKV.Store.Types
+import Optics
+import Optics.State.Operators
 
 runCandidate
   :: ( DebugM m
@@ -37,12 +38,12 @@ runCandidate = recv >>= \case
   Right (Response _ resp)    -> get >>= handleCandidateResponse resp
 
 handleCandidateResponse msg@(VoteResponse term success) s
-  | term > s ^. currTerm = do
+  | term > s ^. #currTerm = do
     debug "Transitioning to follower"
     transitionToFollower msg
   | success = do
-    stateType._Candidate %= (+ 1)
-    votes <- fromMaybe 0 <$> preuse (stateType._Candidate)
+    #stateType % _Candidate %= (+ 1)
+    votes <- fromMaybe 0 <$> preuse (#stateType % _Candidate)
     debug $ "Received " ++ show votes ++ " votes"
     quorumSize' <- quorumSize
     when (votes >= quorumSize') $ do

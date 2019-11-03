@@ -12,6 +12,7 @@ import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 import HaskKV.Utils
 import HaskKV.Types
+import Optics
 
 import qualified Data.Conduit.List as CL
 import qualified Data.IntMap as IM
@@ -105,15 +106,15 @@ testInject = testCase "Inject takes priority" $ do
   msg2 @?= Left S.ElectionTimeout
 
 sourceMessages l s =
-  runConduit $ CL.sourceList l .| sinkTBQueue (S._messages s)
+  runConduit $ CL.sourceList l .| sinkTBQueue (s ^. #messages)
 
 buildClientMap = foldM addToMap
  where
   addToMap s i = do
     bq <- newTBQueueIO 100
-    return s { S._outgoing = IM.insert i bq . S._outgoing $ s }
+    return $ s & #outgoing %~ IM.insert i bq
 
-sinkClients s = forM (IM.assocs . S._outgoing $ s) $ \(_, bq) ->
+sinkClients s = forM (IM.assocs $ s ^. #outgoing) $ \(_, bq) ->
   atomically (isEmptyTBQueue bq) >>= \case
     True  -> return []
     False -> runConduit $ sourceTBQueueOne bq .| sinkList

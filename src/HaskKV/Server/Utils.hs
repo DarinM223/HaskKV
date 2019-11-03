@@ -10,6 +10,7 @@ import Data.Conduit.Network
 import Data.Streaming.Network.Internal
 import HaskKV.Server.Types
 import HaskKV.Utils
+import Optics
 import System.Log.Logger
 
 import qualified Data.ByteString as B
@@ -33,11 +34,11 @@ runServer port host clients s = do
       $  appSource appData
       .| CL.mapFoldable (fmap thrd . decodeOrFail . BL.fromStrict)
       .| CL.iterM (liftIO . debugM "conduit" . ("Receiving: " ++) . show)
-      .| sinkTBQueue (_messages s)
+      .| sinkTBQueue (s ^. #messages)
 
   forM_ (IM.assocs clients) $ \(i, settings) ->
-    forM_ (IM.lookup i . _outgoing $ s)
-      $ \bq -> forkIO $ connectClient settings bq
+    forM_ (IM.lookup i $ s ^. #outgoing) $ \bq ->
+      forkIO $ connectClient settings bq
  where
   thrd t = let (_, _, a) = t in a
 

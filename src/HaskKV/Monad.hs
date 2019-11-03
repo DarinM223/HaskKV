@@ -1,13 +1,12 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Monad where
 
-import Control.Lens (lens, (^.))
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Binary
 import Data.Binary.Orphans ()
-import Data.Generics.Product.Fields
 import Data.IORef
-import GHC.Generics
 import HaskKV.Constr
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
@@ -18,6 +17,7 @@ import HaskKV.Raft.State
 import HaskKV.Server.All
 import HaskKV.Snapshot.All
 import HaskKV.Store.All
+import Optics
 
 data AppConfig msg k v e = AppConfig
   { cState       :: IORef RaftState
@@ -40,11 +40,14 @@ instance HasRun msg k v e (AppConfig msg k v e) where
   run = cRun
 
 data InitAppConfig msg e = InitAppConfig
-  { initLog       :: Maybe (Log e)
-  , initState     :: Maybe PersistentState
-  , serverState   :: ServerState msg
-  , snapDirectory :: Maybe FilePath
-  } deriving Generic
+  { initLog           :: Maybe (Log e)
+  , initState         :: Maybe PersistentState
+  , initServerState   :: ServerState msg
+  , initSnapDirectory :: Maybe FilePath
+  }
+makeFieldLabelsWith
+  (fieldLabelsRules & lensField .~ abbreviatedNamer)
+  ''InitAppConfig
 
 instance MonadState RaftState (App msg k v e) where
   get = App $ ReaderT $ liftIO . readIORef . cState
@@ -78,13 +81,13 @@ newAppConfig
   => InitAppConfig msg e
   -> IO (AppConfig msg k v e)
 newAppConfig config = do
-  let serverState = config ^. field @"serverState"
-      sid         = serverState ^. field @"_sid"
-      raftState   = newRaftState sid $ config ^. field @"initState"
+  let serverState = config ^. #serverState
+      sid         = serverState ^. #sid
+      raftState   = newRaftState sid $ config ^. #state
   raftStateRef <- newIORef raftState
-  store        <- newStore sid $ config ^. field @"initLog"
+  store        <- newStore sid $ config ^. #log
   tempLog      <- newTempLog
-  snapManager  <- newSnapshotManager $ config ^. field @"snapDirectory"
+  snapManager  <- newSnapshotManager $ config ^. #snapDirectory
   let config = AppConfig
         { cState       = raftStateRef
         , cStore       = store

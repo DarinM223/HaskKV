@@ -1,6 +1,5 @@
 module HaskKV.Raft.Follower where
 
-import Control.Lens
 import Control.Monad.State
 import HaskKV.Log.Class
 import HaskKV.Raft.Class
@@ -11,6 +10,7 @@ import HaskKV.Raft.Utils
 import HaskKV.Server.Types
 import HaskKV.Snapshot.Types
 import HaskKV.Store.Types
+import Optics
 
 runFollower
   :: ( DebugM m
@@ -36,7 +36,7 @@ runFollower = recv >>= \case
   Right (Response _ resp)    -> get >>= handleFollowerResponse resp
 
 handleFollowerResponse msg@(VoteResponse term _) s
-  | term > s ^. currTerm = transitionToFollower msg
-  | otherwise            = return ()
+  | term > s ^. #currTerm = transitionToFollower msg
+  | otherwise             = return ()
 
 handleFollowerResponse _ _ = return ()

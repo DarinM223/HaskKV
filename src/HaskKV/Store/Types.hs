@@ -1,7 +1,8 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Store.Types where
 
 import Control.Concurrent.STM
-import Control.Lens
 import Control.Monad.Reader
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Binary
@@ -12,6 +13,7 @@ import GHC.Generics
 import HaskKV.Log.Class
 import HaskKV.Log.InMem
 import HaskKV.Types
+import Optics
 
 import qualified Data.Heap as H
 import qualified Data.Map as M
@@ -77,12 +79,13 @@ instance (Eq k) => Ord (HeapVal k) where
 
 -- | An in-memory storage implementation.
 data StoreData k v e = StoreData
-  { _map         :: M.Map k v
-  , _heap        :: H.Heap (HeapVal k)
-  , _log         :: Log e
-  , _tempEntries :: [e]
-  , _sid         :: SID
+  { storeDataMap         :: M.Map k v
+  , storeDataHeap        :: H.Heap (HeapVal k)
+  , storeDataLog         :: Log e
+  , storeDataTempEntries :: [e]
+  , storeDataSid         :: SID
   } deriving (Show)
+makeFieldLabels ''StoreData
 
 newtype Store k v e = Store { unStore :: TVar (StoreData k v e) }
 
@@ -111,9 +114,9 @@ newStore sid log = fmap Store . newTVarIO $ newStoreData sid log
 
 newStoreData :: SID -> Maybe (Log e) -> StoreData k v e
 newStoreData sid log = StoreData
-  { _map         = M.empty
-  , _heap        = H.empty
-  , _log         = fromMaybe emptyLog log
-  , _tempEntries = []
-  , _sid         = sid
+  { storeDataMap         = M.empty
+  , storeDataHeap        = H.empty
+  , storeDataLog         = fromMaybe emptyLog log
+  , storeDataTempEntries = []
+  , storeDataSid         = sid
   }

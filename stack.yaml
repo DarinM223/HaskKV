@@ -15,7 +15,7 @@
 # resolver:
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
-resolver: lts-14.8
+resolver: lts-14.12
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -51,6 +51,8 @@ extra-deps:
 - cryptonite-0.25
 - memory-0.14.18
 - mime-types-0.1.0.8
+- optics-0.2@sha256:813ef6cc4d2e2b5ee00435831031f38917ba01d1e56dcb62dc18cd0315a9ccb7,6296
+- optics-th-0.2@sha256:b4f6c5a3f134c697837190ed6da969dd284aefe79e43c3ef793093b607bb83b9,1929
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

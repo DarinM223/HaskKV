@@ -1,11 +1,10 @@
 {-# LANGUAGE UndecidableInstances #-}
-
 module HaskKV.Raft.Class where
 
-import Control.Lens
 import Control.Monad.State
 import HaskKV.Raft.State
 import HaskKV.Utils
+import Optics
 import System.Log.Logger
 
 class DebugM m where
@@ -19,8 +18,8 @@ instance MonadTrans PrintDebugT where
 
 instance (MonadIO m, MonadState RaftState m) => DebugM (PrintDebugT m) where
   debug text = do
-    sid       <- lift $ use serverID
-    stateText <- lift (use stateType) <&> \case
+    sid       <- lift $ guse #serverID
+    stateText <- lift (guse #stateType) <&> \case
       Follower    -> "Follower"
       Candidate _ -> "Candidate"
       Leader    _ -> "Leader"
@@ -36,5 +35,5 @@ newtype PersistT m a = PersistT { unPersistT :: m a }
 instance (MonadIO m) => PersistM (PersistT m) where
   persist state = void <$> liftIO $ persistBinary
     persistentStateFilename
-    (_serverID state)
+    (state ^. #serverID)
     (newPersistentState state)

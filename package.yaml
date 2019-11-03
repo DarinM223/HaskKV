@@ -31,13 +31,12 @@ dependencies:
 - containers
 - directory
 - filepath
-- generic-lens
 - heaps
 - hslogger
-- lens
 - mtl
 - network
 - network-simple
+- optics
 - random
 - transformers
 - servant

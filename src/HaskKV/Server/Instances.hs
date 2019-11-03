@@ -4,55 +4,55 @@ module HaskKV.Server.Instances where
 
 import Control.Concurrent.STM
 import Control.Applicative ((<|>))
-import Control.Lens
 import Control.Monad.Reader
 import HaskKV.Server.Types
 import HaskKV.Types
+import Optics
 
 import qualified Data.IntMap as IM
 import qualified HaskKV.Timer as Timer
 
 inject :: ServerEvent -> ServerState msg -> IO ()
-inject HeartbeatTimeout s = Timer.reset (_heartbeatTimer s) 0
-inject ElectionTimeout  s = Timer.reset (_electionTimer s) 0
+inject HeartbeatTimeout s = Timer.reset (s ^. #heartbeatTimer) 0
+inject ElectionTimeout  s = Timer.reset (s ^. #electionTimer) 0
 
 instance (MonadIO m, MonadReader r m, HasServerState msg r)
   => ServerM msg ServerEvent (ServerT m) where
 
-  send i msg = view serverStateL >>= liftIO . send' i msg
-  broadcast msg = view serverStateL >>= liftIO . broadcast' msg
-  recv = view serverStateL >>= liftIO . recv'
-  reset e = view serverStateL >>= liftIO . reset' e
-  serverIds = serverIds' <$> view serverStateL
+  send i msg = gview serverStateL >>= liftIO . send' i msg
+  broadcast msg = gview serverStateL >>= liftIO . broadcast' msg
+  recv = gview serverStateL >>= liftIO . recv'
+  reset e = gview serverStateL >>= liftIO . reset' e
+  serverIds = serverIds' <$> gview serverStateL
 
 send' :: SID -> msg -> ServerState msg -> IO ()
 send' (SID i) msg s = do
-  let bq = IM.lookup i . _outgoing $ s
+  let bq = IM.lookup i $ s ^. #outgoing
   mapM_ (atomically . flip writeTBQueue msg) bq
 
 broadcast' :: msg -> ServerState msg -> IO ()
 broadcast' msg ss = atomically
                   . mapM_ ((`writeTBQueue` msg) . snd)
-                  . filter ((/= _sid ss) . SID . fst)
+                  . filter ((/= ss ^. #sid) . SID . fst)
                   . IM.assocs
-                  $ _outgoing ss
+                  $ ss ^. #outgoing
 
 recv' :: ServerState msg -> IO (Either ServerEvent msg)
 recv' s = atomically $ awaitElectionTimeout s
                    <|> awaitHeartbeatTimeout s
-                   <|> (Right <$> readTBQueue (_messages s))
+                   <|> (Right <$> readTBQueue (s ^. #messages))
  where
   awaitElectionTimeout =
-    fmap (const (Left ElectionTimeout)) . Timer.await . _electionTimer
+    fmap (const (Left ElectionTimeout)) . Timer.await . (^. #electionTimer)
   awaitHeartbeatTimeout =
-    fmap (const (Left HeartbeatTimeout)) . Timer.await . _heartbeatTimer
+    fmap (const (Left HeartbeatTimeout)) . Timer.await . (^. #heartbeatTimer)
 
 reset' :: ServerEvent -> ServerState msg -> IO ()
 reset' HeartbeatTimeout s =
-  Timer.reset (_heartbeatTimer s) (_heartbeatTimeout s)
+  Timer.reset (s ^. #heartbeatTimer) (s ^. #heartbeatTimeout)
 reset' ElectionTimeout s = do
-  timeout <- Timer.randTimeout $ _electionTimeout s
-  Timer.reset (_electionTimer s) timeout
+  timeout <- Timer.randTimeout $ s ^. #electionTimeout
+  Timer.reset (s ^. #electionTimer) timeout
 
 serverIds' :: ServerState msg -> [SID]
-serverIds' = fmap SID . IM.keys . _outgoing
+serverIds' = fmap SID . IM.keys . (^. #outgoing)

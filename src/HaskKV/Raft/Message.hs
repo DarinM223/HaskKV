@@ -1,51 +1,64 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Raft.Message where
 
 import Data.Binary
 import GHC.Generics
 import HaskKV.Types
+import Optics
 
 import qualified Data.ByteString as B
 
 data RaftResponse
   = AppendResponse
-    { _term      :: LogTerm
-    , _success   :: Bool
-    , _lastIndex :: LogIndex
+    { raftResponseTerm      :: LogTerm
+    , raftResponseSuccess   :: Bool
+    , raftResponseLastIndex :: LogIndex
     }
   | VoteResponse
-    { _term    :: LogTerm
-    , _success :: Bool
+    { raftResponseTerm    :: LogTerm
+    , raftResponseSuccess :: Bool
     }
   | InstallSnapshotResponse
-    { _term :: LogTerm
+    { raftResponseTerm :: LogTerm
     }
   deriving (Show, Eq, Generic)
+makeFieldLabels ''RaftResponse
 
 data RequestVote' = RequestVote'
-  { _candidateID :: SID
-  , _term        :: LogTerm
-  , _lastLogIdx  :: LogIndex
-  , _lastLogTerm :: LogTerm
+  { rvCandidateID :: SID
+  , rvTerm        :: LogTerm
+  , rvLastLogIdx  :: LogIndex
+  , rvLastLogTerm :: LogTerm
   } deriving (Show, Eq, Generic)
+makeFieldLabelsWith
+  (fieldLabelsRules & lensField .~ abbreviatedNamer)
+  ''RequestVote'
 
 data AppendEntries' e = AppendEntries'
-  { _term        :: LogTerm
-  , _leaderId    :: SID
-  , _prevLogIdx  :: LogIndex
-  , _prevLogTerm :: LogTerm
-  , _entries     :: [e]
-  , _commitIdx   :: LogIndex
+  { aeTerm        :: LogTerm
+  , aeLeaderId    :: SID
+  , aePrevLogIdx  :: LogIndex
+  , aePrevLogTerm :: LogTerm
+  , aeEntries     :: [e]
+  , aeCommitIdx   :: LogIndex
   } deriving (Show, Eq, Generic)
+makeFieldLabelsWith
+  (fieldLabelsRules & lensField .~ abbreviatedNamer)
+  ''AppendEntries'
 
 data InstallSnapshot' = InstallSnapshot'
-  { _term              :: LogTerm
-  , _leaderId          :: SID
-  , _lastIncludedIndex :: LogIndex
-  , _lastIncludedTerm  :: LogTerm
-  , _offset            :: FilePos
-  , _data              :: B.ByteString
-  , _done              :: Bool
+  { isTerm              :: LogTerm
+  , isLeaderId          :: SID
+  , isLastIncludedIndex :: LogIndex
+  , isLastIncludedTerm  :: LogTerm
+  , isOffset            :: FilePos
+  , isData              :: B.ByteString
+  , isDone              :: Bool
   } deriving (Show, Eq, Generic)
+makeFieldLabelsWith
+  (fieldLabelsRules & lensField .~ abbreviatedNamer)
+  ''InstallSnapshot'
 
 data RaftMessage e
   = RequestVote RequestVote'

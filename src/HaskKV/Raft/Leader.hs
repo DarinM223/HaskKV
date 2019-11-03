@@ -1,8 +1,6 @@
 module HaskKV.Raft.Leader where
 
-import Control.Lens
 import Control.Monad.State
-import Data.Generics.Product.Fields
 import Data.List (sortBy)
 import Data.Maybe
 import HaskKV.Log.Class
@@ -15,6 +13,8 @@ import HaskKV.Raft.Utils
 import HaskKV.Server.Types
 import HaskKV.Snapshot.Types
 import HaskKV.Types
+import Optics
+import Optics.State.Operators
 
 import qualified Data.IntMap as IM
 
@@ -33,14 +33,14 @@ runLeader = recv >>= \case
   Left ElectionTimeout  -> reset ElectionTimeout
   Left HeartbeatTimeout -> do
     reset HeartbeatTimeout
-    commitIndex' <- use commitIndex
-    serverID'    <- use serverID
+    commitIndex' <- guse #commitIndex
+    serverID'    <- guse #serverID
 
     storeTemporaryEntries
 
     -- Update the highest replicated index for our server.
     lastIndex' <- lastIndex
-    stateType._Leader.matchIndex %= IM.insert (unSID serverID') lastIndex'
+    #stateType % _Leader % #matchIndex %= IM.insert (unSID serverID') lastIndex'
     ids <- serverIds
     let otherServerIds = filter (/= serverID') ids
     debug "Sending AppendEntries"
@@ -63,15 +63,15 @@ handleLeaderResponse
   -> RaftState
   -> m ()
 handleLeaderResponse (SID sender) msg@(AppendResponse term success lastIndex) s
-  | term < s ^. currTerm = return ()
-  | term > s ^. currTerm = transitionToFollower msg
+  | term < s ^. #currTerm = return ()
+  | term > s ^. #currTerm = transitionToFollower msg
   | not success = do
     debug $ "Decrementing next index for server " ++ show sender
-    stateType._Leader.nextIndex %= IM.adjust prevIndex sender
+    #stateType % _Leader % #nextIndex %= IM.adjust prevIndex sender
   | otherwise = do
     debug $ "Updating indexes for server " ++ show sender
-    stateType._Leader.matchIndex %= IM.adjust (max lastIndex) sender
-    stateType._Leader.nextIndex %= IM.adjust (max (lastIndex + 1)) sender
+    #stateType % _Leader % #matchIndex %= IM.adjust (max lastIndex) sender
+    #stateType % _Leader % #nextIndex %= IM.adjust (max (lastIndex + 1)) sender
 
     -- If there exists an N such that N > commitIndex,
     -- a majority of matchIndex[i] >= N, and
@@ -79,13 +79,13 @@ handleLeaderResponse (SID sender) msg@(AppendResponse term success lastIndex) s
     n    <- quorumIndex
     term <- fromMaybe 0 <$> termFromIndex n
     debug $ "N: " ++ show n
-    debug $ "Commit Index: " ++ show (_commitIndex s)
-    when (n > _commitIndex s && term == s ^. currTerm) $ do
+    debug $ "Commit Index: " ++ show (s ^. #commitIndex)
+    when (n > s ^. #commitIndex && term == s ^. #currTerm) $ do
       debug $ "Updating commit index to " ++ show n
-      commitIndex .= n
+      #commitIndex .= n
 handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
-  | term < s ^. currTerm = return ()
-  | term > s ^. currTerm = transitionToFollower msg
+  | term < s ^. #currTerm = return ()
+  | term > s ^. #currTerm = transitionToFollower msg
   | otherwise = do
     hasRemaining <- hasChunk sender
     if hasRemaining
@@ -94,14 +94,14 @@ handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
         mapM_ (sendSnapshotChunk sender) chunk
       else snapshotInfo >>= \info -> forM_ info $ \(i, _, _) -> do
         let sid = unSID sender
-        stateType._Leader.matchIndex %= IM.adjust (max i) sid
-        stateType._Leader.nextIndex %= IM.adjust (max (i + 1)) sid
+        #stateType % _Leader % #matchIndex %= IM.adjust (max i) sid
+        #stateType % _Leader % #nextIndex %= IM.adjust (max (i + 1)) sid
 handleLeaderResponse _ _ _ = return ()
 
 quorumIndex :: (MonadState RaftState m, ServerM msg event m) => m LogIndex
 quorumIndex = do
   matchIndexes <- maybe [] IM.elems
-              <$> preuse (stateType._Leader.matchIndex)
+              <$> preuse (#stateType % _Leader % #matchIndex)
   let sorted = sortBy (flip compare) matchIndexes
   quorumSize' <- quorumSize
   return $ sorted !! (quorumSize' - 1)
@@ -109,7 +109,7 @@ quorumIndex = do
 storeTemporaryEntries
   :: (DebugM m, MonadState RaftState m, LogM e m, TempLogM e m, Entry e) => m ()
 storeTemporaryEntries = do
-  term       <- use currTerm
+  term       <- guse #currTerm
   lastIndex' <- lastIndex
 
   entries    <- setIndexAndTerms (lastIndex' + 1) term <$> temporaryEntries
@@ -137,7 +137,7 @@ sendAppendEntries
   -> SID
   -> m ()
 sendAppendEntries lastIndex commitIndex id = do
-  nextIndexes <- preuse (stateType._Leader.nextIndex)
+  nextIndexes <- preuse (#stateType % _Leader % #nextIndex)
   case nextIndexes >>= IM.lookup (unSID id) of
     Just nextIndex -> do
       let pi = prevIndex nextIndex
@@ -149,15 +149,15 @@ sendAppendEntries lastIndex commitIndex id = do
     Nothing -> sendAppend id 0 Nothing [] commitIndex
  where
   sendAppend id prevIndex prevTerm entries commitIndex = do
-    term <- use currTerm
-    sid  <- use serverID
+    term <- guse #currTerm
+    sid  <- guse #serverID
     send id $ AppendEntries $ AppendEntries'
-      { _term        = term
-      , _leaderId    = sid
-      , _prevLogIdx  = prevIndex
-      , _prevLogTerm = fromMaybe 0 prevTerm
-      , _entries     = entries
-      , _commitIdx   = commitIndex
+      { aeTerm        = term
+      , aeLeaderId    = sid
+      , aePrevLogIdx  = prevIndex
+      , aePrevLogTerm = fromMaybe 0 prevTerm
+      , aeEntries     = entries
+      , aeCommitIdx   = commitIndex
       }
   tryInstallSnapshot id pi pt commitIndex =
     readChunk snapshotChunkSize id >>= \case
@@ -170,14 +170,14 @@ sendSnapshotChunk
   -> SnapshotChunk
   -> m ()
 sendSnapshotChunk id chunk = do
-  term <- use currTerm
-  sid  <- use serverID
+  term <- guse #currTerm
+  sid  <- guse #serverID
   send id $ InstallSnapshot $ InstallSnapshot'
-    { _term              = term
-    , _leaderId          = sid
-    , _lastIncludedIndex = chunk ^. field @"_index"
-    , _lastIncludedTerm  = chunk ^. field @"_term"
-    , _offset            = chunk ^. field @"_offset"
-    , _data              = chunk ^. field @"_data"
-    , _done              = chunk ^. field @"_type" == EndChunk
+    { isTerm              = term
+    , isLeaderId          = sid
+    , isLastIncludedIndex = chunk ^. #index
+    , isLastIncludedTerm  = chunk ^. #term
+    , isOffset            = chunk ^. #offset
+    , isData              = chunk ^. #data
+    , isDone              = chunk ^. #type == EndChunk
     }

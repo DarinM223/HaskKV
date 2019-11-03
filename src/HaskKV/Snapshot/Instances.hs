@@ -1,19 +1,17 @@
 {-# LANGUAGE UndecidableInstances #-}
-
 module HaskKV.Snapshot.Instances where
 
 import Control.Concurrent.STM
 import Control.Exception
-import Control.Lens
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Binary (Binary, decode)
 import Data.Foldable (find)
-import Data.Generics.Product.Fields
 import GHC.IO.Handle
 import HaskKV.Snapshot.Types
 import HaskKV.Snapshot.Utils
 import HaskKV.Types
+import Optics
 import System.Directory
 import System.FilePath
 import System.IO
@@ -29,78 +27,78 @@ instance
   , HasSnapshotType s m
   ) => SnapshotM s (SnapshotT m) where
 
-  createSnapshot i t = view snapshotManagerL >>= liftIO . createSnapshot' i t
-  writeSnapshot o d i = view snapshotManagerL >>= liftIO . writeSnapshot' o d i
-  saveSnapshot i = view snapshotManagerL >>= liftIO . saveSnapshot' i
-  readSnapshot i = view snapshotManagerL >>= liftIO . readSnapshot' i
-  hasChunk i = view snapshotManagerL >>= liftIO . hasChunk' i
-  readChunk a i = view snapshotManagerL >>= liftIO . readChunk' a i
-  snapshotInfo = view snapshotManagerL >>= liftIO . snapshotInfo'
+  createSnapshot i t = gview snapshotManagerL >>= liftIO . createSnapshot' i t
+  writeSnapshot o d i = gview snapshotManagerL >>= liftIO . writeSnapshot' o d i
+  saveSnapshot i = gview snapshotManagerL >>= liftIO . saveSnapshot' i
+  readSnapshot i = gview snapshotManagerL >>= liftIO . readSnapshot' i
+  hasChunk i = gview snapshotManagerL >>= liftIO . hasChunk' i
+  readChunk a i = gview snapshotManagerL >>= liftIO . readChunk' a i
+  snapshotInfo = gview snapshotManagerL >>= liftIO . snapshotInfo'
 
 createSnapshot' :: LogIndex -> LogTerm -> SnapshotManager -> IO ()
 createSnapshot' index term manager = do
   handle <- openFile filename WriteMode
-  atomically $ modifyTVar (_snapshots manager) $ \s ->
+  atomically $ modifyTVar (manager ^. #snapshots) $ \s ->
     let snap = Snapshot
-          { _file     = handle
-          , _index    = index
-          , _term     = term
-          , _filepath = filename
-          , _offset   = 0
+          { snapshotFile     = handle
+          , snapshotIndex    = index
+          , snapshotTerm     = term
+          , snapshotFilepath = filename
+          , snapshotOffset   = 0
           }
-    in s { _partial = snap : _partial s }
-  where filename = _directoryPath manager </> partialFilename index term
+    in s & #partial %~ (snap :)
+  where filename = manager ^. #directoryPath </> partialFilename index term
 
 writeSnapshot'
   :: FilePos -> B.ByteString -> LogIndex -> SnapshotManager -> IO ()
 writeSnapshot' offset snapData index manager = do
-  snapshots <- readTVarIO $ _snapshots manager
-  partial'  <- mapM (putAndUpdate offset snapData index) (_partial snapshots)
-  atomically $ modifyTVar (_snapshots manager) $ \s -> s { _partial = partial' }
+  snapshots <- readTVarIO $ manager ^. #snapshots
+  partial' <- mapM (putAndUpdate offset snapData index) (snapshots ^. #partial)
+  atomically $ modifyTVar (manager ^. #snapshots) $ #partial .~ partial'
  where
   putAndUpdate offset snapData index snap
     | matchesIndexAndOffset index offset snap = putAndReturnOffset snapData snap
-    | index == snap ^. field @"_index" && offset == 0 = do
-      hSetFileSize (_file snap) 0
-      hSetPosn $ HandlePosn (_file snap) 0
+    | index == snap ^. #index && offset == 0 = do
+      hSetFileSize (snap ^. #file) 0
+      hSetPosn $ HandlePosn (snap ^. #file) 0
       putAndReturnOffset snapData snap
     | otherwise = return snap
    where
     matchesIndexAndOffset index offset snap =
-      index == snap ^. field @"_index" && offset == snap ^. field @"_offset"
+      index == snap ^. #index && offset == snap ^. #offset
 
     putAndReturnOffset snapData snap = do
-      B.hPut (_file snap) snapData
-      hFlush $ _file snap
-      offset <- getPos <$> hGetPosn (_file snap)
-      return (snap { _offset = offset } :: Snapshot)
+      B.hPut (snap ^. #file) snapData
+      hFlush $ snap ^. #file
+      offset <- getPos <$> hGetPosn (snap ^. #file)
+      return $ snap & #offset .~ offset
 
 readSnapshot' :: (Binary s) => LogIndex -> SnapshotManager -> IO (Maybe s)
 readSnapshot' index manager =
   handle (\(_ :: SomeException) -> return Nothing) $ do
-    snapshots <- readTVarIO $ _snapshots manager
-    case _completed snapshots of
-      Just Snapshot { _index = i, _filepath = path } | i == index ->
-        Just . decode <$> BL.readFile path
+    snapshots <- readTVarIO $ manager ^. #snapshots
+    case snapshots ^. #completed of
+      Just s | s ^. #index == index ->
+        Just . decode <$> BL.readFile (s ^. #filepath)
       _ -> return Nothing
 
 hasChunk' :: SID -> SnapshotManager -> IO Bool
 hasChunk' (SID i) manager = do
-  snapshots <- readTVarIO $ _snapshots manager
-  case IM.lookup i $ _chunks snapshots of
+  snapshots <- readTVarIO $ manager ^. #snapshots
+  case IM.lookup i $ snapshots ^. #chunks of
     Just handle -> not <$> hIsEOF handle
     Nothing     -> return False
 
 readChunk' :: Int -> SID -> SnapshotManager -> IO (Maybe SnapshotChunk)
 readChunk' amount (SID sid) manager = do
-  snapshots <- readTVarIO $ _snapshots manager
-  case _completed snapshots of
-    Just snap@Snapshot { _filepath = filepath } -> do
-      (chunk, chunks') <- flip runStateT (_chunks snapshots) $ do
+  snapshots <- readTVarIO $ manager ^. #snapshots
+  case snapshots ^. #completed of
+    Just snap -> do
+      (chunk, chunks') <- flip runStateT (snapshots ^. #chunks) $ do
         handle <- IM.lookup sid <$> get >>= \case
           Just handle -> return handle
           Nothing     -> do
-            handle <- liftIO $ openFile filepath ReadMode
+            handle <- liftIO $ openFile (snap ^. #filepath) ReadMode
             modify $ IM.insert sid handle
             return handle
         offset <- liftIO . fmap getPos $ hGetPosn handle
@@ -112,62 +110,63 @@ readChunk' amount (SID sid) manager = do
             return EndChunk
           False -> return FullChunk
         return SnapshotChunk
-          { _data   = chunk
-          , _type   = chunkType
-          , _offset = offset
-          , _index  = snap ^. field @"_index"
-          , _term   = snap ^. field @"_term"
+          { snapshotChunkData   = chunk
+          , snapshotChunkType   = chunkType
+          , snapshotChunkOffset = offset
+          , snapshotChunkIndex  = snap ^. #index
+          , snapshotChunkTerm   = snap ^. #term
           }
-      atomically $ modifyTVar (_snapshots manager) $ \snaps ->
-        snaps { _chunks = chunks' }
+      atomically $ modifyTVar (manager ^. #snapshots) $ #chunks .~ chunks'
       return $ Just chunk
     _ -> return Nothing
 
 saveSnapshot' :: LogIndex -> SnapshotManager -> IO ()
 saveSnapshot' index manager = do
-  snapshots <- readTVarIO $ _snapshots manager
-  let snap = find ((== index) . getField @"_index") . _partial $ snapshots
+  snapshots <- readTVarIO $ manager ^. #snapshots
+  let snap = find ((== index) . (^. #index)) $ snapshots ^. #partial
 
   forM_ snap $ \snap -> do
     -- Close and rename snapshot file as completed.
-    hClose $ _file snap
-    let index = snap ^. field @"_index"
-        term  = snap ^. field @"_term"
-        path' = replaceFileName (_filepath snap) (completedFilename index term)
-    renameFile (_filepath snap) path'
+    hClose $ snap ^. #file
+    let path' = replaceFileName
+                (snap ^. #filepath)
+                (completedFilename index (snap ^. #term))
+    renameFile (snap ^. #filepath) path'
     reopened <- openFile path' ReadMode
-    let snap' = snap { _file = reopened, _filepath = path' }
+    let snap' = snap & #file .~ reopened & #filepath .~ path'
 
     -- Replace the existing completed snapshot file if its
     -- index is smaller than the saving snapshot's index.
-    completed' <- case _completed snapshots of
-      Just old@Snapshot { _index = i } | i < index ->
+    completed' <- case snapshots ^. #completed of
+      Just old | old ^. #index < index ->
         removeSnapshot old >> pure (Just snap')
       Nothing   -> pure (Just snap')
       completed -> removeSnapshot snap' >> pure completed
 
     -- Remove partial snapshots with an index smaller than
     -- the saving snapshot's index.
-    partial' <- filterM (filterSnapshot index) . _partial $ snapshots
+    partial' <- filterM (filterSnapshot index) $ snapshots ^. #partial
 
-    atomically $ modifyTVar (_snapshots manager) $ \s ->
-      s { _completed = completed', _partial = partial' }
+    atomically $ modifyTVar (manager ^. #snapshots) $
+      (#completed .~ completed') . (#partial .~ partial')
  where
   removeSnapshot snap = do
-    hClose $ _file snap
-    removeFile $ _filepath snap
+    hClose $ snap ^. #file
+    removeFile $ snap ^. #filepath
 
   filterSnapshot index = \case
-    snap@Snapshot { _index = i } | i < index ->
+    snap | snap ^. #index < index ->
       removeSnapshot snap >> pure False
-    Snapshot { _index = i } | i > index -> pure True
+    snap | snap ^. #index > index -> pure True
     _ -> pure False
 
 snapshotInfo' :: SnapshotManager -> IO (Maybe (LogIndex, LogTerm, FileSize))
 snapshotInfo' manager = do
-  snapshots <- readTVarIO $ _snapshots manager
-  size <- maybe (pure Nothing) (fmap (Just . fromIntegral) . hFileSize . _file)
-        $ _completed snapshots
-  let index = getField @"_index" <$> _completed snapshots
-      term  = getField @"_term" <$> _completed snapshots
+  snapshots <- readTVarIO $ manager ^. #snapshots
+  size <- maybe
+          (pure Nothing)
+          (fmap (Just . fromIntegral) . hFileSize . (^. #file))
+        $ snapshots ^. #completed
+  let index = (^. #index) <$> snapshots ^. #completed
+      term  = (^. #term) <$> snapshots ^. #completed
   return $ (,,) <$> index <*> term <*> size

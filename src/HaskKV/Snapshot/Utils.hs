@@ -7,6 +7,7 @@ import Data.Maybe
 import GHC.IO.Handle
 import HaskKV.Snapshot.Types
 import HaskKV.Types
+import Optics
 import System.Directory
 import System.FilePath
 import System.IO
@@ -19,15 +20,15 @@ newSnapshotManager path = do
   let directoryPath = fromMaybe "" path
   snapshots <- loadSnapshots directoryPath
   return SnapshotManager
-    { _snapshots     = snapshots
-    , _directoryPath = directoryPath
+    { snapshotManagerSnapshots     = snapshots
+    , snapshotManagerDirectoryPath = directoryPath
     }
 
 closeSnapshotManager :: SnapshotManager -> IO ()
 closeSnapshotManager manager = do
-  snapshots <- readTVarIO $ _snapshots manager
-  mapM_ (hClose . _file) (_completed snapshots)
-  mapM_ (hClose . _file) (_partial snapshots)
+  snapshots <- readTVarIO $ manager ^. #snapshots
+  mapM_ (hClose . (^. #file)) (snapshots ^. #completed)
+  mapM_ (hClose . (^. #file)) (snapshots ^. #partial)
 
 loadSnapshots :: FilePath -> IO (TVar Snapshots)
 loadSnapshots path = do
@@ -36,9 +37,9 @@ loadSnapshots path = do
   partial   <- mapM (toPartial . (path </>)) . filter isPartial $ files
   completed <- mapM (toCompleted . (path </>)) . filter isCompleted $ files
   newTVarIO Snapshots
-    { _completed = listToMaybe $ catMaybes completed
-    , _partial   = catMaybes partial
-    , _chunks    = IM.empty
+    { snapshotsCompleted = listToMaybe $ catMaybes completed
+    , snapshotsPartial   = catMaybes partial
+    , snapshotsChunks    = IM.empty
     }
  where
   toSnapshot mode path = case fileSnapInfo (fileBase path) of
@@ -47,11 +48,11 @@ loadSnapshots path = do
       fileSize <- hFileSize handle
       let offset = if fileSize > 0 then fromIntegral fileSize else 0
       return $ Just Snapshot
-        { _file     = handle
-        , _index    = index
-        , _term     = term
-        , _filepath = path
-        , _offset   = offset
+        { snapshotFile     = handle
+        , snapshotIndex    = index
+        , snapshotTerm     = term
+        , snapshotFilepath = path
+        , snapshotOffset   = offset
         }
     Nothing -> return Nothing
   toPartial   = toSnapshot AppendMode
