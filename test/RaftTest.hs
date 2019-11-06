@@ -3,9 +3,7 @@ module RaftTest
   )
 where
 
-import Control.Lens
 import Control.Monad
-import Data.Generics.Product.Fields
 import Data.List (nub)
 import Data.Maybe
 import HaskKV.Log.Class
@@ -17,6 +15,8 @@ import HaskKV.Store.All
 import HaskKV.Types
 import Mock
 import Mock.Instances
+import Optics
+import Optics.State.Operators
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -39,37 +39,39 @@ initLogEntries :: StoreValue Int -> [LogEntry Int (StoreValue Int)]
 initLogEntries value = [entry1, entry2]
  where
   entry1 = LogEntry
-    { _term      = 0
-    , _index     = 1
-    , _data      = Change (TID 0) 1 value
-    , _completed = Completed Nothing
+    { logEntryTerm      = 0
+    , logEntryIndex     = 1
+    , logEntryData      = Change (TID 0) 1 value
+    , logEntryCompleted = Completed Nothing
     }
   entry2 = LogEntry
-    { _term      = 0
-    , _index     = 2
-    , _data      = Delete (TID 0) 1
-    , _completed = Completed Nothing
+    { logEntryTerm      = 0
+    , logEntryIndex     = 2
+    , logEntryData      = Delete (TID 0) 1
+    , logEntryCompleted = Completed Nothing
     }
 
 addedLogEntries :: StoreValue Int -> [LogEntry Int (StoreValue Int)]
 addedLogEntries value = [entry1, entry2]
  where
   entry1 = LogEntry
-    { _term      = 1
-    , _index     = 1
-    , _data      = Change (TID 0) 2 value
-    , _completed = Completed Nothing
+    { logEntryTerm      = 1
+    , logEntryIndex     = 1
+    , logEntryData      = Change (TID 0) 2 value
+    , logEntryCompleted = Completed Nothing
     }
   entry2 = LogEntry
-    { _term      = 1
-    , _index     = 2
-    , _data      = Change (TID 0) 3 value
-    , _completed = Completed Nothing
+    { logEntryTerm      = 1
+    , logEntryIndex     = 2
+    , logEntryData      = Change (TID 0) 3 value
+    , logEntryCompleted = Completed Nothing
     }
 
 noop :: LogEntry Int (StoreValue Int)
-noop =
-  LogEntry {_term = 1, _index = 1, _data = Noop, _completed = Completed Nothing}
+noop = LogEntry { logEntryTerm      = 1
+                , logEntryIndex     = 1
+                , logEntryData      = Noop
+                , logEntryCompleted = Completed Nothing }
 
 testElection :: TestTree
 testElection = testCase "Tests normal majority election" $ do
@@ -85,17 +87,17 @@ testElection = testCase "Tests normal majority election" $ do
       runServer 4 $ storeEntries entries
 
       runServers
-      msgs <- MockT $ preuse (ix 2 . receivingMsgs)
+      msgs <- MockT $ preuse (ix 2 % receivingMsgs)
 
       replicateM_ 3 runServers
-      state <- MockT $ preuse (ix 2 . raftState . stateType)
+      state <- MockT $ preuse (ix 2 % raftState % #stateType)
       return (msgs, state)
-  let resp = VoteResponse {_term = 1, _success = True}
+  let resp = VoteResponse {raftResponseTerm = 1, raftResponseSuccess = True}
   msgs @?= Just [Response 1 resp, Response 3 resp, Response 4 resp]
   let
     expectedState = LeaderState
-      { _nextIndex  = IM.fromList [(1, 4), (2, 4), (3, 4), (4, 4)]
-      , _matchIndex = IM.fromList [(1, 0), (2, 0), (3, 0), (4, 0)]
+      { leaderStateNextIndex  = IM.fromList [(1, 4), (2, 4), (3, 4), (4, 4)]
+      , leaderStateMatchIndex = IM.fromList [(1, 0), (2, 0), (3, 0), (4, 0)]
       }
   state @?= (Just $ Leader expectedState)
 
@@ -119,14 +121,14 @@ testSplitElection = testCase "Test split election" $ do
 
       replicateM_ 4 runServers
       -- Check that no server has been elected leader.
-      state2 <- MockT $ preuse (ix 2 . raftState . stateType)
-      state3 <- MockT $ preuse (ix 3 . raftState . stateType)
+      state2 <- MockT $ preuse (ix 2 % raftState % #stateType)
+      state3 <- MockT $ preuse (ix 3 % raftState % #stateType)
 
       -- Reset timer for server 2 and check that it gets elected.
       runServer 2 $ MockT $ electionTimer .= True
       replicateM_ 4 runServers
-      state2' <- MockT $ preuse (ix 2 . raftState . stateType)
-      state3' <- MockT $ preuse (ix 3 . raftState . stateType)
+      state2' <- MockT $ preuse (ix 2 % raftState % #stateType)
+      state3' <- MockT $ preuse (ix 3 % raftState % #stateType)
       return (state2, state3, state2', state3')
     (s2, s3, s2', s3') = result
   isCandidate s2 @? "State 2 not candidate"
@@ -166,7 +168,7 @@ testLeaderSendsAppendEntries
           runServer 1 runRaft
           flushMessages 1
           msgs <- forM [2, 3, 4, 5] $ \i -> do
-            msgs <- MockT $ preuse $ ix i . receivingMsgs
+            msgs <- MockT $ preuse $ ix i % receivingMsgs
             runServer i runRaft
             flushMessages i
             return msgs
@@ -193,24 +195,24 @@ testLeaderSendsAppendEntries
           -- are updated after leader receives responses.
           replicateM_ 8 runServers
           leaderState <- runServer 1 $ MockT $ preuse
-            (raftState . stateType . _Leader)
-          commitIdx <- runServer 1 $ MockT $ use (raftState . commitIndex)
+            (raftState % #stateType % _Leader)
+          commitIdx <- runServer 1 $ MockT $ use (raftState % #commitIndex)
           return (msgs, catMaybes stores, join leaderState, commitIdx)
         (msgs, stores, state, commitIdx) = result
         blankAE                          = AppendEntries $ AppendEntries'
-          { _term        = 1
-          , _leaderId    = 1
-          , _prevLogIdx  = 0
-          , _prevLogTerm = 0
-          , _entries     = [noop]
-          , _commitIdx   = 0
+          { aeTerm        = 1
+          , aeLeaderId    = 1
+          , aePrevLogIdx  = 0
+          , aePrevLogTerm = 0
+          , aeEntries     = [noop]
+          , aeCommitIdx   = 0
           }
         expectedEntries = fmap (Just . (: [])) . replicate 4 $ blankAE
       msgs @?= expectedEntries
       let numUnique = length . nub . fmap (show . removeSID) $ stores
       numUnique @?= 1
       let
-        storeEntries = getField @"_entries" . _log . head $ stores
+        storeEntries = (head stores) ^. #log % #entries
         expected =
           IM.fromList
             . fmap (\(i, e) -> (i, setEntryIndex (LogIndex i) e))
@@ -222,8 +224,8 @@ testLeaderSendsAppendEntries
         nextIndex  = [(1, 2), (2, 4), (3, 4), (4, 4), (5, 4)]
         matchIndex = [(1, 3), (2, 3), (3, 3), (4, 3), (5, 3)]
       state @?= Just LeaderState
-        { _nextIndex  = IM.fromList nextIndex
-        , _matchIndex = IM.fromList matchIndex
+        { leaderStateNextIndex  = IM.fromList nextIndex
+        , leaderStateMatchIndex = IM.fromList matchIndex
         }
       commitIdx @?= Just 3
 
@@ -241,44 +243,46 @@ testLeaderDecrementsMatch = testCase "Leader decrements match on fail" $ do
       runServer 4 $ storeEntries entries
       replicateM_ 3 runServers
 
-      msgs <- MockT $ preuse $ ix 1 . receivingMsgs
+      msgs <- MockT $ preuse $ ix 1 % receivingMsgs
       replicateM_ 6 runServers
-      state1 <- MockT $ preuse $ ix 1 . raftState . stateType . _Leader
+      state1 <- MockT $ preuse $ ix 1 % raftState % #stateType % _Leader
 
       runServer 1 $ MockT $ heartbeatTimer .= True
       replicateM_ 5 runServers
-      state2 <- MockT $ preuse $ ix 1 . raftState . stateType . _Leader
+      state2 <- MockT $ preuse $ ix 1 % raftState % #stateType % _Leader
 
       runServer 1 $ MockT $ heartbeatTimer .= True
       replicateM_ 5 runServers
-      state3 <- MockT $ preuse $ ix 1 . raftState . stateType . _Leader
+      state3 <- MockT $ preuse $ ix 1 % raftState % #stateType % _Leader
 
       runServer 1 $ MockT $ heartbeatTimer .= True
       replicateM_ 5 runServers
-      state4 <- MockT $ preuse $ ix 1 . raftState . stateType . _Leader
+      state4 <- MockT $ preuse $ ix 1 % raftState % #stateType % _Leader
 
       return (msgs, state1, state2, state3, state4)
     (msgs, s1, s2, s3, s4) = result
     msgs' = fromJust msgs
-    failResp = AppendResponse {_term = 1, _success = False, _lastIndex = 0}
+    failResp = AppendResponse { raftResponseTerm = 1
+                              , raftResponseSuccess = False
+                              , raftResponseLastIndex = 0 }
   elem (Response 2 failResp) msgs'
     && elem (Response 5 failResp) msgs'
     @? "Servers 2 and 5 didn't respond with failure"
   s1 @?= Just LeaderState
-    { _nextIndex  = IM.fromList [(1, 4), (2, 3), (3, 4), (4, 4), (5, 3)]
-    , _matchIndex = IM.fromList [(1, 0), (2, 0), (3, 3), (4, 3), (5, 0)]
+    { leaderStateNextIndex  = IM.fromList [(1, 4), (2, 3), (3, 4), (4, 4), (5, 3)]
+    , leaderStateMatchIndex = IM.fromList [(1, 0), (2, 0), (3, 3), (4, 3), (5, 0)]
     }
   s2 @?= Just LeaderState
-    { _nextIndex  = IM.fromList [(1, 4), (2, 2), (3, 4), (4, 4), (5, 2)]
-    , _matchIndex = IM.fromList [(1, 3), (2, 0), (3, 3), (4, 3), (5, 0)]
+    { leaderStateNextIndex  = IM.fromList [(1, 4), (2, 2), (3, 4), (4, 4), (5, 2)]
+    , leaderStateMatchIndex = IM.fromList [(1, 3), (2, 0), (3, 3), (4, 3), (5, 0)]
     }
   s3 @?= Just LeaderState
-    { _nextIndex  = IM.fromList [(1, 4), (2, 1), (3, 4), (4, 4), (5, 1)]
-    , _matchIndex = IM.fromList [(1, 3), (2, 0), (3, 3), (4, 3), (5, 0)]
+    { leaderStateNextIndex  = IM.fromList [(1, 4), (2, 1), (3, 4), (4, 4), (5, 1)]
+    , leaderStateMatchIndex = IM.fromList [(1, 3), (2, 0), (3, 3), (4, 3), (5, 0)]
     }
   s4 @?= Just LeaderState
-    { _nextIndex  = IM.fromList [(1, 4), (2, 4), (3, 4), (4, 4), (5, 4)]
-    , _matchIndex = IM.fromList [(1, 3), (2, 3), (3, 3), (4, 3), (5, 3)]
+    { leaderStateNextIndex  = IM.fromList [(1, 4), (2, 4), (3, 4), (4, 4), (5, 4)]
+    , leaderStateMatchIndex = IM.fromList [(1, 3), (2, 3), (3, 3), (4, 3), (5, 3)]
     }
 
 testLeaderSendsSnapshot :: TestTree
@@ -309,12 +313,12 @@ testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
         MockT $ heartbeatTimer .= True
       replicateM_ 15 runServers
 
-      store1 <- MockT $ preuse $ ix 1 . store
-      store5 <- MockT $ preuse $ ix 5 . store
+      store1 <- MockT $ preuse $ ix 1 % store
+      store5 <- MockT $ preuse $ ix 5 % store
 
       runServer 1 $ MockT $ heartbeatTimer .= True
       runServers
-      msgs <- MockT $ preuse $ ix 1 . receivingMsgs
+      msgs <- MockT $ preuse $ ix 1 % receivingMsgs
       return (store1, store5, msgs)
     (store1, store5, msgs) = result
   fmap (show . removeSID) store1 @?= fmap (show . removeSID) store5
@@ -326,4 +330,4 @@ testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
   isSnapshotResponse _ = False
 
 removeSID :: StoreData k v e -> StoreData k v e
-removeSID store = store { _sid = SID 0 }
+removeSID store = store { storeDataSid = SID 0 }

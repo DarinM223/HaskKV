@@ -1,12 +1,13 @@
 module Mock where
 
-import Control.Lens
 import Control.Monad.State
 import Data.Foldable (foldl')
 import Data.Maybe
 import HaskKV.Raft.Run
 import HaskKV.Types
 import Mock.Instances
+import Optics
+import Optics.State.Operators
 
 import qualified Data.IntMap as IM
 
@@ -40,8 +41,8 @@ flushMessages :: Int -> MockT (IM.IntMap MockConfig) ()
 flushMessages i = MockT (preuse (ix i)) >>= \case
   Just s -> MockT $ do
     let messages = _sendingMsgs s
-    (ix i . sendingMsgs) .= []
-    forM_ messages $ \((SID sid), msg) -> (ix sid . receivingMsgs) %= (++ [msg])
+    ix i % sendingMsgs .= []
+    forM_ messages $ \((SID sid), msg) -> ix sid % receivingMsgs %= (++ [msg])
   _ -> return ()
 
 runServers :: MockT (IM.IntMap MockConfig) ()

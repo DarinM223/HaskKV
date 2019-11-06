@@ -5,7 +5,6 @@ module Mock.Instances where
 import Control.Monad.State.Strict
 import Data.Binary
 import Data.Maybe
-import Data.Monoid
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
@@ -169,8 +168,6 @@ applyEntryImpl entry@LogEntry { logEntryData = entryData } = do
     Delete _ k   -> deleteValue k
     _            -> return ()
 
-prezoom l m = getFirst <$> zoom l (First . Just <$> m)
-
 instance SnapshotM (M.Map K V) (State MockConfig) where
   createSnapshot = createSnapshotImpl
   writeSnapshot = writeSnapshotImpl
@@ -190,8 +187,8 @@ saveSnapshotImpl i = do
   snap <- fromJust <$> preuse (snapshotManager % partial % ix i')
   snapshotManager % completed %= \case
     Just s | s ^. sIndex < i -> Just snap
-    Nothing                -> Just snap
-    s                      -> s
+    Nothing                  -> Just snap
+    s                        -> s
   snapshotManager % partial %= IM.filter ((> i) . (^. sIndex))
 readSnapshotImpl _ = do
   snapData <- preuse $ snapshotManager % completed % _Just % file
@@ -206,8 +203,8 @@ readChunkImpl amount (SID sid) = snapshotInfo >>= \case
     temp <- preuse $ snapshotManager % chunks % ix sid
     when (isNothing temp || fmap fst temp == Just "") $ do
       file' <- guse $ snapshotManager % completed % _Just % file
-      snapshotManager % chunks %= IM.insert sid (file', 0)
-    prezoom (snapshotManager % chunks % ix sid) $ S.state $ \(s, f) ->
+      snapshotManager % chunks %= IM.insert sid (fromJust file', 0)
+    zoomMaybe (snapshotManager % chunks % ix sid) $ S.state $ \(s, f) ->
       let
         (chunkData, remainder) = splitAt amount s
         chunkType              = if null remainder then EndChunk else FullChunk
