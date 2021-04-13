@@ -5,7 +5,7 @@ module HaskKV.Monad where
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import Data.Binary
-import Data.Binary.Orphans ()
+import Data.Binary.Instances ()
 import Data.IORef
 import HaskKV.Constr
 import HaskKV.Log.Class

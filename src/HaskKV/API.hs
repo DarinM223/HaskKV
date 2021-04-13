@@ -18,7 +18,7 @@ import HaskKV.Raft.State
 import HaskKV.Server.All
 import HaskKV.Store.Types
 import Optics
-import Servant.API
+import Servant.API hiding (inject)
 import Servant.Server
 
 type StoreAPI k v
@@ -26,7 +26,7 @@ type StoreAPI k v
   :<|> "set" :> Capture "key" k :> ReqBody '[JSON] v :> Post '[JSON] ()
   :<|> "delete" :> Capture "key" k :> Delete '[JSON] ()
 
-type MyHandler msg k v e a = ExceptT ServantErr (App msg k v e) a
+type MyHandler msg k v e a = ExceptT ServerError (App msg k v e) a
 
 api :: Proxy (StoreAPI k v)
 api = Proxy

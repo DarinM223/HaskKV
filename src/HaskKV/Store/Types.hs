@@ -6,7 +6,7 @@ import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Binary
-import Data.Binary.Orphans ()
+import Data.Binary.Instances ()
 import Data.Maybe (fromMaybe)
 import Data.Time
 import GHC.Generics

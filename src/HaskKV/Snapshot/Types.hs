@@ -5,6 +5,7 @@ module HaskKV.Snapshot.Types where
 import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Binary (Binary)
+import Data.Kind (Type)
 import GHC.IO.Handle
 import HaskKV.Types
 import Optics
@@ -12,7 +13,7 @@ import Optics
 import qualified Data.ByteString as B
 import qualified Data.IntMap as IM
 
-class (Binary s) => HasSnapshotType s (m :: * -> *) | m -> s
+class (Binary s) => HasSnapshotType s (m :: Type -> Type) | m -> s
 
 data SnapshotChunkType = FullChunk | EndChunk deriving (Show, Eq)
 
