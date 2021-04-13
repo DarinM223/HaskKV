@@ -112,8 +112,8 @@ deleteRange' :: (Binary e) => LogIndex -> LogIndex -> Store k v e -> IO ()
 deleteRange' a b = void . persistAfter (modifyLog (deleteRangeLog a b))
 
 applyEntry' :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
-applyEntry' LogEntry { logEntryData      = entry
-                     , logEntryCompleted = Completed lock } = do
+applyEntry' LogEntry { entryData = entry
+                     , completed = Completed lock } = do
   mapM_ (liftIO . atomically . flip putTMVar ()) lock
   applyStore entry
  where

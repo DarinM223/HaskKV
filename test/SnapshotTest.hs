@@ -161,8 +161,8 @@ testReadChunks =
   readLoop (sid : sids) manager = do
     chunk <- readChunk' 9 sid manager
     forM_ chunk $ \c ->
-      writeSnapshot' (c ^. #offset) (c ^. #data) (sidToIdx sid) manager
-    case (^. #type) <$> chunk of
+      writeSnapshot' (c ^. #offset) (c ^. #chunkData) (sidToIdx sid) manager
+    case (^. #chunkType) <$> chunk of
       Just FullChunk -> readLoop (sids ++ [sid]) manager
       Just EndChunk  -> readLoop sids manager
       _              -> error "Invalid chunk"

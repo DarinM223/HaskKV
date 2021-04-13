@@ -24,10 +24,10 @@ testAddEntries = testCase "addTemporaryEntry adds entries to _tempEntries" $ do
     createEntry n = do
       v <- newStoreValue 10 0 n
       return LogEntry
-        { logEntryTerm      = 0
-        , logEntryIndex     = 0
-        , logEntryData      = Change (TID 0) 1 v
-        , logEntryCompleted = Completed Nothing
+        { term      = 0
+        , index     = 0
+        , entryData = Change (TID 0) 1 v
+        , completed = Completed Nothing
         }
     unChange (Change _ _ v) = v
     unChange _              = undefined
@@ -35,7 +35,7 @@ testAddEntries = testCase "addTemporaryEntry adds entries to _tempEntries" $ do
   -- Tests order of entries.
   mapM_ (flip addTemporaryEntry' tempLog <=< createEntry) [1 .. 3]
   entries <- temporaryEntries' tempLog
-  fmap (_value . unChange . (^. #data)) entries @?= [1, 2, 3]
+  fmap (_value . unChange . (^. #entryData)) entries @?= [1, 2, 3]
 
   -- Tests that entries are cleared after getting temporary entries.
   entries <- temporaryEntries' tempLog

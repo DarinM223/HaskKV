@@ -18,14 +18,14 @@ crashServer :: Int -> MockT (IM.IntMap MockConfig) ()
 crashServer sid = MockT $ modify $ IM.delete sid
 
 dropMessage :: Int -> MockT (IM.IntMap MockConfig) ()
-dropMessage i = void $ runServer i $ MockT $ receivingMsgs %= drop 1
+dropMessage i = void $ runServer i $ MockT $ #receivingMsgs %= drop 1
 
 hasEvent :: Int -> MockT (IM.IntMap MockConfig) Bool
 hasEvent i = do
   has <- runServer i $ MockT $ do
-    messages  <- use receivingMsgs
-    heartbeat <- use heartbeatTimer
-    election  <- use electionTimer
+    messages  <- use #receivingMsgs
+    heartbeat <- use #heartbeatTimer
+    election  <- use #electionTimer
     return $ (not $ null messages) || heartbeat || election
   return $ fromMaybe False has
 
@@ -40,9 +40,9 @@ runServer i m = MockT (preuse (ix i)) >>= \case
 flushMessages :: Int -> MockT (IM.IntMap MockConfig) ()
 flushMessages i = MockT (preuse (ix i)) >>= \case
   Just s -> MockT $ do
-    let messages = _sendingMsgs s
-    ix i % sendingMsgs .= []
-    forM_ messages $ \((SID sid), msg) -> ix sid % receivingMsgs %= (++ [msg])
+    let messages = sendingMsgs s
+    ix i % #sendingMsgs .= []
+    forM_ messages $ \((SID sid), msg) -> ix sid % #receivingMsgs %= (++ [msg])
   _ -> return ()
 
 runServers :: MockT (IM.IntMap MockConfig) ()

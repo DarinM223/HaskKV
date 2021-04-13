@@ -42,10 +42,10 @@ handleArgs (path : sid : _) = do
   let
     sid'   = SID $ read sid
     config = Config
-      { configBackpressure     = Capacity 100
-      , configElectionTimeout  = 2000000
-      , configHeartbeatTimeout = 1000000
-      , configServerData       = []
+      { backpressure     = Capacity 100
+      , electionTimeout  = 2000000
+      , heartbeatTimeout = 1000000
+      , serverData       = []
       }
   config <- readConfig config path
   let

@@ -20,8 +20,8 @@ newSnapshotManager path = do
   let directoryPath = fromMaybe "" path
   snapshots <- loadSnapshots directoryPath
   return SnapshotManager
-    { snapshotManagerSnapshots     = snapshots
-    , snapshotManagerDirectoryPath = directoryPath
+    { snapshots     = snapshots
+    , directoryPath = directoryPath
     }
 
 closeSnapshotManager :: SnapshotManager -> IO ()
@@ -37,9 +37,9 @@ loadSnapshots path = do
   partial   <- mapM (toPartial . (path </>)) . filter isPartial $ files
   completed <- mapM (toCompleted . (path </>)) . filter isCompleted $ files
   newTVarIO Snapshots
-    { snapshotsCompleted = listToMaybe $ catMaybes completed
-    , snapshotsPartial   = catMaybes partial
-    , snapshotsChunks    = IM.empty
+    { completed = listToMaybe $ catMaybes completed
+    , partial   = catMaybes partial
+    , chunks    = IM.empty
     }
  where
   toSnapshot mode path = case fileSnapInfo (fileBase path) of
@@ -48,11 +48,11 @@ loadSnapshots path = do
       fileSize <- hFileSize handle
       let offset = if fileSize > 0 then fromIntegral fileSize else 0
       return $ Just Snapshot
-        { snapshotFile     = handle
-        , snapshotIndex    = index
-        , snapshotTerm     = term
-        , snapshotFilepath = path
-        , snapshotOffset   = offset
+        { file     = handle
+        , index    = index
+        , term     = term
+        , filepath = path
+        , offset   = offset
         }
     Nothing -> return Nothing
   toPartial   = toSnapshot AppendMode

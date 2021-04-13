@@ -1,9 +1,8 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Server.Types where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
+import GHC.Generics
 import HaskKV.Types
 import Optics
 
@@ -22,15 +21,14 @@ data ServerEvent = ElectionTimeout
                  deriving (Show, Eq)
 
 data ServerState msg = ServerState
-  { serverStateMessages         :: TBQueue msg
-  , serverStateOutgoing         :: IM.IntMap (TBQueue msg)
-  , serverStateSid              :: SID
-  , serverStateElectionTimer    :: Timer.Timer
-  , serverStateHeartbeatTimer   :: Timer.Timer
-  , serverStateElectionTimeout  :: Timeout
-  , serverStateHeartbeatTimeout :: Timeout
-  }
-makeFieldLabels ''ServerState
+  { messages         :: TBQueue msg
+  , outgoing         :: IM.IntMap (TBQueue msg)
+  , sid              :: SID
+  , electionTimer    :: Timer.Timer
+  , heartbeatTimer   :: Timer.Timer
+  , electionTimeout  :: Timeout
+  , heartbeatTimeout :: Timeout
+  } deriving Generic
 
 class HasServerState msg r | r -> msg where
   serverStateL :: Lens' r (ServerState msg)
@@ -48,11 +46,11 @@ newServerState backpressure electionTimeout heartbeatTimeout sid = do
   Timer.reset heartbeatTimer heartbeatTimeout
 
   return ServerState
-    { serverStateMessages         = messages
-    , serverStateOutgoing         = IM.empty
-    , serverStateSid              = sid
-    , serverStateElectionTimer    = electionTimer
-    , serverStateHeartbeatTimer   = heartbeatTimer
-    , serverStateElectionTimeout  = electionTimeout
-    , serverStateHeartbeatTimeout = heartbeatTimeout
+    { messages         = messages
+    , outgoing         = IM.empty
+    , sid              = sid
+    , electionTimer    = electionTimer
+    , heartbeatTimer   = heartbeatTimer
+    , electionTimeout  = electionTimeout
+    , heartbeatTimeout = heartbeatTimeout
     }

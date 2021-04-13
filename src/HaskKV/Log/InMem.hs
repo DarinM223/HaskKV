@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Log.InMem where
 
 import Data.Binary
@@ -12,23 +10,22 @@ import Optics
 import qualified Data.IntMap as IM
 
 data Log e = Log
-  { logEntries           :: IM.IntMap e
-  , logHighIdx           :: LogIndex
-  , logLowIdx            :: LogIndex
-  , logSnapshotLastIndex :: Maybe LogIndex
-  , logSnapshotLastTerm  :: Maybe LogTerm
+  { entries           :: IM.IntMap e
+  , highIdx           :: LogIndex
+  , lowIdx            :: LogIndex
+  , snapshotLastIndex :: Maybe LogIndex
+  , snapshotLastTerm  :: Maybe LogTerm
   } deriving (Show, Generic)
-makeFieldLabels ''Log
 
 instance (Binary e) => Binary (Log e)
 
 emptyLog :: Log e
 emptyLog = Log
-  { logEntries           = IM.empty
-  , logHighIdx           = 0
-  , logLowIdx            = 0
-  , logSnapshotLastIndex = Nothing
-  , logSnapshotLastTerm  = Nothing
+  { entries           = IM.empty
+  , highIdx           = 0
+  , lowIdx            = 0
+  , snapshotLastIndex = Nothing
+  , snapshotLastTerm  = Nothing
   }
 
 lastIndexLog :: Log e -> LogIndex
@@ -44,9 +41,9 @@ entryTermLog i log
 
 deleteRangeLog :: LogIndex -> LogIndex -> Log e -> Log e
 deleteRangeLog min max l = l
-  { logLowIdx  = lowIndex'
-  , logHighIdx = highIndex'
-  , logEntries = entries'
+  { lowIdx  = lowIndex'
+  , highIdx = highIndex'
+  , entries = entries'
   }
  where
   indexRange min max = [unLogIndex min .. unLogIndex max]
@@ -60,9 +57,9 @@ storeEntriesLog :: (Entry e) => [e] -> Log e -> Log e
 storeEntriesLog es l = foldl' addEntry l es
  where
   addEntry l e = l
-    { logEntries = entries'
-    , logLowIdx  = lowIndex
-    , logHighIdx = highIndex
+    { entries = entries'
+    , lowIdx  = lowIndex
+    , highIdx = highIndex
     }
    where
     index     = (entryIndex e)

@@ -37,10 +37,10 @@ transitionToLeader msg = do
   prevLastIndex <- lastIndex
   currTerm'     <- guse #currTerm
   let noop = LogEntry
-        { logEntryTerm      = currTerm'
-        , logEntryIndex     = prevLastIndex + 1
-        , logEntryData      = Noop
-        , logEntryCompleted = Completed Nothing
+        { term      = currTerm'
+        , index     = prevLastIndex + 1
+        , entryData = Noop
+        , completed = Completed Nothing
         }
   storeEntries [noop]
 

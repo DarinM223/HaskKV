@@ -58,10 +58,10 @@ server config = hoistServer api (convertApp config) server
 applyEntryData :: LogEntryData k v -> App msg k v (LogEntry k v) ()
 applyEntryData entryData = ask >>= \config -> liftIO $ do
   completed <- Completed . Just <$> newEmptyTMVarIO
-  let entry = LogEntry { logEntryTerm      = 0
-                       , logEntryIndex     = 0
-                       , logEntryData      = entryData
-                       , logEntryCompleted = completed
+  let entry = LogEntry { term      = 0
+                       , index     = 0
+                       , entryData = entryData
+                       , completed = completed
                        }
   f <- async $ run config $ waitApplyEntry entry
   inject HeartbeatTimeout $ config ^. serverStateL

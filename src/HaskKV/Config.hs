@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Config where
 
 import Control.Concurrent.STM (newTBQueueIO)
@@ -7,6 +5,7 @@ import Control.Monad (foldM)
 import Data.Conduit.Network (ClientSettings, clientSettings)
 import Data.Foldable (find, foldl')
 import Data.Maybe (mapMaybe)
+import GHC.Generics
 import HaskKV.Server.Types
 import HaskKV.Types
 import Optics
@@ -16,21 +15,19 @@ import qualified Data.ByteString.Char8 as C
 import qualified Data.IntMap as IM
 
 data ServerData = ServerData
-  { serverDataId          :: SID
-  , serverDataHost        :: String
-  , serverDataRaftPort    :: Int
-  , serverDataApiPort     :: Int
-  , serverDataSnapshotDir :: FilePath
-  } deriving (Show, Eq)
-makeFieldLabels ''ServerData
+  { id          :: SID
+  , host        :: String
+  , raftPort    :: Int
+  , apiPort     :: Int
+  , snapshotDir :: FilePath
+  } deriving (Show, Eq, Generic)
 
 data Config = Config
-  { configBackpressure     :: Capacity
-  , configElectionTimeout  :: Timeout
-  , configHeartbeatTimeout :: Timeout
-  , configServerData       :: [ServerData]
-  } deriving (Show, Eq)
-makeFieldLabels ''Config
+  { backpressure     :: Capacity
+  , electionTimeout  :: Timeout
+  , heartbeatTimeout :: Timeout
+  , serverData       :: [ServerData]
+  } deriving (Show, Eq, Generic)
 
 parseConfig :: Config -> [String] -> Config
 parseConfig c = setData c . mapMaybe attrsToServerData . splitInto 5

@@ -40,11 +40,11 @@ createSnapshot' index term manager = do
   handle <- openFile filename WriteMode
   atomically $ modifyTVar (manager ^. #snapshots) $ \s ->
     let snap = Snapshot
-          { snapshotFile     = handle
-          , snapshotIndex    = index
-          , snapshotTerm     = term
-          , snapshotFilepath = filename
-          , snapshotOffset   = 0
+          { file     = handle
+          , index    = index
+          , term     = term
+          , filepath = filename
+          , offset   = 0
           }
     in s & #partial %~ (snap :)
   where filename = manager ^. #directoryPath </> partialFilename index term
@@ -110,11 +110,11 @@ readChunk' amount (SID sid) manager = do
             return EndChunk
           False -> return FullChunk
         return SnapshotChunk
-          { snapshotChunkData   = chunk
-          , snapshotChunkType   = chunkType
-          , snapshotChunkOffset = offset
-          , snapshotChunkIndex  = snap ^. #index
-          , snapshotChunkTerm   = snap ^. #term
+          { chunkData = chunk
+          , chunkType = chunkType
+          , offset    = offset
+          , index     = snap ^. #index
+          , term      = snap ^. #term
           }
       atomically $ modifyTVar (manager ^. #snapshots) $ #chunks .~ chunks'
       return $ Just chunk

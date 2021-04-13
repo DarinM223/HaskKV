@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Store.Types where
 
 import Control.Concurrent.STM
@@ -79,13 +77,12 @@ instance (Eq k) => Ord (HeapVal k) where
 
 -- | An in-memory storage implementation.
 data StoreData k v e = StoreData
-  { storeDataMap         :: M.Map k v
-  , storeDataHeap        :: H.Heap (HeapVal k)
-  , storeDataLog         :: Log e
-  , storeDataTempEntries :: [e]
-  , storeDataSid         :: SID
-  } deriving (Show)
-makeFieldLabels ''StoreData
+  { map         :: M.Map k v
+  , heap        :: H.Heap (HeapVal k)
+  , log         :: Log e
+  , tempEntries :: [e]
+  , sid         :: SID
+  } deriving (Show, Generic)
 
 newtype Store k v e = Store { unStore :: TVar (StoreData k v e) }
 
@@ -114,9 +111,9 @@ newStore sid log = fmap Store . newTVarIO $ newStoreData sid log
 
 newStoreData :: SID -> Maybe (Log e) -> StoreData k v e
 newStoreData sid log = StoreData
-  { storeDataMap         = M.empty
-  , storeDataHeap        = H.empty
-  , storeDataLog         = fromMaybe emptyLog log
-  , storeDataTempEntries = []
-  , storeDataSid         = sid
+  { map         = M.empty
+  , heap        = H.empty
+  , log         = fromMaybe emptyLog log
+  , tempEntries = []
+  , sid         = sid
   }

@@ -178,6 +178,6 @@ sendSnapshotChunk id chunk = do
     , isLastIncludedIndex = chunk ^. #index
     , isLastIncludedTerm  = chunk ^. #term
     , isOffset            = chunk ^. #offset
-    , isData              = chunk ^. #data
-    , isDone              = chunk ^. #type == EndChunk
+    , isData              = chunk ^. #chunkData
+    , isDone              = chunk ^. #chunkType == EndChunk
     }

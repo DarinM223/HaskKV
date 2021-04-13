@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Log.Entry where
 
 import Control.Concurrent.STM
@@ -8,7 +6,6 @@ import Data.Binary.Put
 import GHC.Generics
 import HaskKV.Log.Class
 import HaskKV.Types
-import Optics
 
 import qualified Data.Binary.Builder as B
 
@@ -41,18 +38,17 @@ data Transaction = Start TID
 data Checkpoint = Begin [TID] | End deriving (Show, Eq, Generic)
 
 data LogEntry k v = LogEntry
-  { logEntryTerm      :: LogTerm
-  , logEntryIndex     :: LogIndex
-  , logEntryData      :: LogEntryData k v
-  , logEntryCompleted :: Completed
+  { term      :: LogTerm
+  , index     :: LogIndex
+  , entryData :: LogEntryData k v
+  , completed :: Completed
   } deriving (Show, Eq, Generic)
-makeFieldLabels ''LogEntry
 
 instance (Show k, Show v, Binary k, Binary v) => Entry (LogEntry k v) where
-  entryIndex = (^. #index)
-  entryTerm = (^. #term)
-  setEntryIndex index = #index .~ index
-  setEntryTerm term = #term .~ term
+  entryIndex = index
+  entryTerm = term
+  setEntryIndex index l = l { index = index }
+  setEntryTerm term l = l { term = term }
 
 instance (Binary k, Binary v) => Binary (LogEntryData k v)
 instance Binary Transaction

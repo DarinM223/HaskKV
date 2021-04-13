@@ -1,5 +1,3 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Monad where
 
 import Control.Monad.Reader
@@ -7,6 +5,7 @@ import Control.Monad.State.Strict
 import Data.Binary
 import Data.Binary.Instances ()
 import Data.IORef
+import GHC.Generics
 import HaskKV.Constr
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
@@ -40,14 +39,11 @@ instance HasRun msg k v e (AppConfig msg k v e) where
   run = cRun
 
 data InitAppConfig msg e = InitAppConfig
-  { initLog           :: Maybe (Log e)
-  , initState         :: Maybe PersistentState
-  , initServerState   :: ServerState msg
-  , initSnapDirectory :: Maybe FilePath
-  }
-makeFieldLabelsWith
-  (fieldLabelsRules & lensField .~ abbreviatedNamer)
-  ''InitAppConfig
+  { log           :: Maybe (Log e)
+  , state         :: Maybe PersistentState
+  , serverState   :: ServerState msg
+  , snapDirectory :: Maybe FilePath
+  } deriving Generic
 
 instance MonadState RaftState (App msg k v e) where
   get = App $ ReaderT $ liftIO . readIORef . cState

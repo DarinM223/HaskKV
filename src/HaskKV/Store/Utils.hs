@@ -84,8 +84,8 @@ loadSnapshotStore lastIncludedIndex lastIncludedTerm map store
   = modifyLog (truncateLog lastIncludedIndex)
   . modifyLog
       (\l -> l
-        { logSnapshotLastIndex = Just lastIncludedIndex
-        , logSnapshotLastTerm  = Just lastIncludedTerm
+        { snapshotLastIndex = Just lastIncludedIndex
+        , snapshotLastTerm  = Just lastIncludedTerm
         }
       )
   . foldl' (\store (k, v) -> setKey k v store) clearedStore

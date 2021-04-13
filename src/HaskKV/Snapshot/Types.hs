@@ -1,11 +1,10 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Snapshot.Types where
 
 import Control.Concurrent.STM
 import Control.Monad.Reader
 import Data.Binary (Binary)
 import Data.Kind (Type)
+import GHC.Generics
 import GHC.IO.Handle
 import HaskKV.Types
 import Optics
@@ -18,13 +17,12 @@ class (Binary s) => HasSnapshotType s (m :: Type -> Type) | m -> s
 data SnapshotChunkType = FullChunk | EndChunk deriving (Show, Eq)
 
 data SnapshotChunk = SnapshotChunk
-  { snapshotChunkData   :: B.ByteString
-  , snapshotChunkType   :: SnapshotChunkType
-  , snapshotChunkOffset :: FilePos
-  , snapshotChunkIndex  :: LogIndex
-  , snapshotChunkTerm   :: LogTerm
-  } deriving (Show, Eq)
-makeFieldLabels ''SnapshotChunk
+  { chunkData :: B.ByteString
+  , chunkType :: SnapshotChunkType
+  , offset    :: FilePos
+  , index     :: LogIndex
+  , term      :: LogTerm
+  } deriving (Show, Eq, Generic)
 
 class (Binary s) => SnapshotM s m | m -> s where
   createSnapshot :: LogIndex -> LogTerm -> m ()
@@ -36,29 +34,26 @@ class (Binary s) => SnapshotM s m | m -> s where
   snapshotInfo   :: m (Maybe (LogIndex, LogTerm, FileSize))
 
 data Snapshot = Snapshot
-  { snapshotFile     :: Handle
-  , snapshotIndex    :: LogIndex
-  , snapshotTerm     :: LogTerm
-  , snapshotFilepath :: FilePath
-  , snapshotOffset   :: FilePos
-  } deriving (Show, Eq)
-makeFieldLabels ''Snapshot
+  { file     :: Handle
+  , index    :: LogIndex
+  , term     :: LogTerm
+  , filepath :: FilePath
+  , offset   :: FilePos
+  } deriving (Show, Eq, Generic)
 
 instance Ord Snapshot where
   compare s1 s2 = compare (s1 ^. #index) (s2 ^. #index)
 
 data Snapshots = Snapshots
-  { snapshotsCompleted :: Maybe Snapshot
-  , snapshotsPartial   :: [Snapshot]
-  , snapshotsChunks    :: IM.IntMap Handle
-  } deriving (Show, Eq)
-makeFieldLabels ''Snapshots
+  { completed :: Maybe Snapshot
+  , partial   :: [Snapshot]
+  , chunks    :: IM.IntMap Handle
+  } deriving (Show, Eq, Generic)
 
 data SnapshotManager = SnapshotManager
-  { snapshotManagerSnapshots     :: TVar Snapshots
-  , snapshotManagerDirectoryPath :: FilePath
-  }
-makeFieldLabels ''SnapshotManager
+  { snapshots     :: TVar Snapshots
+  , directoryPath :: FilePath
+  } deriving Generic
 
 class HasSnapshotManager r where
   snapshotManagerL :: Lens' r SnapshotManager
