@@ -4,13 +4,12 @@ module SnapshotTest
 where
 
 import Control.Concurrent.STM
-import Control.Lens
 import Control.Monad
 import Data.Binary
-import Data.Generics.Product.Fields
 import Data.List (nub, sort)
 import HaskKV.Snapshot.All
 import HaskKV.Types
+import Optics
 import Test.Tasty
 import Test.Tasty.HUnit
 import System.Directory
@@ -124,15 +123,13 @@ testSnapshotLoading =
       saveSnapshot' 102 manager
       createSnapshot' 105 1 manager
 
-      atomically $ modifyTVar (_snapshots manager) $ \s ->
-        s { _partial = sort (_partial s) }
-      snapshots <- readTVarIO $ _snapshots manager
+      atomically $ modifyTVar (manager ^. #snapshots) $ #partial %~ sort
+      snapshots <- readTVarIO $ manager ^. #snapshots
       closeSnapshotManager manager
 
       manager' <- newSnapshotManager $ Just path
-      atomically $ modifyTVar (_snapshots manager') $ \s ->
-        s { _partial = sort (_partial s) }
-      snapshots' <- readTVarIO $ _snapshots manager'
+      atomically $ modifyTVar (manager' ^. #snapshots) $ #partial %~ sort
+      snapshots' <- readTVarIO $ manager' ^. #snapshots
       show snapshots @?= show snapshots'
 
       -- Test that the completed file is not locked and can be read.
@@ -163,13 +160,9 @@ testReadChunks =
   readLoop []           _       = return ()
   readLoop (sid : sids) manager = do
     chunk <- readChunk' 9 sid manager
-    forM_ chunk
-      $ \c -> writeSnapshot'
-          (c ^. field @"_offset")
-          (_data c)
-          (sidToIdx sid)
-          manager
-    case _type <$> chunk of
+    forM_ chunk $ \c ->
+      writeSnapshot' (c ^. #offset) (c ^. #chunkData) (sidToIdx sid) manager
+    case (^. #chunkType) <$> chunk of
       Just FullChunk -> readLoop (sids ++ [sid]) manager
       Just EndChunk  -> readLoop sids manager
       _              -> error "Invalid chunk"

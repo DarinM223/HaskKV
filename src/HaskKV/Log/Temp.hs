@@ -5,14 +5,13 @@ module HaskKV.Log.Temp where
 import Control.Applicative ((<|>))
 import Control.Concurrent.MVar
 import Control.Concurrent.STM
-import Control.Lens
 import Control.Monad.IO.Class
 import Control.Monad.Reader
-import Data.Generics.Product.Fields
 import Data.Maybe (fromJust)
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Types
+import Optics
 
 import qualified HaskKV.Timer as Timer
 
@@ -33,8 +32,8 @@ newtype TempLogT m a = TempLogT { unTempLogT :: m a }
 instance (MonadIO m, MonadReader r m, HasTempLog e r)
   => TempLogM e (TempLogT m) where
 
-  addTemporaryEntry e = view tempLogL >>= liftIO . addTemporaryEntry' e
-  temporaryEntries = view tempLogL >>= liftIO . temporaryEntries'
+  addTemporaryEntry e = gview tempLogL >>= liftIO . addTemporaryEntry' e
+  temporaryEntries = gview tempLogL >>= liftIO . temporaryEntries'
 
 addTemporaryEntry' :: e -> TempLog e -> IO ()
 addTemporaryEntry' e = flip modifyMVar_ (pure . addEntry e) . unTempLog
@@ -54,7 +53,7 @@ applyTimeout = 5000000
 
 -- | Stores entry in the log and then blocks until log entry is committed.
 waitApplyEntry
-  :: (MonadIO m, TempLogM e m, HasField' "_completed" e Completed)
+  :: (MonadIO m, TempLogM e m, LabelOptic' "completed" A_Lens e Completed)
   => e -> m ()
 waitApplyEntry entry = do
   addTemporaryEntry entry
@@ -66,5 +65,4 @@ waitApplyEntry entry = do
     -- or the timeout is finished.
     atomically $ Timer.await timer <|> awaitCompleted
  where
-  awaitCompleted =
-    takeTMVar . fromJust . unCompleted $ entry ^. field' @"_completed"
+  awaitCompleted = takeTMVar . fromJust . unCompleted $ entry ^. #completed

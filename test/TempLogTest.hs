@@ -7,6 +7,7 @@ import Control.Monad
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp
 import HaskKV.Store.All
+import Optics
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -23,10 +24,10 @@ testAddEntries = testCase "addTemporaryEntry adds entries to _tempEntries" $ do
     createEntry n = do
       v <- newStoreValue 10 0 n
       return LogEntry
-        { _term      = 0
-        , _index     = 0
-        , _data      = Change (TID 0) 1 v
-        , _completed = Completed Nothing
+        { term      = 0
+        , index     = 0
+        , entryData = Change (TID 0) 1 v
+        , completed = Completed Nothing
         }
     unChange (Change _ _ v) = v
     unChange _              = undefined
@@ -34,7 +35,7 @@ testAddEntries = testCase "addTemporaryEntry adds entries to _tempEntries" $ do
   -- Tests order of entries.
   mapM_ (flip addTemporaryEntry' tempLog <=< createEntry) [1 .. 3]
   entries <- temporaryEntries' tempLog
-  fmap (_value . unChange . _data) entries @?= [1, 2, 3]
+  fmap (_value . unChange . (^. #entryData)) entries @?= [1, 2, 3]
 
   -- Tests that entries are cleared after getting temporary entries.
   entries <- temporaryEntries' tempLog

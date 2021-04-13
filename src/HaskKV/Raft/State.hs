@@ -1,22 +1,22 @@
 {-# LANGUAGE TemplateHaskell #-}
-
+{-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Raft.State where
 
-import Control.Lens
 import Data.Binary
 import Data.Time
 import GHC.Generics
 import HaskKV.Types
+import Optics
 
 import qualified Data.IntMap as IM
 
 type Time = UTCTime
 
 data LeaderState = LeaderState
-  { _nextIndex  :: IM.IntMap LogIndex
-  , _matchIndex :: IM.IntMap LogIndex
+  { leaderStateNextIndex  :: IM.IntMap LogIndex
+  , leaderStateMatchIndex :: IM.IntMap LogIndex
   } deriving (Show, Eq)
-makeFieldsNoPrefix ''LeaderState
+makeFieldLabels ''LeaderState
 
 data StateType
   = Follower
@@ -26,21 +26,21 @@ data StateType
 makePrisms ''StateType
 
 data RaftState = RaftState
-  { _stateType   :: StateType
-  , _currTerm    :: LogTerm
-  , _votedFor    :: Maybe SID
-  , _leader      :: Maybe SID
-  , _commitIndex :: LogIndex
-  , _lastApplied :: LogIndex
-  , _serverID    :: SID
+  { raftStateStateType   :: StateType
+  , raftStateCurrTerm    :: LogTerm
+  , raftStateVotedFor    :: Maybe SID
+  , raftStateLeader      :: Maybe SID
+  , raftStateCommitIndex :: LogIndex
+  , raftStateLastApplied :: LogIndex
+  , raftStateServerID    :: SID
   } deriving (Show, Eq)
-makeFieldsNoPrefix ''RaftState
+makeFieldLabels ''RaftState
 
 data PersistentState = PersistentState
-  { _currTerm :: LogTerm
-  , _votedFor :: Maybe SID
+  { persistentStateCurrTerm :: LogTerm
+  , persistentStateVotedFor :: Maybe SID
   } deriving (Show, Eq, Generic)
-makeFieldsNoPrefix ''PersistentState
+makeFieldLabels ''PersistentState
 
 instance Binary PersistentState
 
@@ -49,17 +49,17 @@ persistentStateFilename (SID sid) = show sid ++ ".state"
 
 newPersistentState :: RaftState -> PersistentState
 newPersistentState s = PersistentState
-  { _currTerm = s ^. currTerm
-  , _votedFor = s ^. votedFor
+  { persistentStateCurrTerm = s ^. #currTerm
+  , persistentStateVotedFor = s ^. #votedFor
   }
 
 newRaftState :: SID -> Maybe PersistentState -> RaftState
 newRaftState sid s = RaftState
-  { _stateType   = Follower
-  , _currTerm    = maybe 0 (^. currTerm) s
-  , _votedFor    = s >>= (^. votedFor)
-  , _leader      = Nothing
-  , _commitIndex = 0
-  , _lastApplied = 0
-  , _serverID    = sid
+  { raftStateStateType   = Follower
+  , raftStateCurrTerm    = maybe 0 (^. #currTerm) s
+  , raftStateVotedFor    = s >>= (^. #votedFor)
+  , raftStateLeader      = Nothing
+  , raftStateCommitIndex = 0
+  , raftStateLastApplied = 0
+  , raftStateServerID    = sid
   }

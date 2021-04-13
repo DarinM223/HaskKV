@@ -1,12 +1,12 @@
 module Lib where
 
 import Control.Concurrent (forkIO)
-import Control.Lens
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import HaskKV
 import HaskKV.Store.All
+import Optics
 import Servant.Server (serve)
 import System.Environment (getArgs)
 import System.Log.Logger
@@ -42,10 +42,10 @@ handleArgs (path : sid : _) = do
   let
     sid'   = SID $ read sid
     config = Config
-      { _backpressure     = Capacity 100
-      , _electionTimeout  = 2000000
-      , _heartbeatTimeout = 1000000
-      , _serverData       = []
+      { backpressure     = Capacity 100
+      , electionTimeout  = 2000000
+      , heartbeatTimeout = 1000000
+      , serverData       = []
       }
   config <- readConfig config path
   let

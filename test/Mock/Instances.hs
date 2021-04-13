@@ -1,13 +1,10 @@
-{-# LANGUAGE TemplateHaskell #-}
-
+{-# LANGUAGE NoMonomorphismRestriction #-}
 module Mock.Instances where
 
-import Control.Lens
 import Control.Monad.State.Strict
 import Data.Binary
-import Data.Generics.Product.Fields
 import Data.Maybe
-import Data.Monoid
+import GHC.Generics
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
@@ -19,6 +16,8 @@ import HaskKV.Snapshot.Types hiding (HasSnapshotManager)
 import HaskKV.Store.Types hiding (HasStore)
 import HaskKV.Store.Utils
 import HaskKV.Types
+import Optics
+import Optics.State.Operators
 
 import qualified Control.Monad.State as S
 import qualified Data.ByteString as B
@@ -34,54 +33,51 @@ type E = LogEntry K V
 type M = RaftMessage E
 
 data MockSnapshot = MockSnapshot
-  { _file   :: String
-  , _sIndex :: LogIndex
-  , _term   :: LogTerm
-  } deriving (Show)
-makeFieldsNoPrefix ''MockSnapshot
+  { file   :: String
+  , sIndex :: LogIndex
+  , term   :: LogTerm
+  } deriving (Show, Generic)
 
 data MockSnapshotManager = MockSnapshotManager
-  { _completed :: Maybe MockSnapshot
-  , _partial   :: IM.IntMap MockSnapshot
-  , _chunks    :: IM.IntMap (String, FilePos)
-  } deriving (Show)
-makeFieldsNoPrefix ''MockSnapshotManager
+  { completed :: Maybe MockSnapshot
+  , partial   :: IM.IntMap MockSnapshot
+  , chunks    :: IM.IntMap (String, FilePos)
+  } deriving (Show, Generic)
 
 data MockConfig = MockConfig
-  { _raftState       :: RaftState
-  , _store           :: StoreData K V E
-  , _tempLog         :: [E]
-  , _snapshotManager :: MockSnapshotManager
-  , _receivingMsgs   :: [M]
-  , _sendingMsgs     :: [(SID, M)]
-  , _myServerID      :: SID
-  , _serverIDs       :: [SID]
-  , _electionTimer   :: Bool
-  , _heartbeatTimer  :: Bool
-  , _appliedEntries  :: [E]
-  } deriving (Show)
-makeFieldsNoPrefix ''MockConfig
+  { raftState       :: RaftState
+  , store           :: StoreData K V E
+  , tempLog         :: [E]
+  , snapshotManager :: MockSnapshotManager
+  , receivingMsgs   :: [M]
+  , sendingMsgs     :: [(SID, M)]
+  , myServerID      :: SID
+  , serverIDs       :: [SID]
+  , electionTimer   :: Bool
+  , heartbeatTimer  :: Bool
+  , appliedEntries  :: [E]
+  } deriving (Show, Generic)
 
 newMockSnapshotManager :: MockSnapshotManager
 newMockSnapshotManager = MockSnapshotManager
-  { _completed = Nothing
-  , _partial   = IM.empty
-  , _chunks    = IM.empty
+  { completed = Nothing
+  , partial   = IM.empty
+  , chunks    = IM.empty
   }
 
 newMockConfig :: [SID] -> SID -> MockConfig
 newMockConfig sids sid = MockConfig
-  { _raftState       = newRaftState sid Nothing
-  , _store           = newStoreData sid Nothing
-  , _tempLog         = []
-  , _snapshotManager = newMockSnapshotManager
-  , _receivingMsgs   = []
-  , _sendingMsgs     = []
-  , _myServerID      = sid
-  , _serverIDs       = sids
-  , _electionTimer   = False
-  , _heartbeatTimer  = False
-  , _appliedEntries  = []
+  { raftState       = newRaftState sid Nothing
+  , store           = newStoreData sid Nothing
+  , tempLog         = []
+  , snapshotManager = newMockSnapshotManager
+  , receivingMsgs   = []
+  , sendingMsgs     = []
+  , myServerID      = sid
+  , serverIDs       = sids
+  , electionTimer   = False
+  , heartbeatTimer  = False
+  , appliedEntries  = []
   }
 
 newtype MockT s a = MockT { unMockT :: State s a }
@@ -99,8 +95,8 @@ runMockT :: MockT s a -> s -> (a, s)
 runMockT m s = flip runState s . unMockT $ m
 
 instance MonadState RaftState (MockT MockConfig) where
-  get = MockT (gets _raftState)
-  put v = MockT (raftState .= v)
+  get = MockT (use #raftState)
+  put v = MockT (#raftState .= v)
 
 instance DebugM (MockT MockConfig) where
   debug _ = return ()
@@ -109,52 +105,50 @@ instance PersistM (MockT MockConfig) where
   persist _ = return ()
 
 instance TempLogM E (State MockConfig) where
-  addTemporaryEntry e = tempLog %= (++ [e])
+  addTemporaryEntry e = #tempLog %= (++ [e])
   temporaryEntries = temporaryEntriesImpl
 
 temporaryEntriesImpl = do
-  log <- use tempLog
-  tempLog .= []
+  log <- use #tempLog
+  #tempLog .= []
   return log
 
 instance LogM E (State MockConfig) where
-  firstIndex = _lowIdx . _log <$> gets _store
-  lastIndex = lastIndexLog . _log <$> gets _store
+  firstIndex = (^. #log % #lowIdx) <$> use #store
+  lastIndex = lastIndexLog . (^. #log) <$> use #store
   loadEntry = loadEntryImpl
-  termFromIndex i = entryTermLog i . _log <$> gets _store
-  storeEntries es = store %= (\s -> s { _log = storeEntriesLog es (_log s) })
-  deleteRange a b = store %= (\s -> s { _log = deleteRangeLog a b (_log s) })
+  termFromIndex i = entryTermLog i . (^. #log) <$> use #store
+  storeEntries es = #store %= (#log %~ storeEntriesLog es)
+  deleteRange a b = #store %= (#log %~ deleteRangeLog a b)
 
 loadEntryImpl (LogIndex k) =
-  IM.lookup k . getField @"_entries" . _log <$> gets _store
+  IM.lookup k . (^. #log % #entries) <$> use #store
 
 instance StorageM K V (State MockConfig) where
-  getValue k = getKey k <$> gets _store
-  setValue k v = store %= setKey k v
-  replaceValue k v = zoom store $ S.state $ replaceKey k v
-  deleteValue k = store %= deleteKey k
-  cleanupExpired t = store %= cleanupStore t
+  getValue k = getKey k <$> use #store
+  setValue k v = #store %= setKey k v
+  replaceValue k v = zoom #store $ S.state $ replaceKey k v
+  deleteValue k = #store %= deleteKey k
+  cleanupExpired t = #store %= cleanupStore t
 
 instance LoadSnapshotM (M.Map K V) (State MockConfig) where
-  loadSnapshot i t m = store %= loadSnapshotStore i t m
+  loadSnapshot i t m = #store %= loadSnapshotStore i t m
 
 instance TakeSnapshotM (State MockConfig) where
   takeSnapshot = takeSnapshotImpl
 
 takeSnapshotImpl = do
-  lastIndex <- use $ raftState.lastApplied
-  storeData <- gets _store
+  lastIndex <- use $ #raftState % #lastApplied
+  storeData <- use #store
   let
-    firstIndex = _lowIdx $ _log storeData
+    firstIndex = storeData ^. #log % #lowIdx
     lastTerm =
       entryTerm
         . fromJust
         . IM.lookup (unLogIndex lastIndex)
-        . getField @"_entries"
-        . _log
-        $ storeData
+        $ storeData ^. #log % #entries
   createSnapshot lastIndex lastTerm
-  let snapData = B.concat . BL.toChunks . encode . _map $ storeData
+  let snapData = B.concat . BL.toChunks . encode $ storeData ^. #map
   writeSnapshot 0 snapData lastIndex
   saveSnapshot lastIndex
   deleteRange firstIndex lastIndex
@@ -164,14 +158,12 @@ takeSnapshotImpl = do
 instance ApplyEntryM K V E (State MockConfig) where
   applyEntry = applyEntryImpl
 
-applyEntryImpl entry@LogEntry { _data = entryData } = do
-  appliedEntries %= (++ [entry])
+applyEntryImpl entry@LogEntry { entryData = entryData } = do
+  #appliedEntries %= (++ [entry])
   case entryData of
     Change _ k v -> setValue k v
     Delete _ k   -> deleteValue k
     _            -> return ()
-
-prezoom l m = getFirst <$> zoom l (First . Just <$> m)
 
 instance SnapshotM (M.Map K V) (State MockConfig) where
   createSnapshot = createSnapshotImpl
@@ -183,75 +175,75 @@ instance SnapshotM (M.Map K V) (State MockConfig) where
   snapshotInfo = snapshotInfoImpl
 
 createSnapshotImpl i t = do
-  let snapshot = MockSnapshot {_file = "", _sIndex = i, _term = t}
-  snapshotManager.partial %= IM.insert (unLogIndex i) snapshot
+  let snapshot = MockSnapshot {file = "", sIndex = i, term = t}
+  #snapshotManager % #partial %= IM.insert (unLogIndex i) snapshot
 writeSnapshotImpl _ snapData (LogIndex i) =
-  snapshotManager.partial.ix i.file %= (++ (C.unpack snapData))
+  #snapshotManager % #partial % ix i % #file %= (++ (C.unpack snapData))
 saveSnapshotImpl i = do
   let i' = unLogIndex i
-  snap <- fromJust <$> preuse (snapshotManager.partial.ix i')
-  snapshotManager.completed %= \case
-    Just s | s ^. sIndex < i -> Just snap
-    Nothing                -> Just snap
-    s                      -> s
-  snapshotManager.partial %= IM.filter ((> i) . (^. sIndex))
+  snap <- fromJust <$> preuse (#snapshotManager % #partial % ix i')
+  #snapshotManager % #completed %= \case
+    Just s | s ^. #sIndex < i -> Just snap
+    Nothing                   -> Just snap
+    s                         -> s
+  #snapshotManager % #partial %= IM.filter ((> i) . (^. #sIndex))
 readSnapshotImpl _ = do
-  snapData <- preuse $ snapshotManager.completed._Just.file
+  snapData <- preuse $ #snapshotManager % #completed % _Just % #file
   return . fmap (decode . CL.pack) $ snapData
 hasChunkImpl (SID sid) =
-  preuse (snapshotManager.chunks.ix sid) >>= pure . \case
+  preuse (#snapshotManager % #chunks % ix sid) >>= pure . \case
     Just (s, _) | s == "" -> False
     Nothing               -> False
     _                     -> True
 readChunkImpl amount (SID sid) = snapshotInfo >>= \case
   Just (i, t, _) -> do
-    temp <- preuse $ snapshotManager.chunks.ix sid
+    temp <- preuse $ #snapshotManager % #chunks % ix sid
     when (isNothing temp || fmap fst temp == Just "") $ do
-      file' <- use $ snapshotManager.completed._Just.file
-      snapshotManager.chunks %= IM.insert sid (file', 0)
-    prezoom (snapshotManager.chunks.ix sid) $ S.state $ \(s, f) ->
+      file' <- guse $ #snapshotManager % #completed % _Just % #file
+      #snapshotManager % #chunks %= IM.insert sid (fromJust file', 0)
+    zoomMaybe (#snapshotManager % #chunks % ix sid) $ S.state $ \(s, f) ->
       let
         (chunkData, remainder) = splitAt amount s
         chunkType              = if null remainder then EndChunk else FullChunk
         chunk                  = SnapshotChunk
-          { _data   = C.pack chunkData
-          , _type   = chunkType
-          , _offset = f
-          , _index  = i
-          , _term   = t
+          { chunkData = C.pack chunkData
+          , chunkType = chunkType
+          , offset    = f
+          , index     = i
+          , term      = t
           }
       in (chunk, (remainder, f + 1))
   _ -> return Nothing
 snapshotInfoImpl = do
-  snapIndex <- preuse $ snapshotManager.completed._Just.sIndex
-  snapTerm  <- preuse $ snapshotManager.completed._Just.term
-  file      <- preuse $ snapshotManager.completed._Just.file
+  snapIndex <- preuse $ #snapshotManager % #completed % _Just % #sIndex
+  snapTerm  <- preuse $ #snapshotManager % #completed % _Just % #term
+  file      <- preuse $ #snapshotManager % #completed % _Just % #file
   let snapSize = fmap (fromIntegral . length) file
   return $ (,,) <$> snapIndex <*> snapTerm <*> snapSize
 
 instance ServerM M ServerEvent (State MockConfig) where
-  send sid msg = sendingMsgs %= (++ [(sid, msg)])
+  send sid msg = #sendingMsgs %= (++ [(sid, msg)])
   broadcast = broadcastImpl
   recv = recvImpl
-  reset HeartbeatTimeout = heartbeatTimer .= False
-  reset ElectionTimeout = electionTimer .= False
-  serverIds = gets _serverIDs
+  reset HeartbeatTimeout = #heartbeatTimer .= False
+  reset ElectionTimeout = #electionTimer .= False
+  serverIds = use #serverIDs
 
 broadcastImpl msg = do
-  sid  <- use myServerID
-  sids <- use serverIDs
+  sid  <- use #myServerID
+  sids <- use #serverIDs
   mapM_ (flip send msg) . filter (/= sid) $ sids
 recvImpl = S.get >>= go
  where
   go s
-    | s ^. electionTimer = do
-      electionTimer .= False
+    | s ^. #electionTimer = do
+      #electionTimer .= False
       return (Left ElectionTimeout)
-    | s ^. heartbeatTimer = do
-      heartbeatTimer .= False
+    | s ^. #heartbeatTimer = do
+      #heartbeatTimer .= False
       return (Left HeartbeatTimeout)
     | otherwise = do
-      msgs <- use receivingMsgs
+      msgs <- use #receivingMsgs
       let (msg, msgs') = splitAt 1 msgs
-      receivingMsgs .= msgs'
+      #receivingMsgs .= msgs'
       return $ Right $ head msg

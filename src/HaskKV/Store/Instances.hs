@@ -4,7 +4,6 @@ module HaskKV.Store.Instances where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM
-import Control.Lens
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Binary
@@ -19,6 +18,7 @@ import HaskKV.Store.Types
 import HaskKV.Store.Utils
 import HaskKV.Types
 import HaskKV.Utils
+import Optics
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -38,20 +38,20 @@ type SnapFn k v =
   forall a. (forall m. (MonadIO m, SnapshotM (M.Map k v) m) => m a) -> IO a
 
 instance (StoreClass k v e r m) => StorageM k v (StoreT m) where
-  getValue k = view storeL >>= liftIO . getValue' k
-  setValue k v = view storeL >>= liftIO . setValue' k v
-  replaceValue k v = view storeL >>= liftIO . replaceValue' k v
-  deleteValue k = view storeL >>= liftIO . deleteValue' k
-  cleanupExpired t = view storeL >>= liftIO . cleanupExpired' t
+  getValue k = gview storeL >>= liftIO . getValue' k
+  setValue k v = gview storeL >>= liftIO . setValue' k v
+  replaceValue k v = gview storeL >>= liftIO . replaceValue' k v
+  deleteValue k = gview storeL >>= liftIO . deleteValue' k
+  cleanupExpired t = gview storeL >>= liftIO . cleanupExpired' t
 
 instance (StoreClass k v e r m, SnapshotM s m, TakeSnapshotM m)
   => LogM e (StoreT m) where
-  firstIndex = view storeL >>= liftIO . firstIndex'
-  lastIndex = view storeL >>= liftIO . lastIndex'
-  loadEntry k = view storeL >>= liftIO . loadEntry' k
-  termFromIndex i = view storeL >>= liftIO . termFromIndex' i
-  deleteRange a b = view storeL >>= liftIO . deleteRange' a b
-  storeEntries es = view storeL >>= lift . storeEntries' es
+  firstIndex = gview storeL >>= liftIO . firstIndex'
+  lastIndex = gview storeL >>= liftIO . lastIndex'
+  loadEntry k = gview storeL >>= liftIO . loadEntry' k
+  termFromIndex i = gview storeL >>= liftIO . termFromIndex' i
+  deleteRange a b = gview storeL >>= liftIO . deleteRange' a b
+  storeEntries es = gview storeL >>= lift . storeEntries' es
 
 instance ( StoreClass k v e r m
          , SnapshotM s m
@@ -61,13 +61,13 @@ instance ( StoreClass k v e r m
   applyEntry = applyEntry'
 
 instance (StoreClass k v e r m) => LoadSnapshotM (M.Map k v) (StoreT m) where
-  loadSnapshot i t map = view storeL >>= liftIO . loadSnapshot' i t map
+  loadSnapshot i t map = gview storeL >>= liftIO . loadSnapshot' i t map
 
 instance (StoreClass k v e r m, HasRun msg k v e r)
   => TakeSnapshotM (StoreT m) where
   takeSnapshot = do
-    store <- view storeL
-    lastApplied <- lift $ gets _lastApplied
+    store <- gview storeL
+    lastApplied <- lift $ gets (^. #lastApplied)
     config <- ask
     liftIO $ takeSnapshot' (run config) lastApplied store
 
@@ -87,17 +87,17 @@ cleanupExpired' :: (Show k, Ord k, Storable v) => Time -> Store k v e -> IO ()
 cleanupExpired' t = modifyTVarIO (cleanupStore t) . unStore
 
 firstIndex' :: Store k v e -> IO LogIndex
-firstIndex' = fmap (_lowIdx . _log) . readTVarIO . unStore
+firstIndex' = fmap (^. #log % #lowIdx) . readTVarIO . unStore
 
 lastIndex' :: Store k v e -> IO LogIndex
-lastIndex' = fmap (lastIndexLog . _log) . readTVarIO . unStore
+lastIndex' = fmap (lastIndexLog . (^. #log)) . readTVarIO . unStore
 
 loadEntry' :: LogIndex -> Store k v e -> IO (Maybe e)
 loadEntry' (LogIndex k) =
-  fmap (IM.lookup k . _entries . _log) . readTVarIO . unStore
+  fmap (IM.lookup k . (^. #log % #entries)) . readTVarIO . unStore
 
 termFromIndex' :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe LogTerm)
-termFromIndex' i = fmap (entryTermLog i . _log) . readTVarIO . unStore
+termFromIndex' i = fmap (entryTermLog i . (^. #log)) . readTVarIO . unStore
 
 storeEntries'
   :: (Entry e, MonadIO m, SnapshotM s m, TakeSnapshotM m)
@@ -112,7 +112,8 @@ deleteRange' :: (Binary e) => LogIndex -> LogIndex -> Store k v e -> IO ()
 deleteRange' a b = void . persistAfter (modifyLog (deleteRangeLog a b))
 
 applyEntry' :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
-applyEntry' LogEntry { _data = entry, _completed = Completed lock } = do
+applyEntry' LogEntry { entryData = entry
+                     , completed = Completed lock } = do
   mapM_ (liftIO . atomically . flip putTMVar ()) lock
   applyStore entry
  where
@@ -131,14 +132,14 @@ takeSnapshot'
   => SnapFn k v -> LogIndex -> Store k v e -> IO ()
 takeSnapshot' run lastApplied store = do
   storeData <- readTVarIO $ unStore store
-  let firstIndex = _lowIdx $ _log storeData
+  let firstIndex = storeData ^. #log % #lowIdx
       lastTerm   = entryTerm
                  . fromJust
                  . IM.lookup (unLogIndex lastApplied)
-                 $ _entries (_log storeData)
+                 $ storeData ^. #log % #entries
   void $ forkIO $ run $ do
     createSnapshot lastApplied lastTerm
-    let snapData = B.concat . BL.toChunks . encode . _map $ storeData
+    let snapData = B.concat . BL.toChunks . encode $ storeData ^. #map
     -- FIXME(DarinM223): maybe write a version of writeSnapshot
     -- that takes in a lazy bytestring instead of a strict bytestring?
     writeSnapshot 0 snapData lastApplied

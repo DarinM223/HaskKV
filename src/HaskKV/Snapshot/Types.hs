@@ -1,27 +1,27 @@
 module HaskKV.Snapshot.Types where
 
 import Control.Concurrent.STM
-import Control.Lens
 import Control.Monad.Reader
 import Data.Binary (Binary)
-import Data.Generics.Product.Fields
-import GHC.IO.Handle
+import Data.Kind (Type)
 import GHC.Generics
+import GHC.IO.Handle
 import HaskKV.Types
+import Optics
 
 import qualified Data.ByteString as B
 import qualified Data.IntMap as IM
 
-class (Binary s) => HasSnapshotType s (m :: * -> *) | m -> s
+class (Binary s) => HasSnapshotType s (m :: Type -> Type) | m -> s
 
 data SnapshotChunkType = FullChunk | EndChunk deriving (Show, Eq)
 
 data SnapshotChunk = SnapshotChunk
-  { _data   :: B.ByteString
-  , _type   :: SnapshotChunkType
-  , _offset :: FilePos
-  , _index  :: LogIndex
-  , _term   :: LogTerm
+  { chunkData :: B.ByteString
+  , chunkType :: SnapshotChunkType
+  , offset    :: FilePos
+  , index     :: LogIndex
+  , term      :: LogTerm
   } deriving (Show, Eq, Generic)
 
 class (Binary s) => SnapshotM s m | m -> s where
@@ -34,26 +34,26 @@ class (Binary s) => SnapshotM s m | m -> s where
   snapshotInfo   :: m (Maybe (LogIndex, LogTerm, FileSize))
 
 data Snapshot = Snapshot
-  { _file     :: Handle
-  , _index    :: LogIndex
-  , _term     :: LogTerm
-  , _filepath :: FilePath
-  , _offset   :: FilePos
+  { file     :: Handle
+  , index    :: LogIndex
+  , term     :: LogTerm
+  , filepath :: FilePath
+  , offset   :: FilePos
   } deriving (Show, Eq, Generic)
 
 instance Ord Snapshot where
-  compare s1 s2 = compare (s1 ^. field @"_index") (s2 ^. field @"_index")
+  compare s1 s2 = compare (s1 ^. #index) (s2 ^. #index)
 
 data Snapshots = Snapshots
-  { _completed :: Maybe Snapshot
-  , _partial   :: [Snapshot]
-  , _chunks    :: IM.IntMap Handle
-  } deriving (Show, Eq)
+  { completed :: Maybe Snapshot
+  , partial   :: [Snapshot]
+  , chunks    :: IM.IntMap Handle
+  } deriving (Show, Eq, Generic)
 
 data SnapshotManager = SnapshotManager
-  { _snapshots     :: TVar Snapshots
-  , _directoryPath :: FilePath
-  }
+  { snapshots     :: TVar Snapshots
+  , directoryPath :: FilePath
+  } deriving Generic
 
 class HasSnapshotManager r where
   snapshotManagerL :: Lens' r SnapshotManager

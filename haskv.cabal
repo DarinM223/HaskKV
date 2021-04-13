@@ -1,0 +1,186 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: ed9d4533ebb4fe471306653b773229b03ed282d388c5335909b43c6ac71c1740
+
+name:           haskv
+version:        0.1.0.0
+description:    Please see the README on Github at <https://github.com/githubuser/haskv#readme>
+homepage:       https://github.com/githubuser/haskv#readme
+bug-reports:    https://github.com/githubuser/haskv/issues
+author:         Author name here
+maintainer:     example@example.com
+copyright:      2018 Author name here
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/githubuser/haskv
+
+library
+  hs-source-dirs:
+      src
+  default-extensions: BangPatterns BlockArguments ConstraintKinds DataKinds DefaultSignatures DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies DerivingVia DuplicateRecordFields EmptyCase ExistentialQuantification FlexibleContexts FlexibleInstances FunctionalDependencies GADTs GeneralizedNewtypeDeriving InstanceSigs KindSignatures LambdaCase MultiParamTypeClasses NumericUnderscores OverloadedLabels OverloadedStrings PatternSynonyms QuantifiedConstraints RankNTypes ScopedTypeVariables StandaloneDeriving TupleSections TypeApplications TypeFamilies TypeFamilyDependencies TypeOperators
+  ghc-options: -W -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -fshow-hole-constraints -haddock
+  build-depends:
+      base                          >= 4.7 && <5
+    , aeson                         >= 1.5.6 && < 1.6
+    , bytestring                    >= 0.10.12 && < 0.11
+    , containers                    >= 0.6.2 && < 0.7
+    , binary                        >= 0.8.8 && < 0.9
+    , transformers                  >= 0.5.6 && < 0.6
+    , time                          >= 1.9.3 && < 1.10
+    , random                        >= 1.2.0 && < 1.3
+    , mtl                           >= 2.2.2 && < 2.3
+    , async                         >= 2.2.3 && < 2.3
+    , stm                           >= 2.5.0 && < 2.6
+    , binary-instances              >= 1.0.1 && < 1.1
+    , binary-orphans                >= 1.0.1 && < 1.1
+    , conduit                       >= 1.3.4 && < 1.4
+    , directory                     >= 1.3.6 && < 1.4
+    , filepath                      >= 1.4.2 && < 1.5
+    , conduit-extra                 >= 1.3.5 && < 1.4
+    , network                       >= 3.1.0 && < 3.2
+    , streaming-commons             >= 0.2.2 && < 0.3
+    , heaps                         >= 0.4 && < 0.5
+    , hslogger                      >= 1.3.1 && < 1.4
+    , network-simple                >= 0.4.5 && < 0.5
+    , optics                        >= 0.4 && < 0.5
+    , servant                       >= 0.18.2 && < 0.19
+    , servant-server                >= 0.18.2 && < 0.19
+    , warp                          >= 3.3.14 && < 3.4
+  exposed-modules:
+      HaskKV
+      HaskKV.API
+      HaskKV.Config
+      HaskKV.Constr
+      HaskKV.Log.Class
+      HaskKV.Log.Entry
+      HaskKV.Log.InMem
+      HaskKV.Log.Temp
+      HaskKV.Log.Utils
+      HaskKV.Monad
+      HaskKV.Raft.Candidate
+      HaskKV.Raft.Class
+      HaskKV.Raft.Follower
+      HaskKV.Raft.Leader
+      HaskKV.Raft.Message
+      HaskKV.Raft.RPC
+      HaskKV.Raft.Run
+      HaskKV.Raft.State
+      HaskKV.Raft.Utils
+      HaskKV.Server.All
+      HaskKV.Server.Instances
+      HaskKV.Server.Types
+      HaskKV.Server.Utils
+      HaskKV.Snapshot.All
+      HaskKV.Snapshot.Instances
+      HaskKV.Snapshot.Types
+      HaskKV.Snapshot.Utils
+      HaskKV.Store.All
+      HaskKV.Store.Instances
+      HaskKV.Store.Types
+      HaskKV.Store.Utils
+      HaskKV.Timer
+      HaskKV.Types
+      HaskKV.Utils
+      Lib
+  other-modules:
+      Paths_haskv
+  default-language: Haskell2010
+
+executable haskv-exe
+  main-is: Main.hs
+  hs-source-dirs:
+      app
+  default-extensions: BangPatterns BlockArguments ConstraintKinds DataKinds DefaultSignatures DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies DerivingVia DuplicateRecordFields EmptyCase ExistentialQuantification FlexibleContexts FlexibleInstances FunctionalDependencies GADTs GeneralizedNewtypeDeriving InstanceSigs KindSignatures LambdaCase MultiParamTypeClasses NumericUnderscores OverloadedLabels OverloadedStrings PatternSynonyms QuantifiedConstraints RankNTypes ScopedTypeVariables StandaloneDeriving TupleSections TypeApplications TypeFamilies TypeFamilyDependencies TypeOperators
+  ghc-options: -W -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -fshow-hole-constraints -haddock -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base                          >= 4.7 && <5
+    , haskv
+    , aeson                         >= 1.5.6 && < 1.6
+    , bytestring                    >= 0.10.12 && < 0.11
+    , containers                    >= 0.6.2 && < 0.7
+    , binary                        >= 0.8.8 && < 0.9
+    , transformers                  >= 0.5.6 && < 0.6
+    , time                          >= 1.9.3 && < 1.10
+    , random                        >= 1.2.0 && < 1.3
+    , mtl                           >= 2.2.2 && < 2.3
+    , async                         >= 2.2.3 && < 2.3
+    , stm                           >= 2.5.0 && < 2.6
+    , binary-instances              >= 1.0.1 && < 1.1
+    , binary-orphans                >= 1.0.1 && < 1.1
+    , conduit                       >= 1.3.4 && < 1.4
+    , directory                     >= 1.3.6 && < 1.4
+    , filepath                      >= 1.4.2 && < 1.5
+    , conduit-extra                 >= 1.3.5 && < 1.4
+    , network                       >= 3.1.0 && < 3.2
+    , streaming-commons             >= 0.2.2 && < 0.3
+    , heaps                         >= 0.4 && < 0.5
+    , hslogger                      >= 1.3.1 && < 1.4
+    , network-simple                >= 0.4.5 && < 0.5
+    , optics                        >= 0.4 && < 0.5
+    , servant                       >= 0.18.2 && < 0.19
+    , servant-server                >= 0.18.2 && < 0.19
+    , warp                          >= 3.3.14 && < 3.4
+  other-modules:
+      Paths_haskv
+  default-language: Haskell2010
+
+test-suite haskv-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs:
+      test
+  default-extensions: BangPatterns BlockArguments ConstraintKinds DataKinds DefaultSignatures DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies DerivingVia DuplicateRecordFields EmptyCase ExistentialQuantification FlexibleContexts FlexibleInstances FunctionalDependencies GADTs GeneralizedNewtypeDeriving InstanceSigs KindSignatures LambdaCase MultiParamTypeClasses NumericUnderscores OverloadedLabels OverloadedStrings PatternSynonyms QuantifiedConstraints RankNTypes ScopedTypeVariables StandaloneDeriving TupleSections TypeApplications TypeFamilies TypeFamilyDependencies TypeOperators
+  ghc-options: -W -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -fshow-hole-constraints -haddock -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base                          >= 4.7 && <5
+    , haskv
+    , aeson                         >= 1.5.6 && < 1.6
+    , bytestring                    >= 0.10.12 && < 0.11
+    , containers                    >= 0.6.2 && < 0.7
+    , binary                        >= 0.8.8 && < 0.9
+    , transformers                  >= 0.5.6 && < 0.6
+    , time                          >= 1.9.3 && < 1.10
+    , random                        >= 1.2.0 && < 1.3
+    , mtl                           >= 2.2.2 && < 2.3
+    , async                         >= 2.2.3 && < 2.3
+    , stm                           >= 2.5.0 && < 2.6
+    , binary-orphans                >= 1.0.1 && < 1.1
+    , conduit                       >= 1.3.4 && < 1.4
+    , directory                     >= 1.3.6 && < 1.4
+    , filepath                      >= 1.4.2 && < 1.5
+    , conduit-extra                 >= 1.3.5 && < 1.4
+    , network                       >= 3.1.0 && < 3.2
+    , streaming-commons             >= 0.2.2 && < 0.3
+    , heaps                         >= 0.4 && < 0.5
+    , hslogger                      >= 1.3.1 && < 1.4
+    , network-simple                >= 0.4.5 && < 0.5
+    , optics                        >= 0.4 && < 0.5
+    , servant                       >= 0.18.2 && < 0.19
+    , servant-server                >= 0.18.2 && < 0.19
+    , warp                          >= 3.3.14 && < 3.4
+    , tasty                         >= 1.4.1 && < 1.5
+    , tasty-hunit                   >= 0.10.0 && < 0.11
+    , tasty-quickcheck              >= 0.10.1 && < 0.11
+  other-modules:
+      LogTest
+      Mock
+      Mock.Instances
+      RaftTest
+      ServerTest
+      SnapshotTest
+      StoreTest
+      TempLogTest
+      Tests
+      Paths_haskv
+  default-language: Haskell2010

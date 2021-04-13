@@ -1,10 +1,10 @@
 module HaskKV.Server.Types where
 
 import Control.Concurrent.STM
-import Control.Lens
 import Control.Monad.Reader
 import GHC.Generics
 import HaskKV.Types
+import Optics
 
 import qualified Data.IntMap as IM
 import qualified HaskKV.Timer as Timer
@@ -21,13 +21,13 @@ data ServerEvent = ElectionTimeout
                  deriving (Show, Eq)
 
 data ServerState msg = ServerState
-  { _messages         :: TBQueue msg
-  , _outgoing         :: IM.IntMap (TBQueue msg)
-  , _sid              :: SID
-  , _electionTimer    :: Timer.Timer
-  , _heartbeatTimer   :: Timer.Timer
-  , _electionTimeout  :: Timeout
-  , _heartbeatTimeout :: Timeout
+  { messages         :: TBQueue msg
+  , outgoing         :: IM.IntMap (TBQueue msg)
+  , sid              :: SID
+  , electionTimer    :: Timer.Timer
+  , heartbeatTimer   :: Timer.Timer
+  , electionTimeout  :: Timeout
+  , heartbeatTimeout :: Timeout
   } deriving Generic
 
 class HasServerState msg r | r -> msg where
@@ -46,11 +46,11 @@ newServerState backpressure electionTimeout heartbeatTimeout sid = do
   Timer.reset heartbeatTimer heartbeatTimeout
 
   return ServerState
-    { _messages         = messages
-    , _outgoing         = IM.empty
-    , _sid              = sid
-    , _electionTimer    = electionTimer
-    , _heartbeatTimer   = heartbeatTimer
-    , _electionTimeout  = electionTimeout
-    , _heartbeatTimeout = heartbeatTimeout
+    { messages         = messages
+    , outgoing         = IM.empty
+    , sid              = sid
+    , electionTimer    = electionTimer
+    , heartbeatTimer   = heartbeatTimer
+    , electionTimeout  = electionTimeout
+    , heartbeatTimeout = heartbeatTimeout
     }
