@@ -2,10 +2,10 @@ import atexit
 import subprocess
 
 jobs = [
-    ["stack", "exec", "haskv-exe", "--", "./config.txt", "100"],
-    ["stack", "exec", "haskv-exe", "--", "./config.txt", "101"],
-    ["stack", "exec", "haskv-exe", "--", "./config.txt", "102"],
-    ["stack", "exec", "haskv-exe", "--", "./config.txt", "103"],
+    ["cabal", "run", "haskv-exe", "--", "./config.txt", "100"],
+    ["cabal", "run", "haskv-exe", "--", "./config.txt", "101"],
+    ["cabal", "run", "haskv-exe", "--", "./config.txt", "102"],
+    ["cabal", "run", "haskv-exe", "--", "./config.txt", "103"],
 ]
 
 pids = []
