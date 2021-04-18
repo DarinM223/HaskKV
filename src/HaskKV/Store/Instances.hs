@@ -7,6 +7,7 @@ import Control.Concurrent.STM
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Binary
+import Data.Foldable (for_, traverse_)
 import Data.Maybe (fromJust)
 import HaskKV.Constr
 import HaskKV.Log.Class
@@ -22,7 +23,6 @@ import Optics
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.IntMap as IM
 import qualified Data.Map as M
 
 type StoreClass k v e r m =
@@ -94,7 +94,7 @@ lastIndex' = fmap (lastIndexLog . (^. #log)) . readTVarIO . unStore
 
 loadEntry' :: LogIndex -> Store k v e -> IO (Maybe e)
 loadEntry' (LogIndex k) =
-  fmap (IM.lookup k . (^. #log % #entries)) . readTVarIO . unStore
+  fmap (^. #log % #entries % at k) . readTVarIO . unStore
 
 termFromIndex' :: (Entry e) => LogIndex -> Store k v e -> IO (Maybe LogTerm)
 termFromIndex' i = fmap (entryTermLog i . (^. #log)) . readTVarIO . unStore
@@ -114,7 +114,7 @@ deleteRange' a b = void . persistAfter (modifyLog (deleteRangeLog a b))
 applyEntry' :: (MonadIO m, StorageM k v m) => LogEntry k v -> m ()
 applyEntry' LogEntry { entryData = entry
                      , completed = Completed lock } = do
-  mapM_ (liftIO . atomically . flip putTMVar ()) lock
+  traverse_ (liftIO . atomically . flip putTMVar ()) lock
   applyStore entry
  where
   applyStore (Change _ k v) = setValue k v
@@ -133,10 +133,8 @@ takeSnapshot'
 takeSnapshot' run lastApplied store = do
   storeData <- readTVarIO $ unStore store
   let firstIndex = storeData ^. #log % #lowIdx
-      lastTerm   = entryTerm
-                 . fromJust
-                 . IM.lookup (unLogIndex lastApplied)
-                 $ storeData ^. #log % #entries
+      lastTerm   = entryTerm $ fromJust
+                 $ storeData ^. #log % #entries % at (unLogIndex lastApplied)
   void $ forkIO $ run $ do
     createSnapshot lastApplied lastTerm
     let snapData = B.concat . BL.toChunks . encode $ storeData ^. #map
@@ -146,7 +144,7 @@ takeSnapshot' run lastApplied store = do
     saveSnapshot lastApplied
 
     snap <- readSnapshot lastApplied
-    forM_ snap $ \snap ->
+    for_ snap $ \snap ->
       liftIO
         $ flip persistAfter store
         $ loadSnapshotStore lastApplied lastTerm snap

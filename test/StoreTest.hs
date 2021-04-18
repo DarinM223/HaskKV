@@ -4,7 +4,7 @@ module StoreTest
 where
 
 import Control.Concurrent
-import Control.Monad
+import Data.Foldable (for_)
 import Data.Time
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -52,7 +52,7 @@ testCleanupExpired = testCase "cleanupExpired removes expired values" $ do
   expire2Sec' <- newStoreValue 2 1 "value3"
   expire6Sec  <- newStoreValue 6 1 "value4"
   let vals = [expire1Sec, expire2Sec, expire2Sec', expire6Sec]
-  forM_ (zip [1 ..] vals) $ \(k, v) -> setValue' k v store
+  for_ (zip [1 ..] vals) $ \(k, v) -> setValue' k v store
   threadDelay 2100000
   getCurrentTime >>= flip cleanupExpired' store
   getValue' 1 store >>= (@=? Nothing)

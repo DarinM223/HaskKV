@@ -1,7 +1,7 @@
 module Mock where
 
 import Control.Monad.State
-import Data.Foldable (foldl')
+import Data.Foldable (foldl', for_)
 import Data.Maybe
 import HaskKV.Raft.Run
 import HaskKV.Types
@@ -42,7 +42,7 @@ flushMessages i = MockT (preuse (ix i)) >>= \case
   Just s -> MockT $ do
     let messages = sendingMsgs s
     ix i % #sendingMsgs .= []
-    forM_ messages $ \((SID sid), msg) -> ix sid % #receivingMsgs %= (++ [msg])
+    for_ messages $ \((SID sid), msg) -> ix sid % #receivingMsgs %= (++ [msg])
   _ -> return ()
 
 runServers :: MockT (IM.IntMap MockConfig) ()

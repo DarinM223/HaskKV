@@ -1,6 +1,7 @@
 module HaskKV.Raft.Run where
 
 import Control.Monad.State
+import Data.Foldable (traverse_)
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Raft.Candidate (runCandidate)
@@ -33,7 +34,7 @@ runRaft = do
     #lastApplied %= (+ 1)
     entry <- loadEntry (lastApplied' + 1)
     debug $ "Applying entry: " ++ show entry
-    mapM_ applyEntry entry
+    traverse_ applyEntry entry
 
   use #stateType >>= \case
     Follower    -> runFollower

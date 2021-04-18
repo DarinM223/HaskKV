@@ -5,6 +5,7 @@ module HaskKV.Server.Instances where
 import Control.Concurrent.STM
 import Control.Applicative ((<|>))
 import Control.Monad.Reader
+import Data.Foldable (traverse_)
 import HaskKV.Server.Types
 import HaskKV.Types
 import Optics
@@ -26,13 +27,12 @@ instance (MonadIO m, MonadReader r m, HasServerState msg r)
   serverIds = serverIds' <$> gview serverStateL
 
 send' :: SID -> msg -> ServerState msg -> IO ()
-send' (SID i) msg s = do
-  let bq = IM.lookup i $ s ^. #outgoing
-  mapM_ (atomically . flip writeTBQueue msg) bq
+send' (SID i) msg s =
+  traverse_ (atomically . flip writeTBQueue msg) (s ^. #outgoing % at i)
 
 broadcast' :: msg -> ServerState msg -> IO ()
 broadcast' msg ss = atomically
-                  . mapM_ ((`writeTBQueue` msg) . snd)
+                  . traverse_ ((`writeTBQueue` msg) . snd)
                   . filter ((/= ss ^. #sid) . SID . fst)
                   . IM.assocs
                   $ ss ^. #outgoing

@@ -37,7 +37,7 @@ entryTermLog :: (Entry e) => LogIndex -> Log e -> Maybe LogTerm
 entryTermLog i log
   | i <= 0 = Just 0
   | log ^. #snapshotLastIndex == Just i = log ^. #snapshotLastTerm
-  | otherwise = fmap entryTerm . IM.lookup (unLogIndex i) $ log ^. #entries
+  | otherwise = entryTerm <$> log ^. #entries % at (unLogIndex i)
 
 deleteRangeLog :: LogIndex -> LogIndex -> Log e -> Log e
 deleteRangeLog min max l = l

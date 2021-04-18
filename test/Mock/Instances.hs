@@ -3,6 +3,7 @@ module Mock.Instances where
 
 import Control.Monad.State.Strict
 import Data.Binary
+import Data.Foldable (traverse_)
 import Data.Maybe
 import GHC.Generics
 import HaskKV.Log.Class
@@ -114,15 +115,14 @@ temporaryEntriesImpl = do
   return log
 
 instance LogM E (State MockConfig) where
-  firstIndex = (^. #log % #lowIdx) <$> use #store
-  lastIndex = lastIndexLog . (^. #log) <$> use #store
+  firstIndex = use (#store % #log % #lowIdx)
+  lastIndex = lastIndexLog <$> use (#store % #log)
   loadEntry = loadEntryImpl
-  termFromIndex i = entryTermLog i . (^. #log) <$> use #store
-  storeEntries es = #store %= (#log %~ storeEntriesLog es)
-  deleteRange a b = #store %= (#log %~ deleteRangeLog a b)
+  termFromIndex i = entryTermLog i <$> use (#store % #log)
+  storeEntries es = #store % #log %= storeEntriesLog es
+  deleteRange a b = #store % #log %= deleteRangeLog a b
 
-loadEntryImpl (LogIndex k) =
-  IM.lookup k . (^. #log % #entries) <$> use #store
+loadEntryImpl (LogIndex k) = use (#store % #log % #entries % at k)
 
 instance StorageM K V (State MockConfig) where
   getValue k = getKey k <$> use #store
@@ -142,18 +142,15 @@ takeSnapshotImpl = do
   storeData <- use #store
   let
     firstIndex = storeData ^. #log % #lowIdx
-    lastTerm =
-      entryTerm
-        . fromJust
-        . IM.lookup (unLogIndex lastIndex)
-        $ storeData ^. #log % #entries
+    lastTerm   = entryTerm $ fromJust
+               $ storeData ^. #log % #entries % at (unLogIndex lastIndex)
   createSnapshot lastIndex lastTerm
   let snapData = B.concat . BL.toChunks . encode $ storeData ^. #map
   writeSnapshot 0 snapData lastIndex
   saveSnapshot lastIndex
   deleteRange firstIndex lastIndex
   snap <- readSnapshot lastIndex
-  mapM_ (loadSnapshot lastIndex lastTerm) snap
+  traverse_ (loadSnapshot lastIndex lastTerm) snap
 
 instance ApplyEntryM K V E (State MockConfig) where
   applyEntry = applyEntryImpl
@@ -232,7 +229,7 @@ instance ServerM M ServerEvent (State MockConfig) where
 broadcastImpl msg = do
   sid  <- use #myServerID
   sids <- use #serverIDs
-  mapM_ (flip send msg) . filter (/= sid) $ sids
+  traverse_ (flip send msg) $ filter (/= sid) sids
 recvImpl = S.get >>= go
  where
   go s

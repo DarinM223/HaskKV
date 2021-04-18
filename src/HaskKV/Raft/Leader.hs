@@ -1,6 +1,7 @@
 module HaskKV.Raft.Leader where
 
 import Control.Monad.State
+import Data.Foldable (for_, traverse_)
 import Data.List (sortBy)
 import Data.Maybe
 import HaskKV.Log.Class
@@ -44,7 +45,7 @@ runLeader = recv >>= \case
     ids <- serverIds
     let otherServerIds = filter (/= serverID') ids
     debug "Sending AppendEntries"
-    mapM_ (sendAppendEntries lastIndex' commitIndex') otherServerIds
+    traverse_ (sendAppendEntries lastIndex' commitIndex') otherServerIds
   Right (RequestVote rv)       -> get >>= handleRequestVote rv
   Right (AppendEntries ae)     -> get >>= handleAppendEntries ae
   Right (InstallSnapshot _)    -> return ()
@@ -91,8 +92,8 @@ handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
     if hasRemaining
       then do
         chunk <- readChunk snapshotChunkSize sender
-        mapM_ (sendSnapshotChunk sender) chunk
-      else snapshotInfo >>= \info -> forM_ info $ \(i, _, _) -> do
+        traverse_ (sendSnapshotChunk sender) chunk
+      else snapshotInfo >>= \info -> for_ info $ \(i, _, _) -> do
         let sid = unSID sender
         #stateType % _Leader % #matchIndex %= IM.adjust (max i) sid
         #stateType % _Leader % #nextIndex %= IM.adjust (max (i + 1)) sid

@@ -1,9 +1,10 @@
 module Lib where
 
 import Control.Concurrent (forkIO)
-import Control.Monad
-import Control.Monad.Trans
-import Control.Monad.Trans.Maybe
+import Control.Monad (forever)
+import Control.Monad.Trans (lift)
+import Control.Monad.Trans.Maybe (MaybeT (MaybeT), runMaybeT)
+import Data.Foldable (traverse_)
 import HaskKV
 import HaskKV.Store.All
 import Optics
@@ -65,11 +66,13 @@ handleArgs (path : sid : _) = do
     lift $ loadSnapshot index term snapshot
 
   -- Run Raft server and handler.
-  mapM_ (\p -> runServer p "*" settings (appConfig ^. serverStateL)) raftPort
+  traverse_
+    (\p -> runServer p "*" settings (appConfig ^. serverStateL))
+    raftPort
   forkIO $ forever $ run appConfig runRaft
 
   -- Run API server.
-  mapM_ (`Warp.run` serve api (server appConfig)) apiPort
+  traverse_ (`Warp.run` serve api (server appConfig)) apiPort
 handleArgs _ = do
   putStrLn "Invalid arguments passed"
   putStrLn "Arguments are:"

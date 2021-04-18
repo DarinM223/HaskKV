@@ -2,6 +2,7 @@ module HaskKV.Snapshot.Utils where
 
 import Control.Concurrent.STM
 import Control.Exception
+import Data.Foldable (traverse_)
 import Data.List (elemIndex)
 import Data.Maybe
 import GHC.IO.Handle
@@ -27,15 +28,15 @@ newSnapshotManager path = do
 closeSnapshotManager :: SnapshotManager -> IO ()
 closeSnapshotManager manager = do
   snapshots <- readTVarIO $ manager ^. #snapshots
-  mapM_ (hClose . (^. #file)) (snapshots ^. #completed)
-  mapM_ (hClose . (^. #file)) (snapshots ^. #partial)
+  traverse_ (hClose . (^. #file)) (snapshots ^. #completed)
+  traverse_ (hClose . (^. #file)) (snapshots ^. #partial)
 
 loadSnapshots :: FilePath -> IO (TVar Snapshots)
 loadSnapshots path = do
   files <- catch (getDirectoryContents path)
          $ \(_ :: SomeException) -> return []
-  partial   <- mapM (toPartial . (path </>)) . filter isPartial $ files
-  completed <- mapM (toCompleted . (path </>)) . filter isCompleted $ files
+  partial   <- traverse (toPartial . (path </>)) $ filter isPartial files
+  completed <- traverse (toCompleted . (path </>)) $ filter isCompleted files
   newTVarIO Snapshots
     { completed = listToMaybe $ catMaybes completed
     , partial   = catMaybes partial

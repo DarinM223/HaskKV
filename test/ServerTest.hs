@@ -6,8 +6,9 @@ where
 import Conduit
 import Control.Concurrent (threadDelay, forkIO)
 import Control.Concurrent.STM
-import Control.Monad
+import Control.Monad (foldM)
 import Data.ByteString
+import Data.Traversable (for)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.HUnit
 import HaskKV.Utils
@@ -114,7 +115,7 @@ buildClientMap = foldM addToMap
     bq <- newTBQueueIO 100
     return $ s & #outgoing %~ IM.insert i bq
 
-sinkClients s = forM (IM.assocs $ s ^. #outgoing) $ \(_, bq) ->
+sinkClients s = for (IM.assocs $ s ^. #outgoing) $ \(_, bq) ->
   atomically (isEmptyTBQueue bq) >>= \case
     True  -> return []
     False -> runConduit $ sourceTBQueueOne bq .| sinkList

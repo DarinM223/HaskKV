@@ -4,8 +4,8 @@ module SnapshotTest
 where
 
 import Control.Concurrent.STM
-import Control.Monad
 import Data.Binary
+import Data.Foldable (for_, traverse_)
 import Data.List (nub, sort)
 import HaskKV.Snapshot.All
 import HaskKV.Types
@@ -148,10 +148,10 @@ testReadChunks =
       saveSnapshot' 101 manager
 
       let sids = [1, 2, 3, 4] :: [SID]
-      mapM_ (\sid -> createSnapshot' (sidToIdx sid) 1 manager) sids
+      traverse_ (\sid -> createSnapshot' (sidToIdx sid) 1 manager) sids
       readLoop sids manager
       closeSnapshotManager manager
-      files <- mapM (readSID path) sids
+      files <- traverse (readSID path) sids
       length (nub files) @?= 1
       head files @?= snapData
  where
@@ -160,7 +160,7 @@ testReadChunks =
   readLoop []           _       = return ()
   readLoop (sid : sids) manager = do
     chunk <- readChunk' 9 sid manager
-    forM_ chunk $ \c ->
+    for_ chunk $ \c ->
       writeSnapshot' (c ^. #offset) (c ^. #chunkData) (sidToIdx sid) manager
     case (^. #chunkType) <$> chunk of
       Just FullChunk -> readLoop (sids ++ [sid]) manager

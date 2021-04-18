@@ -3,7 +3,8 @@ module TempLogTest
   )
 where
 
-import Control.Monad
+import Control.Monad ((<=<))
+import Data.Foldable (for_, traverse_)
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp
 import HaskKV.Store.All
@@ -33,7 +34,7 @@ testAddEntries = testCase "addTemporaryEntry adds entries to _tempEntries" $ do
     unChange _              = undefined
 
   -- Tests order of entries.
-  mapM_ (flip addTemporaryEntry' tempLog <=< createEntry) [1 .. 3]
+  traverse_ (flip addTemporaryEntry' tempLog <=< createEntry) [1 .. 3]
   entries <- temporaryEntries' tempLog
   fmap (_value . unChange . (^. #entryData)) entries @?= [1, 2, 3]
 
@@ -42,7 +43,7 @@ testAddEntries = testCase "addTemporaryEntry adds entries to _tempEntries" $ do
   length entries @?= 0
 
   -- Tests entries bounded to maxTempEntries
-  forM_ [1 .. maxTempEntries + 500] $ \n -> do
+  for_ [1 .. maxTempEntries + 500] $ \n -> do
     entry <- createEntry n
     addTemporaryEntry' entry tempLog
   entries <- temporaryEntries' tempLog

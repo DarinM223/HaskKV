@@ -2,11 +2,11 @@ module HaskKV.Server.Utils where
 
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Exception
-import Control.Monad
 import Control.Monad.IO.Class
 import Data.Binary
 import Data.Conduit
 import Data.Conduit.Network
+import Data.Foldable (for_, traverse_)
 import Data.Streaming.Network.Internal
 import HaskKV.Server.Types
 import HaskKV.Utils
@@ -36,9 +36,8 @@ runServer port host clients s = do
       .| CL.iterM (liftIO . debugM "conduit" . ("Receiving: " ++) . show)
       .| sinkTBQueue (s ^. #messages)
 
-  forM_ (IM.assocs clients) $ \(i, settings) ->
-    forM_ (IM.lookup i $ s ^. #outgoing) $ \bq ->
-      forkIO $ connectClient settings bq
+  for_ (IM.assocs clients) $ \(i, settings) ->
+    traverse_ (forkIO . connectClient settings) (s ^. #outgoing % at i)
  where
   thrd t = let (_, _, a) = t in a
 

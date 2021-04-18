@@ -1,6 +1,7 @@
 module HaskKV.Raft.RPC where
 
 import Control.Monad.State
+import Data.Foldable (traverse_)
 import Data.Maybe
 import HaskKV.Log.Class
 import HaskKV.Log.Utils
@@ -141,7 +142,7 @@ handleInstallSnapshot is s
           deleteRange first last
 
           snap <- readSnapshot snapIndex
-          mapM_ (loadSnapshot snapIndex snapTerm) snap
+          traverse_ (loadSnapshot snapIndex snapTerm) snap
 
     send (is ^. #leaderId) $ successResponse s
  where

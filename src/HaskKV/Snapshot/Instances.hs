@@ -6,7 +6,7 @@ import Control.Exception
 import Control.Monad.Reader
 import Control.Monad.State
 import Data.Binary (Binary, decode)
-import Data.Foldable (find)
+import Data.Foldable (find, for_)
 import GHC.IO.Handle
 import HaskKV.Snapshot.Types
 import HaskKV.Snapshot.Utils
@@ -53,7 +53,9 @@ writeSnapshot'
   :: FilePos -> B.ByteString -> LogIndex -> SnapshotManager -> IO ()
 writeSnapshot' offset snapData index manager = do
   snapshots <- readTVarIO $ manager ^. #snapshots
-  partial' <- mapM (putAndUpdate offset snapData index) (snapshots ^. #partial)
+  partial' <- traverse
+    (putAndUpdate offset snapData index)
+    (snapshots ^. #partial)
   atomically $ modifyTVar (manager ^. #snapshots) $ #partial .~ partial'
  where
   putAndUpdate offset snapData index snap
@@ -85,7 +87,7 @@ readSnapshot' index manager =
 hasChunk' :: SID -> SnapshotManager -> IO Bool
 hasChunk' (SID i) manager = do
   snapshots <- readTVarIO $ manager ^. #snapshots
-  case IM.lookup i $ snapshots ^. #chunks of
+  case snapshots ^. #chunks % at i of
     Just handle -> not <$> hIsEOF handle
     Nothing     -> return False
 
@@ -125,7 +127,7 @@ saveSnapshot' index manager = do
   snapshots <- readTVarIO $ manager ^. #snapshots
   let snap = find ((== index) . (^. #index)) $ snapshots ^. #partial
 
-  forM_ snap $ \snap -> do
+  for_ snap $ \snap -> do
     -- Close and rename snapshot file as completed.
     hClose $ snap ^. #file
     let path' = replaceFileName

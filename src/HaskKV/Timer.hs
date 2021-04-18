@@ -5,6 +5,7 @@ module HaskKV.Timer where
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad.IO.Class
+import Data.Foldable (traverse_)
 import HaskKV.Types
 import System.Random
 
@@ -39,7 +40,7 @@ reset t (Timeout timeout) = liftIO $ do
 cancel :: (MonadIO m) => Timer -> m ()
 cancel t = liftIO $ do
   tid <- atomically $ tryTakeTMVar (_thread t)
-  mapM_ killThread tid
+  traverse_ killThread tid
 
 await :: Timer -> STM ()
 await = takeTMVar . _var

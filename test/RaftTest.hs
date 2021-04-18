@@ -4,8 +4,10 @@ module RaftTest
 where
 
 import Control.Monad
+import Data.Foldable (for_, traverse_)
 import Data.List (nub)
 import Data.Maybe
+import Data.Traversable (for)
 import HaskKV.Log.Class
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
@@ -168,7 +170,7 @@ testLeaderSendsAppendEntries
           -- AppendEntries messages
           runServer 1 runRaft
           flushMessages 1
-          msgs <- forM [2, 3, 4, 5] $ \i -> do
+          msgs <- for [2, 3, 4, 5] $ \i -> do
             msgs <- MockT $ preuse $ ix i % #receivingMsgs
             runServer i runRaft
             flushMessages i
@@ -177,7 +179,7 @@ testLeaderSendsAppendEntries
           -- Add new log entries to leader
           runServer 1 $ do
             MockT $ do
-              mapM_ addTemporaryEntry added
+              traverse_ addTemporaryEntry added
               #heartbeatTimer .= True
             runRaft
           flushMessages 1
@@ -187,7 +189,7 @@ testLeaderSendsAppendEntries
           --
           -- The entries added at the beginning should
           -- have been replaced.
-          stores <- forM [2, 3, 4, 5] $ \i -> do
+          stores <- for [2, 3, 4, 5] $ \i -> do
             runServer i runRaft
             flushMessages i
             runServer i $ MockT $ use #store
@@ -296,14 +298,14 @@ testLeaderSendsSnapshot = testCase "Leader sends snapshot" $ do
       runServer 1 $ MockT $ do
         storeEntries entries
         #electionTimer .= True
-      mapM_ (flip runServer (storeEntries entries)) [2, 3, 4]
+      traverse_ (flip runServer (storeEntries entries)) [2, 3, 4]
       replicateM_ 5 runServers
 
       runServer 1 $ do
         MockT $ #heartbeatTimer .= True
         runRaft
       flushMessages 1
-      forM_ [2, 3, 4] $ \i -> do
+      for_ [2, 3, 4] $ \i -> do
         runServer i runRaft
         flushMessages i
       dropMessage 5
