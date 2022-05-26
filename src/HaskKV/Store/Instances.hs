@@ -69,7 +69,7 @@ instance (StoreClass k v e r m, HasRun msg k v e r)
     store <- gview storeL
     lastApplied <- lift $ gets (^. #lastApplied)
     config <- ask
-    liftIO $ takeSnapshot' (run config) lastApplied store
+    liftIO $ takeSnapshot' (\c -> run config c) lastApplied store
 
 getValue' :: (Ord k) => k -> Store k v e -> IO (Maybe v)
 getValue' k = fmap (getKey k) . readTVarIO . unStore

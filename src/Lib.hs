@@ -8,7 +8,7 @@ import Data.Foldable (traverse_)
 import HaskKV
 import HaskKV.Store.All
 import Optics
-import Servant.Server (serve)
+import Servant.Server (hoistServer, serve)
 import System.Environment (getArgs)
 import System.Log.Logger
 import System.Log.Handler.Simple
@@ -61,8 +61,8 @@ handleArgs (path : sid : _) = do
     <*> pure (configSnapshotDirectory sid' config)
   appConfig <- newAppConfig initAppConfig :: IO MyConfig
   run appConfig $ runMaybeT $ do
-    (index, term, _) <- lift snapshotInfo >>= MaybeT . pure
-    snapshot         <- lift (readSnapshot index) >>= MaybeT . pure
+    (index, term, _) <- MaybeT snapshotInfo
+    snapshot         <- MaybeT (readSnapshot index)
     lift $ loadSnapshot index term snapshot
 
   -- Run Raft server and handler.
@@ -72,7 +72,8 @@ handleArgs (path : sid : _) = do
   forkIO $ forever $ run appConfig runRaft
 
   -- Run API server.
-  traverse_ (`Warp.run` serve api (server appConfig)) apiPort
+  let apiServer = hoistServer api (convertApp appConfig) server
+  traverse_ (`Warp.run` serve api apiServer) apiPort
 handleArgs _ = do
   putStrLn "Invalid arguments passed"
   putStrLn "Arguments are:"

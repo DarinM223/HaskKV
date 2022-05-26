@@ -1,5 +1,6 @@
 module HaskKV.API
   ( api
+  , convertApp
   , server
   )
 where
@@ -7,17 +8,17 @@ where
 import Control.Concurrent.Async (async, wait)
 import Control.Concurrent.STM (newEmptyTMVarIO)
 import Control.Monad.Except
-import Control.Monad.Reader
-import Data.Aeson (FromJSON, ToJSON)
+import Control.Monad.Reader (MonadReader (ask))
 import Data.Proxy (Proxy(Proxy))
 import HaskKV.Constr (Constr, run)
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
-import HaskKV.Monad
-import HaskKV.Raft.State
-import HaskKV.Server.All
-import HaskKV.Store.Types
-import Optics
+import HaskKV.Monad (App, AppConfig, runApp)
+import HaskKV.Raft.State (StateType (Leader))
+import HaskKV.Server.Instances (inject)
+import HaskKV.Server.Types (ServerEvent (HeartbeatTimeout), HasServerState (serverStateL))
+import HaskKV.Store.Types (KeyClass, ValueClass, StorageM (getValue))
+import Optics ((^.), use)
 import Servant.API hiding (inject)
 import Servant.Server
 
@@ -26,7 +27,7 @@ type StoreAPI k v
   :<|> "set" :> Capture "key" k :> ReqBody '[JSON] v :> Post '[JSON] ()
   :<|> "delete" :> Capture "key" k :> Delete '[JSON] ()
 
-type MyHandler msg k v e a = ExceptT ServerError (App msg k v e) a
+type MyHandler msg k v e = ExceptT ServerError (App msg k v e)
 
 api :: Proxy (StoreAPI k v)
 api = Proxy
@@ -49,11 +50,9 @@ convertApp :: AppConfig msg k v e -> MyHandler msg k v e a -> Handler a
 convertApp config = Handler . ExceptT . flip runApp config . runExceptT
 
 server
-  :: (KeyClass k, ValueClass v, FromHttpApiData k, FromJSON v, ToJSON v)
-  => AppConfig msg k v (LogEntry k v)
-  -> Server (StoreAPI k v)
-server config = hoistServer api (convertApp config) server
-  where server = getRoute :<|> setRoute :<|> deleteRoute
+  :: (KeyClass k, ValueClass v)
+  => ServerT (StoreAPI k v) (MyHandler msg k v (LogEntry k v))
+server = getRoute :<|> setRoute :<|> deleteRoute
 
 applyEntryData :: LogEntryData k v -> App msg k v (LogEntry k v) ()
 applyEntryData entryData = ask >>= \config -> liftIO $ do

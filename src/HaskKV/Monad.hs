@@ -90,6 +90,6 @@ newAppConfig config = do
         , cTempLog     = tempLog
         , cServerState = serverState
         , cSnapManager = snapManager
-        , cRun         = flip runApp config
+        , cRun         = (\app -> runApp app config)
         }
   return config
