@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module HaskKV.Log.Entry where
 
 import Control.Concurrent.STM (TMVar)

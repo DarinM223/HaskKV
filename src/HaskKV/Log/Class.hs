@@ -1,5 +1,4 @@
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 module HaskKV.Log.Class where
 
 import Data.Binary (Binary)

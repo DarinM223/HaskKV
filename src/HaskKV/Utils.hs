@@ -1,4 +1,3 @@
-{-# LANGUAGE ScopedTypeVariables #-}
 module HaskKV.Utils where
 
 import Control.Concurrent.MVar (MVar, putMVar, takeMVar)

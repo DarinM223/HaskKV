@@ -1,4 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module HaskKV.Types where
 
 import Data.Binary (Binary)
