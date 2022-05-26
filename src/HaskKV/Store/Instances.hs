@@ -1,25 +1,28 @@
+{-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-
 module HaskKV.Store.Instances where
 
 import Control.Concurrent (forkIO)
-import Control.Concurrent.STM
+import Control.Concurrent.STM (atomically, readTVarIO, putTMVar, modifyTVar')
 import Control.Monad.Reader
-import Control.Monad.State
-import Data.Binary
+import Control.Monad.State (MonadState, gets)
+import Data.Binary (Binary, encode)
 import Data.Foldable (for_, traverse_)
 import Data.Maybe (fromJust)
-import HaskKV.Constr
-import HaskKV.Log.Class
+import HaskKV.Constr (HasRun (..))
+import HaskKV.Log.Class (Entry (entryTerm), LogM (..))
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
-import HaskKV.Raft.State (RaftState(..))
+import HaskKV.Raft.State (RaftState (..))
 import HaskKV.Snapshot.Types
 import HaskKV.Store.Types
 import HaskKV.Store.Utils
-import HaskKV.Types
-import HaskKV.Utils
-import Optics
+import HaskKV.Types (LogIndex (..), LogTerm)
+import HaskKV.Utils (modifyTVarIO, stateTVarIO)
+import Optics ((%), (^.), At (at), ViewableOptic (gview))
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL

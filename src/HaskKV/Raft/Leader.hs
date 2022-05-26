@@ -1,21 +1,24 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE TypeFamilies #-}
 module HaskKV.Raft.Leader where
 
-import Control.Monad.State
+import Control.Monad.State (MonadState (get), when)
 import Data.Foldable (for_, traverse_)
 import Data.List (sortBy)
-import Data.Maybe
+import Data.Maybe (fromMaybe, isNothing)
 import HaskKV.Log.Class
-import HaskKV.Log.Utils
-import HaskKV.Raft.Class
+import HaskKV.Log.Utils (entryRange, prevIndex)
+import HaskKV.Raft.Class (PersistM, DebugM (..))
 import HaskKV.Raft.Message
-import HaskKV.Raft.RPC
-import HaskKV.Raft.State
-import HaskKV.Raft.Utils
+import HaskKV.Raft.RPC (handleAppendEntries, handleRequestVote)
+import HaskKV.Raft.State (_Leader, RaftState)
+import HaskKV.Raft.Utils (quorumSize, transitionToFollower)
 import HaskKV.Server.Types
 import HaskKV.Snapshot.Types
-import HaskKV.Types
-import Optics
-import Optics.State.Operators
+import HaskKV.Types (LogIndex, SID (..))
+import Optics ((%), (^.), preuse, guse)
+import Optics.State.Operators ((%=), (.=))
 
 import qualified Data.IntMap as IM
 

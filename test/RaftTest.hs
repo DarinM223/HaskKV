@@ -1,7 +1,6 @@
-module RaftTest
-  ( tests
-  )
-where
+{-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE OverloadedLabels #-}
+module RaftTest (tests) where
 
 import Control.Monad
 import Data.Foldable (for_, traverse_)

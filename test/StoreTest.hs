@@ -1,7 +1,4 @@
-module StoreTest
-  ( tests
-  )
-where
+module StoreTest (tests) where
 
 import Control.Concurrent
 import Data.Foldable (for_)

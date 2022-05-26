@@ -1,4 +1,8 @@
+{-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE TypeFamilies #-}
 module Mock.Instances where
 
 import Control.Monad.State.Strict

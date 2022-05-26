@@ -1,11 +1,13 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Raft.Class where
 
-import Control.Monad.State
+import Control.Monad.State (MonadIO (..), MonadTrans (..), MonadState, void)
 import HaskKV.Raft.State
-import HaskKV.Utils
-import Optics
-import System.Log.Logger
+import HaskKV.Utils (persistBinary)
+import Optics ((<&>), (^.), guse)
+import System.Log.Logger (debugM)
 
 class DebugM m where
   debug :: String -> m ()

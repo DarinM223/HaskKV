@@ -1,17 +1,19 @@
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FunctionalDependencies #-}
 module HaskKV.Store.Types where
 
-import Control.Concurrent.STM
-import Control.Monad.Reader
+import Control.Concurrent.STM (TVar, newTVarIO)
+import Control.Monad.Reader (MonadIO, MonadReader, MonadTrans (..))
 import Data.Aeson (FromJSON, ToJSON)
-import Data.Binary
+import Data.Binary (Binary)
 import Data.Binary.Instances ()
 import Data.Maybe (fromMaybe)
-import Data.Time
-import GHC.Generics
-import HaskKV.Log.Class
-import HaskKV.Log.InMem
-import HaskKV.Types
-import Optics
+import Data.Time (UTCTime, secondsToDiffTime, addUTCTime, getCurrentTime)
+import GHC.Generics (Generic)
+import HaskKV.Log.Class (LogM)
+import HaskKV.Log.InMem (Log, emptyLog)
+import HaskKV.Types (LogIndex, LogTerm, SID)
+import Optics (Lens')
 
 import qualified Data.Heap as H
 import qualified Data.Map as M

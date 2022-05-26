@@ -1,14 +1,15 @@
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE UndecidableInstances #-}
 
 module HaskKV.Server.Instances where
 
-import Control.Concurrent.STM
+import Control.Concurrent.STM (atomically, readTBQueue, writeTBQueue)
 import Control.Applicative ((<|>))
-import Control.Monad.Reader
+import Control.Monad.Reader (MonadIO (..), MonadReader)
 import Data.Foldable (traverse_)
 import HaskKV.Server.Types
-import HaskKV.Types
-import Optics
+import HaskKV.Types (SID (SID))
+import Optics ((%), (^.), At (at), ViewableOptic (gview))
 
 import qualified Data.IntMap as IM
 import qualified HaskKV.Timer as Timer

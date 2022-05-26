@@ -2,12 +2,12 @@ module HaskKV.Timer where
 
 -- Implementation taken from: https://github.com/NicolasT/kontiki
 
-import Control.Concurrent
+import Control.Concurrent (ThreadId, forkIO, killThread, threadDelay)
 import Control.Concurrent.STM
-import Control.Monad.IO.Class
+import Control.Monad.IO.Class (MonadIO (..))
 import Data.Foldable (traverse_)
-import HaskKV.Types
-import System.Random
+import HaskKV.Types (Timeout (Timeout))
+import System.Random (Random (randomR), getStdRandom)
 
 timeoutRange :: Timeout -> (Int, Int)
 timeoutRange (Timeout timeout) = (timeout, 2 * timeout - 1)

@@ -1,20 +1,23 @@
+{-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Snapshot.Instances where
 
-import Control.Concurrent.STM
-import Control.Exception
-import Control.Monad.Reader
+import Control.Concurrent.STM (atomically, readTVarIO, modifyTVar)
+import Control.Exception (SomeException, handle)
+import Control.Monad.Reader (MonadReader)
 import Control.Monad.State
 import Data.Binary (Binary, decode)
 import Data.Foldable (find, for_)
 import GHC.IO.Handle
 import HaskKV.Snapshot.Types
-import HaskKV.Snapshot.Utils
-import HaskKV.Types
-import Optics
-import System.Directory
-import System.FilePath
-import System.IO
+import HaskKV.Snapshot.Utils (getPos, completedFilename, partialFilename)
+import HaskKV.Types (FilePos, FileSize, LogIndex, LogTerm, SID (SID))
+import Optics ((&), (%), (%~), (.~), (^.), At (at), ViewableOptic (gview))
+import System.Directory (removeFile, renameFile)
+import System.FilePath ((</>), replaceFileName)
+import System.IO (IOMode (ReadMode, WriteMode), openFile)
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL

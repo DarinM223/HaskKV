@@ -1,6 +1,7 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module HaskKV.Types where
 
-import Data.Binary
+import Data.Binary (Binary)
 
 newtype LogIndex = LogIndex { unLogIndex :: Int }
   deriving (Eq, Num, Ord, Binary)

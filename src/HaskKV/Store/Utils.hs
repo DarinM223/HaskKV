@@ -1,15 +1,16 @@
+{-# LANGUAGE OverloadedLabels #-}
 module HaskKV.Store.Utils where
 
-import Control.Concurrent.STM
-import Data.Binary
+import Control.Concurrent.STM (atomically, readTVar, modifyTVar)
+import Data.Binary (Binary)
 import Data.Foldable (foldl')
 import Data.Maybe (fromJust, fromMaybe)
-import Data.Time
+import Data.Time (diffUTCTime)
 import HaskKV.Log.InMem
 import HaskKV.Store.Types
-import HaskKV.Types
-import HaskKV.Utils
-import Optics
+import HaskKV.Types (FileSize, LogIndex, LogTerm)
+import HaskKV.Utils (minHeapMaybe, persistBinary)
+import Optics ((&), (%~), (.~), (^.))
 
 import qualified Data.Map as M
 import qualified Data.Heap as H
@@ -64,7 +65,7 @@ cleanupStore curr s = case minHeapMaybe (s ^. #heap) of
   Just (HeapVal (t, k)) | diff t curr <= 0 ->
     let (_, h') = fromJust . H.viewMin $ s ^. #heap
         v       = getKey k s
-    in 
+    in
        -- Only delete key from store if it hasn't been
        -- replaced/removed after it was set.
        if maybe False ((== 0) . diff t) (v >>= expireTime)

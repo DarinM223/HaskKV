@@ -1,19 +1,21 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
 module HaskKV.Raft.Candidate where
 
-import Control.Monad.State
-import Data.Maybe
-import HaskKV.Log.Class
-import HaskKV.Log.Entry
-import HaskKV.Raft.Class
-import HaskKV.Raft.Message
+import Control.Monad.State (MonadState (get), when)
+import Data.Maybe (fromMaybe)
+import HaskKV.Log.Class (LogM)
+import HaskKV.Log.Entry (LogEntry)
+import HaskKV.Raft.Class (PersistM, DebugM (..))
+import HaskKV.Raft.Message (RaftResponse (VoteResponse), RaftMessage (..))
 import HaskKV.Raft.RPC
-import HaskKV.Raft.State
+import HaskKV.Raft.State (_Candidate, RaftState)
 import HaskKV.Raft.Utils
-import HaskKV.Server.Types
-import HaskKV.Snapshot.Types
-import HaskKV.Store.Types
-import Optics
-import Optics.State.Operators
+import HaskKV.Server.Types (ServerEvent (..), ServerM (reset, recv))
+import HaskKV.Snapshot.Types (SnapshotM)
+import HaskKV.Store.Types (LoadSnapshotM, StorageM)
+import Optics ((%), (^.), preuse)
+import Optics.State.Operators ((%=))
 
 runCandidate
   :: ( DebugM m

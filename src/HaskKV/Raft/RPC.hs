@@ -1,19 +1,21 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
 module HaskKV.Raft.RPC where
 
-import Control.Monad.State
+import Control.Monad.State (MonadState (get), when)
 import Data.Foldable (traverse_)
-import Data.Maybe
-import HaskKV.Log.Class
-import HaskKV.Log.Utils
-import HaskKV.Raft.Class
+import Data.Maybe (fromMaybe, isJust, isNothing)
+import HaskKV.Log.Class (Entry (entryIndex, entryTerm), LogM (..))
+import HaskKV.Log.Utils (diffEntriesWithLog)
+import HaskKV.Raft.Class (PersistM (..), DebugM (..))
 import HaskKV.Raft.Message
-import HaskKV.Raft.State
-import HaskKV.Raft.Utils
+import HaskKV.Raft.State (RaftState)
+import HaskKV.Raft.Utils (transitionToFollower)
 import HaskKV.Server.Types
 import HaskKV.Snapshot.Types
-import HaskKV.Store.Types
-import Optics
-import Optics.State.Operators
+import HaskKV.Store.Types (LoadSnapshotM (..), StorageM)
+import Optics ((^.), guse)
+import Optics.State.Operators ((.=))
 
 handleRequestVote
   :: ( DebugM m

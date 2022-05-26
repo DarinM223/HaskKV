@@ -1,7 +1,5 @@
-module SnapshotTest
-  ( tests
-  )
-where
+{-# LANGUAGE OverloadedLabels #-}
+module SnapshotTest (tests) where
 
 import Control.Concurrent.STM
 import Data.Binary

@@ -1,10 +1,13 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Raft.Message where
 
-import Data.Binary
-import GHC.Generics
-import HaskKV.Types
+import Data.Binary (Binary)
+import GHC.Generics (Generic)
+import HaskKV.Types (FilePos, LogIndex, LogTerm, SID)
 import Optics
 
 import qualified Data.ByteString as B

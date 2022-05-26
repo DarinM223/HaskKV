@@ -1,22 +1,26 @@
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE TypeFamilies #-}
 module HaskKV.Monad where
 
-import Control.Monad.Reader
-import Control.Monad.State.Strict
-import Data.Binary
+import Control.Monad.Reader (MonadIO (..), MonadReader, ReaderT (..))
+import Control.Monad.State.Strict (MonadState (get, put))
+import Data.Binary (Binary)
 import Data.Binary.Instances ()
-import Data.IORef
-import GHC.Generics
-import HaskKV.Constr
-import HaskKV.Log.Class
-import HaskKV.Log.Entry
-import HaskKV.Log.InMem
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import GHC.Generics (Generic)
+import HaskKV.Constr (Fn, SnapshotType, HasRun (..), Constr)
+import HaskKV.Log.Class (LogM, TempLogM)
+import HaskKV.Log.Entry (LogEntry)
+import HaskKV.Log.InMem (Log)
 import HaskKV.Log.Temp
 import HaskKV.Raft.Class
-import HaskKV.Raft.State
+import HaskKV.Raft.State (PersistentState, RaftState, newRaftState)
 import HaskKV.Server.All
 import HaskKV.Snapshot.All
 import HaskKV.Store.All
-import Optics
+import Optics ((^.), lens)
 
 data AppConfig msg k v e = AppConfig
   { cState       :: IORef RaftState

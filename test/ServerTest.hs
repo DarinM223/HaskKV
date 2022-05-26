@@ -1,7 +1,7 @@
-module ServerTest
-  ( tests
-  )
-where
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedStrings #-}
+module ServerTest (tests) where
 
 import Conduit
 import Control.Concurrent (threadDelay, forkIO)

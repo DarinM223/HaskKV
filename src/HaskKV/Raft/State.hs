@@ -1,12 +1,15 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 module HaskKV.Raft.State where
 
-import Data.Binary
-import Data.Time
-import GHC.Generics
-import HaskKV.Types
-import Optics
+import Data.Binary (Binary)
+import Data.Time (UTCTime)
+import GHC.Generics (Generic)
+import HaskKV.Types (LogIndex, LogTerm, SID (SID))
+import Optics ((^.), makeFieldLabels, makePrisms)
 
 import qualified Data.IntMap as IM
 

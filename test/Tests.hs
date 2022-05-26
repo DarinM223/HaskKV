@@ -1,7 +1,4 @@
-module Tests
-  ( allTests
-  )
-where
+module Tests (allTests) where
 
 import Test.Tasty
 

@@ -1,17 +1,19 @@
+{-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE OverloadedLabels #-}
 module HaskKV.Snapshot.Utils where
 
-import Control.Concurrent.STM
-import Control.Exception
+import Control.Concurrent.STM (TVar, newTVarIO, readTVarIO)
+import Control.Exception (SomeException, catch)
 import Data.Foldable (traverse_)
 import Data.List (elemIndex)
-import Data.Maybe
-import GHC.IO.Handle
+import Data.Maybe (catMaybes, fromMaybe, listToMaybe)
+import GHC.IO.Handle (HandlePosn (..), hClose, hFileSize)
 import HaskKV.Snapshot.Types
-import HaskKV.Types
-import Optics
-import System.Directory
-import System.FilePath
-import System.IO
+import HaskKV.Types (FilePos (FilePos), LogIndex (LogIndex), LogTerm (LogTerm))
+import Optics ((^.))
+import System.Directory (getDirectoryContents)
+import System.FilePath ((</>), hasExtension, splitExtension, takeBaseName)
+import System.IO (IOMode (ReadMode, AppendMode), openFile)
 import Text.Read (readMaybe)
 
 import qualified Data.IntMap as IM

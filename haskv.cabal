@@ -28,7 +28,6 @@ source-repository head
 library
   hs-source-dirs:
       src
-  default-extensions: BangPatterns BlockArguments ConstraintKinds DataKinds DefaultSignatures DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies DerivingVia DuplicateRecordFields EmptyCase ExistentialQuantification FlexibleContexts FlexibleInstances FunctionalDependencies GADTs GeneralizedNewtypeDeriving InstanceSigs KindSignatures LambdaCase MultiParamTypeClasses NumericUnderscores OverloadedLabels OverloadedStrings PatternSynonyms QuantifiedConstraints RankNTypes ScopedTypeVariables StandaloneDeriving TupleSections TypeApplications TypeFamilies TypeFamilyDependencies TypeOperators
   ghc-options: -W -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -fshow-hole-constraints -haddock
   build-depends:
       base >=4.16.0.0 && <5
@@ -95,13 +94,12 @@ library
       Lib
   other-modules:
       Paths_haskv
-  default-language: Haskell2010
+  default-language: GHC2021
 
 executable haskv-exe
   main-is: Main.hs
   hs-source-dirs:
       app
-  default-extensions: BangPatterns BlockArguments ConstraintKinds DataKinds DefaultSignatures DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies DerivingVia DuplicateRecordFields EmptyCase ExistentialQuantification FlexibleContexts FlexibleInstances FunctionalDependencies GADTs GeneralizedNewtypeDeriving InstanceSigs KindSignatures LambdaCase MultiParamTypeClasses NumericUnderscores OverloadedLabels OverloadedStrings PatternSynonyms QuantifiedConstraints RankNTypes ScopedTypeVariables StandaloneDeriving TupleSections TypeApplications TypeFamilies TypeFamilyDependencies TypeOperators
   ghc-options: -W -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -fshow-hole-constraints -haddock -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.16.0.0 && <5
@@ -133,14 +131,13 @@ executable haskv-exe
     , warp
   other-modules:
       Paths_haskv
-  default-language: Haskell2010
+  default-language: GHC2021
 
 test-suite haskv-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   hs-source-dirs:
       test
-  default-extensions: BangPatterns BlockArguments ConstraintKinds DataKinds DefaultSignatures DeriveFoldable DeriveFunctor DeriveGeneric DeriveLift DeriveTraversable DerivingStrategies DerivingVia DuplicateRecordFields EmptyCase ExistentialQuantification FlexibleContexts FlexibleInstances FunctionalDependencies GADTs GeneralizedNewtypeDeriving InstanceSigs KindSignatures LambdaCase MultiParamTypeClasses NumericUnderscores OverloadedLabels OverloadedStrings PatternSynonyms QuantifiedConstraints RankNTypes ScopedTypeVariables StandaloneDeriving TupleSections TypeApplications TypeFamilies TypeFamilyDependencies TypeOperators
   ghc-options: -W -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -fshow-hole-constraints -haddock -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.16.0.0 && <5
@@ -183,4 +180,4 @@ test-suite haskv-test
       TempLogTest
       Tests
       Paths_haskv
-  default-language: Haskell2010
+  default-language: GHC2021

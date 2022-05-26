@@ -1,17 +1,18 @@
+{-# LANGUAGE OverloadedLabels #-}
 module HaskKV.Server.Utils where
 
 import Control.Concurrent (forkIO, threadDelay)
-import Control.Exception
-import Control.Monad.IO.Class
-import Data.Binary
-import Data.Conduit
+import Control.Exception (SomeException, catch)
+import Control.Monad.IO.Class (MonadIO (liftIO))
+import Data.Binary (Binary, decodeOrFail, encode)
+import Data.Conduit ((.|), runConduit, runConduitRes)
 import Data.Conduit.Network
 import Data.Foldable (for_, traverse_)
-import Data.Streaming.Network.Internal
-import HaskKV.Server.Types
-import HaskKV.Utils
-import Optics
-import System.Log.Logger
+import Data.Streaming.Network.Internal (ClientSettings (clientPort, clientHost))
+import HaskKV.Server.Types (ServerState (outgoing, messages))
+import HaskKV.Utils (sinkTBQueue, sourceTBQueue)
+import Optics ((%), (^.), At (at))
+import System.Log.Logger (debugM)
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL

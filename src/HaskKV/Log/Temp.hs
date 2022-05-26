@@ -1,17 +1,20 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE UndecidableInstances #-}
-
 module HaskKV.Log.Temp where
 
 import Control.Applicative ((<|>))
-import Control.Concurrent.MVar
-import Control.Concurrent.STM
-import Control.Monad.IO.Class
-import Control.Monad.Reader
+import Control.Concurrent.MVar (MVar, modifyMVar_, newMVar, putMVar, takeMVar)
+import Control.Concurrent.STM (atomically, takeTMVar)
+import Control.Monad.IO.Class (MonadIO (..))
+import Control.Monad.Reader (MonadReader)
 import Data.Maybe (fromJust)
-import HaskKV.Log.Class
-import HaskKV.Log.Entry
-import HaskKV.Types
-import Optics
+import HaskKV.Log.Class (TempLogM (..))
+import HaskKV.Log.Entry (Completed (unCompleted))
+import HaskKV.Types (Timeout)
+import Optics ((^.), A_Lens, LabelOptic', Lens', ViewableOptic (gview))
 
 import qualified HaskKV.Timer as Timer
 

@@ -1,11 +1,13 @@
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module HaskKV.Log.Entry where
 
-import Control.Concurrent.STM
-import Data.Binary
-import Data.Binary.Put
-import GHC.Generics
-import HaskKV.Log.Class
-import HaskKV.Types
+import Control.Concurrent.STM (TMVar)
+import Data.Binary (Binary (put, get))
+import Data.Binary.Put (putBuilder)
+import GHC.Generics (Generic)
+import HaskKV.Log.Class (Entry (..))
+import HaskKV.Types (LogIndex, LogTerm)
 
 import qualified Data.Binary.Builder as B
 

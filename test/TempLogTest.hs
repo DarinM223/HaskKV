@@ -1,7 +1,5 @@
-module TempLogTest
-  ( tests
-  )
-where
+{-# LANGUAGE OverloadedLabels #-}
+module TempLogTest (tests) where
 
 import Control.Monad ((<=<))
 import Data.Foldable (for_, traverse_)

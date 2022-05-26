@@ -1,13 +1,17 @@
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE NoFieldSelectors #-}
+{-# LANGUAGE OverloadedLabels #-}
 module HaskKV.Snapshot.Types where
 
-import Control.Concurrent.STM
-import Control.Monad.Reader
+import Control.Concurrent.STM (TVar)
+import Control.Monad.Reader (MonadIO, MonadReader)
 import Data.Binary (Binary)
 import Data.Kind (Type)
-import GHC.Generics
-import GHC.IO.Handle
-import HaskKV.Types
-import Optics
+import GHC.Generics (Generic)
+import GHC.IO.Handle (Handle)
+import HaskKV.Types (FilePos, FileSize, LogIndex, LogTerm, SID)
+import Optics ((^.), Lens')
 
 import qualified Data.ByteString as B
 import qualified Data.IntMap as IM

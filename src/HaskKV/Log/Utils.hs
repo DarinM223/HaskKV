@@ -1,7 +1,8 @@
+{-# LANGUAGE LambdaCase #-}
 module HaskKV.Log.Utils where
 
 import HaskKV.Log.Class
-import HaskKV.Types
+import HaskKV.Types (LogIndex)
 
 type Index      = LogIndex
 type StartIndex = Index

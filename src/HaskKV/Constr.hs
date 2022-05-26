@@ -1,12 +1,13 @@
+{-# LANGUAGE FunctionalDependencies #-}
 module HaskKV.Constr where
 
-import Control.Monad.State
+import Control.Monad.State (MonadIO, MonadState)
 import Data.Map (Map)
-import HaskKV.Log.Class
-import HaskKV.Raft.Class
-import HaskKV.Raft.State
-import HaskKV.Server.Types
-import HaskKV.Snapshot.Types
+import HaskKV.Log.Class (Entry, LogM, TempLogM)
+import HaskKV.Raft.Class (PersistM, DebugM)
+import HaskKV.Raft.State (RaftState)
+import HaskKV.Server.Types (ServerEvent, ServerM)
+import HaskKV.Snapshot.Types (SnapshotM)
 import HaskKV.Store.Types
 
 import qualified Data.Map as M

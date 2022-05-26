@@ -1,16 +1,18 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
 module HaskKV.Raft.Follower where
 
-import Control.Monad.State
-import HaskKV.Log.Class
-import HaskKV.Raft.Class
-import HaskKV.Raft.Message
+import Control.Monad.State (MonadState (get))
+import HaskKV.Log.Class (Entry, LogM)
+import HaskKV.Raft.Class (PersistM, DebugM (..))
+import HaskKV.Raft.Message (RaftResponse (VoteResponse), RaftMessage(..))
 import HaskKV.Raft.RPC
-import HaskKV.Raft.State
-import HaskKV.Raft.Utils
-import HaskKV.Server.Types
-import HaskKV.Snapshot.Types
-import HaskKV.Store.Types
-import Optics
+import HaskKV.Raft.State (RaftState)
+import HaskKV.Raft.Utils (startElection, transitionToFollower)
+import HaskKV.Server.Types (ServerEvent (..), ServerM (reset, recv))
+import HaskKV.Snapshot.Types (SnapshotM)
+import HaskKV.Store.Types (LoadSnapshotM, StorageM)
+import Optics ((^.))
 
 runFollower
   :: ( DebugM m

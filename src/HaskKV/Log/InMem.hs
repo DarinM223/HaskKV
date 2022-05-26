@@ -1,11 +1,13 @@
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedLabels #-}
 module HaskKV.Log.InMem where
 
-import Data.Binary
+import Data.Binary (Binary)
 import Data.Foldable (foldl')
-import GHC.Generics
-import HaskKV.Log.Class
-import HaskKV.Types
-import Optics
+import GHC.Generics (Generic)
+import HaskKV.Log.Class (Entry (entryIndex, entryTerm))
+import HaskKV.Types (LogIndex (unLogIndex), LogTerm, SID (SID))
+import Optics ((%), (^.), At (at))
 
 import qualified Data.IntMap as IM
 

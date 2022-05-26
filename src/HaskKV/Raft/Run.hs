@@ -1,20 +1,22 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedLabels #-}
 module HaskKV.Raft.Run where
 
-import Control.Monad.State
+import Control.Monad.State (MonadState, when)
 import Data.Foldable (traverse_)
-import HaskKV.Log.Class
-import HaskKV.Log.Entry
+import HaskKV.Log.Class (LogM (loadEntry), TempLogM)
+import HaskKV.Log.Entry (LogEntry)
 import HaskKV.Raft.Candidate (runCandidate)
-import HaskKV.Raft.Class
+import HaskKV.Raft.Class (PersistM, DebugM (..))
 import HaskKV.Raft.Follower (runFollower)
 import HaskKV.Raft.Leader (runLeader)
-import HaskKV.Raft.Message
-import HaskKV.Raft.State
-import HaskKV.Server.Types
-import HaskKV.Snapshot.Types
-import HaskKV.Store.Types
-import Optics
-import Optics.State.Operators
+import HaskKV.Raft.Message (RaftMessage)
+import HaskKV.Raft.State (RaftState, StateType (Leader, Follower, Candidate))
+import HaskKV.Server.Types (ServerEvent, ServerM)
+import HaskKV.Snapshot.Types (SnapshotM)
+import HaskKV.Store.Types (ApplyEntryM (..), LoadSnapshotM)
+import Optics (use, guse)
+import Optics.State.Operators ((%=))
 
 runRaft
   :: ( DebugM m

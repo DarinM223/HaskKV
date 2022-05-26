@@ -1,16 +1,18 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedLabels #-}
 module HaskKV.Raft.Utils where
 
-import Control.Monad.State
-import Data.Maybe
-import HaskKV.Log.Class
+import Control.Monad.State (MonadState (get))
+import Data.Maybe (fromMaybe)
+import HaskKV.Log.Class (LogM (termFromIndex, storeEntries, lastIndex))
 import HaskKV.Log.Entry
-import HaskKV.Raft.Class
+import HaskKV.Raft.Class (PersistM (..))
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Server.Types
-import HaskKV.Types
-import Optics
-import Optics.State.Operators
+import HaskKV.Types (LogTerm, SID (unSID))
+import Optics ((^.), guse, A_Lens, LabelOptic')
+import Optics.State.Operators ((%=), (.=))
 
 import qualified Data.IntMap as IM
 

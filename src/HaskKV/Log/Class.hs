@@ -1,7 +1,9 @@
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module HaskKV.Log.Class where
 
-import Data.Binary
-import HaskKV.Types
+import Data.Binary (Binary)
+import HaskKV.Types (LogIndex, LogTerm)
 
 class (Binary l, Show l) => Entry l where
   entryIndex    :: l -> LogIndex

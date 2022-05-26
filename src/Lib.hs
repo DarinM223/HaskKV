@@ -1,3 +1,5 @@
+{-# LANGUAGE DisambiguateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Lib where
 
 import Control.Concurrent (forkIO)
@@ -6,14 +8,14 @@ import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe (MaybeT (MaybeT), runMaybeT)
 import Data.Foldable (traverse_)
 import HaskKV
-import HaskKV.Store.All
-import Optics
+import HaskKV.Store.Types (LoadSnapshotM (loadSnapshot))
+import Optics ((^.))
 import Servant.Server (hoistServer, serve)
 import System.Environment (getArgs)
 import System.Log.Logger
-import System.Log.Handler.Simple
+import System.Log.Handler.Simple (fileHandler)
 import System.Log.Handler (setFormatter)
-import System.Log.Formatter
+import System.Log.Formatter (simpleLogFormatter)
 
 import qualified Network.Wai.Handler.Warp as Warp
 

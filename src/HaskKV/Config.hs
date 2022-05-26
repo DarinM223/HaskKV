@@ -1,3 +1,5 @@
+{-# LANGUAGE NoFieldSelectors #-}
+{-# LANGUAGE OverloadedLabels #-}
 module HaskKV.Config where
 
 import Control.Concurrent.STM (newTBQueueIO)
@@ -5,10 +7,10 @@ import Control.Monad (foldM)
 import Data.Conduit.Network (ClientSettings, clientSettings)
 import Data.Foldable (find, foldl')
 import Data.Maybe (mapMaybe)
-import GHC.Generics
-import HaskKV.Server.Types
-import HaskKV.Types
-import Optics
+import GHC.Generics (Generic)
+import HaskKV.Server.Types (ServerState (outgoing), newServerState)
+import HaskKV.Types (Capacity (unCapacity), SID (..), Timeout)
+import Optics ((&), (.~), (^.))
 import Text.Read (readMaybe)
 
 import qualified Data.ByteString.Char8 as C

@@ -1,10 +1,11 @@
+{-# LANGUAGE FunctionalDependencies #-}
 module HaskKV.Server.Types where
 
-import Control.Concurrent.STM
-import Control.Monad.Reader
-import GHC.Generics
-import HaskKV.Types
-import Optics
+import Control.Concurrent.STM (TBQueue, newTBQueueIO)
+import Control.Monad.Reader (MonadIO, MonadReader)
+import GHC.Generics (Generic)
+import HaskKV.Types (Capacity (unCapacity), SID, Timeout)
+import Optics (Lens')
 
 import qualified Data.IntMap as IM
 import qualified HaskKV.Timer as Timer
