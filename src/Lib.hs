@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fspecialise-aggressively #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Lib where
