@@ -48,3 +48,4 @@ diffEntriesWithLog last entries =
         deleteRange (entryIndex e) lastIndex
         return $ Just i
       _ -> diffEntriesStart lastIndex es
+{-# INLINABLE diffEntriesWithLog #-}

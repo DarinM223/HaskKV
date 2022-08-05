@@ -38,6 +38,7 @@ runCandidate = recv >>= \case
   Right (AppendEntries ae)   -> get >>= handleAppendEntries ae
   Right (InstallSnapshot is) -> get >>= handleInstallSnapshot is
   Right (Response _ resp)    -> get >>= handleCandidateResponse resp
+{-# INLINABLE runCandidate #-}
 
 handleCandidateResponse msg@(VoteResponse term success) s
   | term > s ^. #currTerm = do
@@ -51,5 +52,5 @@ handleCandidateResponse msg@(VoteResponse term success) s
     when (votes >= quorumSize') $ do
       debug "Transitioning to leader"
       transitionToLeader msg
-
 handleCandidateResponse _ _ = return ()
+{-# INLINABLE handleCandidateResponse #-}

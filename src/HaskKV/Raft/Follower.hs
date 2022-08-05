@@ -36,9 +36,9 @@ runFollower = recv >>= \case
   Right (AppendEntries ae)   -> get >>= handleAppendEntries ae
   Right (InstallSnapshot is) -> get >>= handleInstallSnapshot is
   Right (Response _ resp)    -> get >>= handleFollowerResponse resp
+{-# INLINABLE runFollower #-}
 
 handleFollowerResponse msg@(VoteResponse term _) s
   | term > s ^. #currTerm = transitionToFollower msg
-  | otherwise             = return ()
-
 handleFollowerResponse _ _ = return ()
+{-# INLINABLE handleFollowerResponse #-}

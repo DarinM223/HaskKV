@@ -11,16 +11,12 @@ import HaskKV
 import HaskKV.Store.Types (LoadSnapshotM (loadSnapshot))
 import Optics ((^.))
 import Servant.Server (hoistServer, serve)
-import System.Environment (getArgs)
 import System.Log.Logger
 import System.Log.Handler.Simple (fileHandler)
 import System.Log.Handler (setFormatter)
 import System.Log.Formatter (simpleLogFormatter)
 
 import qualified Network.Wai.Handler.Warp as Warp
-
-runApp :: IO ()
-runApp = getArgs >>= handleArgs
 
 type MyKey     = Int
 type MyValue   = StoreValue Int
@@ -62,7 +58,7 @@ handleArgs (path : sid : _) = do
     <*> configToServerState sid' config
     <*> pure (configSnapshotDirectory sid' config)
   appConfig <- newAppConfig initAppConfig :: IO MyConfig
-  run appConfig $ runMaybeT $ do
+  flip runApp appConfig $ runMaybeT $ do
     (index, term, _) <- MaybeT snapshotInfo
     snapshot         <- MaybeT (readSnapshot index)
     lift $ loadSnapshot index term snapshot
@@ -71,7 +67,7 @@ handleArgs (path : sid : _) = do
   traverse_
     (\p -> runServer p "*" settings (appConfig ^. serverStateL))
     raftPort
-  forkIO $ forever $ run appConfig runRaft
+  forkIO $ forever $ runApp runRaft appConfig
 
   -- Run API server.
   let apiServer = hoistServer api (convertApp appConfig) server

@@ -33,6 +33,7 @@ data AppConfig msg k v e = AppConfig
 
 instance HasServerState msg (AppConfig msg k v e) where
   serverStateL = lens cServerState (\s t -> s { cServerState = t })
+  {-# INLINABLE serverStateL #-}
 instance HasStore k v e (AppConfig msg k v e) where
   storeL = lens cStore (\s t -> s { cStore = t })
 instance HasTempLog e (AppConfig msg k v e) where
@@ -97,3 +98,4 @@ newAppConfig config = do
         , cRun         = (\app -> runApp app config)
         }
   return config
+{-# INLINABLE newAppConfig #-}

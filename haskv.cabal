@@ -28,7 +28,7 @@ source-repository head
 library
   hs-source-dirs:
       src
-  ghc-options: -W -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -fshow-hole-constraints -haddock
+  ghc-options: -W -Wcompat -Wincomplete-record-updates -Wincomplete-uni-patterns -Wredundant-constraints -Wall-missed-specialisations -fshow-hole-constraints -haddock
   build-depends:
       base >=4.16.0.0 && <5
     , aeson

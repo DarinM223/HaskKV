@@ -65,6 +65,7 @@ instance ( StoreClass k v e r m
 
 instance (StoreClass k v e r m) => LoadSnapshotM (M.Map k v) (StoreT m) where
   loadSnapshot i t map = gview storeL >>= liftIO . loadSnapshot' i t map
+  {-# INLINABLE loadSnapshot #-}
 
 instance (StoreClass k v e r m, HasRun msg k v e r)
   => TakeSnapshotM (StoreT m) where

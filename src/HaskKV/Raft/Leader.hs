@@ -53,6 +53,7 @@ runLeader = recv >>= \case
   Right (AppendEntries ae)     -> get >>= handleAppendEntries ae
   Right (InstallSnapshot _)    -> return ()
   Right (Response sender resp) -> get >>= handleLeaderResponse sender resp
+{-# INLINABLE runLeader #-}
 
 handleLeaderResponse
   :: ( DebugM m
@@ -101,6 +102,7 @@ handleLeaderResponse sender msg@(InstallSnapshotResponse term) s
         #stateType % _Leader % #matchIndex %= IM.adjust (max i) sid
         #stateType % _Leader % #nextIndex %= IM.adjust (max (i + 1)) sid
 handleLeaderResponse _ _ _ = return ()
+{-# INLINABLE handleLeaderResponse #-}
 
 quorumIndex :: (MonadState RaftState m, ServerM msg event m) => m LogIndex
 quorumIndex = do
@@ -109,6 +111,7 @@ quorumIndex = do
   let sorted = sortBy (flip compare) matchIndexes
   quorumSize' <- quorumSize
   return $ sorted !! (quorumSize' - 1)
+{-# INLINABLE quorumIndex #-}
 
 storeTemporaryEntries
   :: (DebugM m, MonadState RaftState m, LogM e m, TempLogM e m, Entry e) => m ()
@@ -125,6 +128,7 @@ storeTemporaryEntries = do
    where
     e'   = setEntryTerm term . setEntryIndex idx $ e
     rest = setIndexAndTerms (idx + 1) term es
+{-# INLINABLE storeTemporaryEntries #-}
 
 snapshotChunkSize :: Int
 snapshotChunkSize = 10
@@ -167,6 +171,7 @@ sendAppendEntries lastIndex commitIndex id = do
     readChunk snapshotChunkSize id >>= \case
       Just chunk -> sendSnapshotChunk id chunk
       Nothing    -> sendAppend id pi pt [] commitIndex
+{-# INLINABLE sendAppendEntries #-}
 
 sendSnapshotChunk
   :: (MonadState RaftState m, ServerM (RaftMessage e) event m)
@@ -185,3 +190,4 @@ sendSnapshotChunk id chunk = do
     , isData              = chunk ^. #chunkData
     , isDone              = chunk ^. #chunkType == EndChunk
     }
+{-# INLINABLE sendSnapshotChunk #-}

@@ -59,6 +59,7 @@ handleRequestVote rv s
   canVote cid s = isNothing (s ^. #votedFor) || s ^. #votedFor == Just cid
   checkValid rv i t = rv ^. #lastLogIdx >= i && rv ^. #lastLogTerm >= t
   fail rv = send (rv ^. #candidateID) . failResponse
+{-# INLINABLE handleRequestVote #-}
 
 handleAppendEntries
   :: ( DebugM m
@@ -107,6 +108,7 @@ handleAppendEntries ae s
     AppendResponse (s ^. #currTerm) True lastIndex
   failResponse s =
     Response (s ^. #serverID) $ AppendResponse (s ^. #currTerm) False 0
+{-# INLINABLE handleAppendEntries #-}
 
 handleInstallSnapshot
   :: ( StorageM k v m
@@ -152,3 +154,4 @@ handleInstallSnapshot is s
     Response (s ^. #serverID) $ InstallSnapshotResponse $ s ^. #currTerm
   failResponse s =
     Response (s ^. #serverID) $ InstallSnapshotResponse $ s ^. #currTerm
+{-# INLINABLE handleInstallSnapshot #-}

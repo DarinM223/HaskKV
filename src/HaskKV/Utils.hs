@@ -41,9 +41,11 @@ sourceTBQueue q = go
     e <- liftIO $ atomically $ readTBQueue q
     yield e
     go
+{-# INLINABLE sourceTBQueue #-}
 
 sinkTBQueue :: (MonadIO m) => TBQueue a -> ConduitM a o m ()
 sinkTBQueue q = awaitForever (liftIO . atomically . writeTBQueue q)
+{-# INLINABLE sinkTBQueue #-}
 
 sourceTBQueueOne :: (MonadIO m) => TBQueue o -> ConduitM i o m ()
 sourceTBQueueOne q = do
@@ -57,6 +59,7 @@ persistBinary filename sid binary =
     BL.hPut file $ encode binary
     hFlush file
     FileSize . fromIntegral <$> hFileSize file
+{-# INLINABLE persistBinary #-}
 
 loadBinary :: (Binary b) => (SID -> FilePath) -> SID -> IO (Maybe b)
 loadBinary filename = handle (\(_ :: SomeException) -> pure Nothing)

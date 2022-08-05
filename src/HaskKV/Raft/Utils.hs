@@ -24,6 +24,7 @@ transitionToFollower msg = do
   #stateType .= Follower
   setCurrTerm $ msg ^. #term
   get >>= persist
+{-# INLINABLE transitionToFollower #-}
 
 transitionToLeader
   :: ( LogM (LogEntry k v) m
@@ -64,11 +65,13 @@ transitionToLeader msg = do
       leaderState  = LeaderState { leaderStateNextIndex  = nextIndexes
                                  , leaderStateMatchIndex = matchIndexes }
   #stateType .= Leader leaderState
+{-# INLINABLE transitionToLeader #-}
 
 quorumSize :: (ServerM msg e m) => m Int
 quorumSize = do
   servers <- length <$> serverIds
   return $ servers `quot` 2 + 1
+{-# INLINABLE quorumSize #-}
 
 startElection
   :: ( MonadState RaftState m
@@ -94,6 +97,7 @@ startElection = do
     , rvLastLogIdx  = lastIndex'
     , rvLastLogTerm = lastTerm
     }
+{-# INLINABLE startElection #-}
 
 setCurrTerm :: (MonadState RaftState m) => LogTerm -> m ()
 setCurrTerm term = do

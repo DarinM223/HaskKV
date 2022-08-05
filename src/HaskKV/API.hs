@@ -13,7 +13,7 @@ import Control.Concurrent.STM (newEmptyTMVarIO)
 import Control.Monad.Except
 import Control.Monad.Reader (MonadReader (ask))
 import Data.Proxy (Proxy(Proxy))
-import HaskKV.Constr (Constr, run)
+import HaskKV.Constr (Constr)
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
 import HaskKV.Monad (App, AppConfig, runApp)
@@ -56,6 +56,7 @@ server
   :: (KeyClass k, ValueClass v)
   => ServerT (StoreAPI k v) (MyHandler msg k v (LogEntry k v))
 server = getRoute :<|> setRoute :<|> deleteRoute
+{-# INLINABLE server #-}
 
 applyEntryData :: LogEntryData k v -> App msg k v (LogEntry k v) ()
 applyEntryData entryData = ask >>= \config -> liftIO $ do
@@ -65,6 +66,6 @@ applyEntryData entryData = ask >>= \config -> liftIO $ do
                        , entryData = entryData
                        , completed = completed
                        }
-  f <- async $ run config $ waitApplyEntry entry
+  f <- async $ runApp (waitApplyEntry entry) config
   inject HeartbeatTimeout $ config ^. serverStateL
   wait f

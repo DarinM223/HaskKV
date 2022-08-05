@@ -60,3 +60,4 @@ runServer port host clients s = do
       .| CL.iterM (liftIO . debugM "conduit" . ("Sending: " ++) . show)
       .| CL.map (B.concat . BL.toChunks . encode)
       .| appSink appData
+{-# INLINABLE runServer #-}

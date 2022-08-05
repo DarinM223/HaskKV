@@ -40,6 +40,7 @@ setKey k v s = s & #map %~ M.insert k v' & #heap .~ heap'
   heap'     = case expireTime v' of
     Just time -> H.insert (HeapVal (time, k)) $ s ^. #heap
     _         -> s ^. #heap
+{-# INLINABLE setKey #-}
 
 replaceKey
   :: (Ord k, Storable v)
@@ -99,6 +100,7 @@ loadSnapshotStore lastIncludedIndex lastIncludedTerm map store
       lastIncludedIndex
       log
     | otherwise = log
+{-# INLINABLE loadSnapshotStore #-}
 
 modifyLog :: (Log e -> Log e) -> StoreData k v e -> StoreData k v e
 modifyLog f = #log %~ f
