@@ -13,7 +13,7 @@ import Control.Concurrent.STM (newEmptyTMVarIO)
 import Control.Monad.Except
 import Control.Monad.Reader (MonadReader (ask))
 import Data.Proxy (Proxy(Proxy))
-import HaskKV.Constr (Constr)
+import HaskKV.Log.Class (Entry)
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
 import HaskKV.Monad (App, AppConfig, runApp)
@@ -24,6 +24,8 @@ import HaskKV.Store.Types (KeyClass, ValueClass, StorageM (getValue))
 import Optics ((^.), use)
 import Servant.API hiding (inject)
 import Servant.Server
+
+type Constr k v e = (KeyClass k, ValueClass v, Entry e)
 
 type StoreAPI k v
   =    "get" :> Capture "key" k :> Get '[JSON] (Maybe v)

@@ -55,12 +55,12 @@ library
     , optics
     , servant
     , servant-server
+    , unliftio-core
     , warp
   exposed-modules:
       HaskKV
       HaskKV.API
       HaskKV.Config
-      HaskKV.Constr
       HaskKV.Log.Class
       HaskKV.Log.Entry
       HaskKV.Log.InMem

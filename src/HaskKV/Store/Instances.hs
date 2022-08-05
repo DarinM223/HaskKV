@@ -7,12 +7,12 @@ module HaskKV.Store.Instances where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (atomically, readTVarIO, putTMVar, modifyTVar')
+import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 import Control.Monad.Reader
 import Control.Monad.State (MonadState, gets)
 import Data.Binary (Binary, encode)
 import Data.Foldable (for_, traverse_)
 import Data.Maybe (fromJust)
-import HaskKV.Constr (HasRun (..))
 import HaskKV.Log.Class (Entry (entryTerm), LogM (..))
 import HaskKV.Log.Entry
 import HaskKV.Log.InMem
@@ -67,13 +67,12 @@ instance (StoreClass k v e r m) => LoadSnapshotM (M.Map k v) (StoreT m) where
   loadSnapshot i t map = gview storeL >>= liftIO . loadSnapshot' i t map
   {-# INLINABLE loadSnapshot #-}
 
-instance (StoreClass k v e r m, HasRun msg k v e r)
+instance (StoreClass k v e r m, MonadUnliftIO m, SnapshotM (M.Map k v) m)
   => TakeSnapshotM (StoreT m) where
-  takeSnapshot = do
+  takeSnapshot = lift $ do
     store <- gview storeL
-    lastApplied <- lift $ gets (^. #lastApplied)
-    config <- ask
-    liftIO $ takeSnapshot' (\c -> run config c) lastApplied store
+    lastApplied <- gets (^. #lastApplied)
+    takeSnapshot' lastApplied store
 
 getValue' :: (Ord k) => k -> Store k v e -> IO (Maybe v)
 getValue' k = fmap (getKey k) . readTVarIO . unStore
@@ -132,24 +131,28 @@ loadSnapshot' lastIndex lastTerm map (Store store) =
   atomically $ modifyTVar' store (loadSnapshotStore lastIndex lastTerm map)
 
 takeSnapshot'
-  :: (KeyClass k, ValueClass v, Entry e)
-  => SnapFn k v -> LogIndex -> Store k v e -> IO ()
-takeSnapshot' run lastApplied store = do
-  storeData <- readTVarIO $ unStore store
+  :: ( KeyClass k, ValueClass v, Entry e
+     , MonadUnliftIO m
+     , SnapshotM (M.Map k v) m
+     )
+  => LogIndex -> Store k v e -> m ()
+takeSnapshot' lastApplied store = do
+  storeData <- liftIO $ readTVarIO $ unStore store
   let firstIndex = storeData ^. #log % #lowIdx
       lastTerm   = entryTerm $ fromJust
                  $ storeData ^. #log % #entries % at (unLogIndex lastApplied)
-  void $ forkIO $ run $ do
-    createSnapshot lastApplied lastTerm
-    let snapData = B.concat . BL.toChunks . encode $ storeData ^. #map
-    -- FIXME(DarinM223): maybe write a version of writeSnapshot
-    -- that takes in a lazy bytestring instead of a strict bytestring?
-    writeSnapshot 0 snapData lastApplied
-    saveSnapshot lastApplied
+  withRunInIO $ \run ->
+    void $ forkIO $ run $ do
+      createSnapshot lastApplied lastTerm
+      let snapData = B.concat . BL.toChunks . encode $ storeData ^. #map
+      -- FIXME(DarinM223): maybe write a version of writeSnapshot
+      -- that takes in a lazy bytestring instead of a strict bytestring?
+      writeSnapshot 0 snapData lastApplied
+      saveSnapshot lastApplied
 
-    snap <- readSnapshot lastApplied
-    for_ snap $ \snap ->
-      liftIO
-        $ flip persistAfter store
-        $ loadSnapshotStore lastApplied lastTerm snap
-        . modifyLog (deleteRangeLog firstIndex lastApplied)
+      snap <- readSnapshot lastApplied
+      for_ snap $ \snap ->
+        liftIO
+          $ flip persistAfter store
+          $ loadSnapshotStore lastApplied lastTerm snap
+          . modifyLog (deleteRangeLog firstIndex lastApplied)
