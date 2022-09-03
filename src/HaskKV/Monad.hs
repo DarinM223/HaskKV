@@ -4,7 +4,6 @@
 {-# LANGUAGE TypeFamilies #-}
 module HaskKV.Monad where
 
-import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Reader (MonadIO (..), MonadReader, ReaderT (..))
 import Control.Monad.State.Strict (MonadState (get, put))
 import Data.Binary (Binary)
@@ -22,6 +21,7 @@ import HaskKV.Server.All
 import HaskKV.Snapshot.All
 import HaskKV.Store.All
 import Optics ((^.), lens)
+import UnliftIO (MonadUnliftIO)
 
 type SnapshotType = Map
 

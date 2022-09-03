@@ -5,7 +5,6 @@
 module HaskKV.Snapshot.Instances where
 
 import Control.Concurrent.STM (atomically, readTVarIO, modifyTVar)
-import Control.Exception (SomeException, handle)
 import Control.Monad.Reader (MonadReader)
 import Control.Monad.State
 import Data.Binary (Binary, decode)
@@ -18,6 +17,7 @@ import Optics ((&), (%), (%~), (.~), (^.), At (at), ViewableOptic (gview))
 import System.Directory (removeFile, renameFile)
 import System.FilePath ((</>), replaceFileName)
 import System.IO (IOMode (ReadMode, WriteMode), openFile)
+import UnliftIO.Exception (SomeException, handle)
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL

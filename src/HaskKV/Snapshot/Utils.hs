@@ -3,7 +3,6 @@
 module HaskKV.Snapshot.Utils where
 
 import Control.Concurrent.STM (TVar, newTVarIO, readTVarIO)
-import Control.Exception (SomeException, catch)
 import Data.Foldable (traverse_)
 import Data.List (elemIndex)
 import Data.Maybe (catMaybes, fromMaybe, listToMaybe)
@@ -15,6 +14,7 @@ import System.Directory (getDirectoryContents)
 import System.FilePath ((</>), hasExtension, splitExtension, takeBaseName)
 import System.IO (IOMode (ReadMode, AppendMode), openFile)
 import Text.Read (readMaybe)
+import UnliftIO.Exception (SomeException, catch)
 
 import qualified Data.IntMap as IM
 

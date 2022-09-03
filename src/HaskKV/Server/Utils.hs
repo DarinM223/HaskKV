@@ -2,7 +2,6 @@
 module HaskKV.Server.Utils where
 
 import Control.Concurrent (forkIO, threadDelay)
-import Control.Exception (SomeException, catch)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Binary (Binary, decodeOrFail, encode)
 import Data.Conduit ((.|), runConduit, runConduitRes)
@@ -13,6 +12,7 @@ import HaskKV.Server.Types (ServerState (outgoing, messages))
 import HaskKV.Utils (sinkTBQueue, sourceTBQueue)
 import Optics ((%), (^.), At (at))
 import System.Log.Logger (debugM)
+import UnliftIO.Exception (SomeException, catch)
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL

@@ -55,7 +55,7 @@ library
     , optics
     , servant
     , servant-server
-    , unliftio-core
+    , unliftio
     , warp
   exposed-modules:
       HaskKV

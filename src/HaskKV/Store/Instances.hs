@@ -7,7 +7,6 @@ module HaskKV.Store.Instances where
 
 import Control.Concurrent (forkIO)
 import Control.Concurrent.STM (atomically, readTVarIO, putTMVar, modifyTVar')
-import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 import Control.Monad.Reader
 import Control.Monad.State (MonadState, gets)
 import Data.Binary (Binary, encode)
@@ -23,6 +22,7 @@ import HaskKV.Store.Utils
 import HaskKV.Types (LogIndex (..), LogTerm)
 import HaskKV.Utils (modifyTVarIO, stateTVarIO)
 import Optics ((%), (^.), At (at), ViewableOptic (gview))
+import UnliftIO (MonadUnliftIO, withRunInIO)
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL

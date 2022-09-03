@@ -2,12 +2,12 @@ module HaskKV.Utils where
 
 import Control.Concurrent.MVar (MVar, putMVar, takeMVar)
 import Control.Concurrent.STM
-import Control.Exception (SomeException, handle)
 import Control.Monad.IO.Class (MonadIO (..))
 import Data.Binary (Binary, decodeFileOrFail, encode)
 import Data.Conduit (ConduitM, awaitForever, yield)
 import HaskKV.Types (FileSize (FileSize), SID)
 import System.IO (IOMode (WriteMode), hFileSize, hFlush, withFile)
+import UnliftIO.Exception (SomeException, handle)
 
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Heap as H
