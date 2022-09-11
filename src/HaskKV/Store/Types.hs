@@ -3,7 +3,6 @@
 module HaskKV.Store.Types where
 
 import Control.Concurrent.STM (TVar, newTVarIO)
-import Control.Monad.Reader (MonadIO, MonadReader, MonadTrans (..))
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Binary (Binary)
 import Data.Binary.Instances ()
@@ -13,7 +12,6 @@ import GHC.Generics (Generic)
 import HaskKV.Log.Class (LogM)
 import HaskKV.Log.InMem (Log, emptyLog)
 import HaskKV.Types (LogIndex, LogTerm, SID)
-import Optics (Lens')
 
 import qualified Data.Heap as H
 import qualified Data.Map as M
@@ -87,15 +85,6 @@ data StoreData k v e = StoreData
   } deriving (Show, Generic)
 
 newtype Store k v e = Store { unStore :: TVar (StoreData k v e) }
-
-class HasStore k v e r | r -> k v e where
-  storeL :: Lens' r (Store k v e)
-
-newtype StoreT m a = StoreT { unStoreT :: m a }
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
-
-instance MonadTrans StoreT where
-  lift = StoreT
 
 newStoreValue :: Integer -> Int -> v -> IO (StoreValue v)
 newStoreValue seconds version val = do

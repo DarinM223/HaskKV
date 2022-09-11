@@ -1,27 +1,29 @@
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE TypeFamilies #-}
 module HaskKV.Monad where
 
-import Control.Monad.Reader (MonadIO (..), MonadReader, ReaderT (..))
+import Control.Monad.Reader (MonadIO (..), MonadReader, ReaderT (..), asks, void)
 import Control.Monad.State.Strict (MonadState (get, put))
-import Data.Binary (Binary)
-import Data.Binary.Instances ()
 import Data.IORef (IORef, newIORef, readIORef, writeIORef)
 import Data.Map (Map)
 import GHC.Generics (Generic)
-import HaskKV.Log.Class (Entry, LogM, TempLogM)
+import HaskKV.Log.Class (Entry, LogM (..), TempLogM (..))
 import HaskKV.Log.Entry (LogEntry)
 import HaskKV.Log.InMem (Log)
 import HaskKV.Log.Temp
-import HaskKV.Raft.Class
-import HaskKV.Raft.State (PersistentState, RaftState, newRaftState)
-import HaskKV.Server.All
-import HaskKV.Snapshot.All
-import HaskKV.Store.All
-import Optics ((^.), lens)
+import HaskKV.Raft.Class (DebugM, PersistM (..), PrintDebugT (..))
+import HaskKV.Raft.State
+import HaskKV.Server.Types (ServerEvent, ServerM (..), ServerState (sid))
+import HaskKV.Snapshot.Types (SnapshotM (..), SnapshotManager)
+import HaskKV.Snapshot.Utils (newSnapshotManager)
+import HaskKV.Store.Types
+import HaskKV.Utils (persistBinary)
+import Optics ((^.), use)
 import UnliftIO (MonadUnliftIO)
+import qualified HaskKV.Server.Instances as Server
+import qualified HaskKV.Snapshot.Instances as Snap
+import qualified HaskKV.Store.Instances as Store
 
 type SnapshotType = Map
 
@@ -32,16 +34,6 @@ data AppConfig msg k v e = AppConfig
   , cServerState :: ServerState msg
   , cSnapManager :: SnapshotManager
   }
-
-instance HasServerState msg (AppConfig msg k v e) where
-  serverStateL = lens cServerState (\s t -> s { cServerState = t })
-  {-# INLINABLE serverStateL #-}
-instance HasStore k v e (AppConfig msg k v e) where
-  storeL = lens cStore (\s t -> s { cStore = t })
-instance HasTempLog e (AppConfig msg k v e) where
-  tempLogL = lens cTempLog (\s t -> s { cTempLog = t })
-instance HasSnapshotManager (AppConfig msg k v e) where
-  snapshotManagerL = lens cSnapManager (\s t -> s { cSnapManager = t })
 
 data InitAppConfig msg e = InitAppConfig
   { log           :: Maybe (Log e)
@@ -54,27 +46,72 @@ instance MonadState RaftState (App msg k v e) where
   get = App $ readIORef . cState
   put x = App $ flip writeIORef x . cState
 
-instance (Binary k, Binary v) =>
-  HasSnapshotType (SnapshotType k v) (App msg k v e)
-
 newtype App msg k v e a = App
   { runApp :: AppConfig msg k v e -> IO a }
   deriving ( Functor, Applicative, Monad, MonadIO
            , MonadReader (AppConfig msg k v e)
            , MonadUnliftIO ) via ReaderT (AppConfig msg k v e) IO
-  deriving (ServerM msg ServerEvent) via ServerT (App msg k v e)
-  deriving ( StorageM k v
-           , LogM e
-           , LoadSnapshotM (SnapshotType k v)
-           , TakeSnapshotM ) via StoreT (App msg k v e)
-  deriving (TempLogM e) via TempLogT (App msg k v e)
-  deriving (SnapshotM (SnapshotType k v)) via SnapshotT (App msg k v e)
   deriving DebugM via PrintDebugT (App msg k v e)
-  deriving PersistM via PersistT (App msg k v e)
 
-deriving via StoreT (App msg k v e) instance
-  (KeyClass k, ValueClass v, Entry e, e ~ LogEntry k v)
-  => ApplyEntryM k v e (App msg k v e)
+instance ServerM msg ServerEvent (App msg k v e) where
+  send i msg = asks cServerState >>= liftIO . Server.send i msg
+  broadcast msg = asks cServerState >>= liftIO . Server.broadcast msg
+  recv = asks cServerState >>= liftIO . Server.recv
+  reset e = asks cServerState >>= liftIO . Server.reset e
+  serverIds = Server.serverIds <$> asks cServerState
+
+instance (KeyClass k, ValueClass v) => StorageM k v (App msg k v e) where
+  getValue k = asks cStore >>= liftIO . Store.getValue k
+  {-# INLINABLE getValue #-}
+  setValue k v = asks cStore >>= liftIO . Store.setValue k v
+  replaceValue k v = asks cStore >>= liftIO . Store.replaceValue k v
+  deleteValue k = asks cStore >>= liftIO . Store.deleteValue k
+  cleanupExpired t = asks cStore >>= liftIO . Store.cleanupExpired t
+
+instance (Entry e, KeyClass k, ValueClass v) => LogM e (App msg k v e) where
+  firstIndex = asks cStore >>= liftIO . Store.firstIndex
+  lastIndex = asks cStore >>= liftIO . Store.lastIndex
+  loadEntry k = asks cStore >>= liftIO . Store.loadEntry k
+  termFromIndex i = asks cStore >>= liftIO . Store.termFromIndex i
+  deleteRange a b = asks cStore >>= liftIO . Store.deleteRange a b
+  storeEntries es = asks cStore >>= Store.storeEntries es
+
+instance (KeyClass k, ValueClass v)
+  => ApplyEntryM k v (LogEntry k v) (App msg k v (LogEntry k v)) where
+  applyEntry = Store.applyEntry
+
+instance (KeyClass k, ValueClass v)
+   => LoadSnapshotM (Map k v) (App msg k v e) where
+  loadSnapshot i t map = asks cStore >>= liftIO . Store.loadSnapshot i t map
+  {-# INLINABLE loadSnapshot #-}
+
+instance (Entry e, KeyClass k, ValueClass v)
+  => TakeSnapshotM (App msg k v e) where
+  takeSnapshot = do
+    store <- asks cStore
+    lastApplied <- use #lastApplied
+    Store.takeSnapshot lastApplied store
+
+instance TempLogM e (App msg k v e) where
+  addTemporaryEntry e = asks cTempLog >>= liftIO . addTemporaryEntry' e
+  temporaryEntries = asks cTempLog >>= liftIO . temporaryEntries'
+
+instance (KeyClass k, ValueClass v)
+  => SnapshotM (SnapshotType k v) (App msg k v e) where
+  createSnapshot i t = asks cSnapManager >>= liftIO . Snap.createSnapshot i t
+  writeSnapshot o d i = asks cSnapManager >>= liftIO . Snap.writeSnapshot o d i
+  saveSnapshot i = asks cSnapManager >>= liftIO . Snap.saveSnapshot i
+  readSnapshot i = asks cSnapManager >>= liftIO . Snap.readSnapshot i
+  {-# INLINABLE readSnapshot #-}
+  hasChunk i = asks cSnapManager >>= liftIO . Snap.hasChunk i
+  readChunk a i = asks cSnapManager >>= liftIO . Snap.readChunk a i
+  snapshotInfo = asks cSnapManager >>= liftIO . Snap.snapshotInfo
+
+instance PersistM (App msg k v e) where
+  persist state = void <$> liftIO $ persistBinary
+    persistentStateFilename
+    (state ^. #serverID)
+    (newPersistentState state)
 
 newAppConfig
   :: (e ~ LogEntry k v) => InitAppConfig msg e -> IO (AppConfig msg k v e)

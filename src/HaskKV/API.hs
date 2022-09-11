@@ -16,12 +16,12 @@ import Data.Proxy (Proxy(Proxy))
 import HaskKV.Log.Class (Entry)
 import HaskKV.Log.Entry
 import HaskKV.Log.Temp (waitApplyEntry)
-import HaskKV.Monad (App, AppConfig, runApp)
+import HaskKV.Monad (App, AppConfig (cServerState), runApp)
 import HaskKV.Raft.State (StateType (Leader))
 import HaskKV.Server.Instances (inject)
-import HaskKV.Server.Types (ServerEvent (HeartbeatTimeout), HasServerState (serverStateL))
+import HaskKV.Server.Types (ServerEvent (HeartbeatTimeout))
 import HaskKV.Store.Types (KeyClass, ValueClass, StorageM (getValue))
-import Optics ((^.), use)
+import Optics (use)
 import Servant.API hiding (inject)
 import Servant.Server
 
@@ -69,5 +69,5 @@ applyEntryData entryData = ask >>= \config -> liftIO $ do
                        , completed = completed
                        }
   f <- async $ runApp (waitApplyEntry entry) config
-  inject HeartbeatTimeout $ config ^. serverStateL
+  inject HeartbeatTimeout $ cServerState config
   wait f

@@ -1,3 +1,11 @@
 packages: .
 
 optimization: 2
+
+package haskv
+  ghc-options: -finfo-table-map
+               -fdistinct-constructor-tables
+               -eventlog
+               -dsuppress-all
+               -ddump-to-file
+               -ddump-simpl

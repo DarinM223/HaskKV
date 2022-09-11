@@ -91,6 +91,7 @@ library
       HaskKV.Timer
       HaskKV.Types
       HaskKV.Utils
+      App
       Lib
   other-modules:
       Paths_haskv

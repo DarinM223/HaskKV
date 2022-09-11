@@ -9,6 +9,7 @@ import Test.Tasty.HUnit
 import HaskKV.Log.Entry
 import HaskKV.Store.All
 import HaskKV.Types
+import qualified HaskKV.Store.Instances as S
 
 tests :: TestTree
 tests = testGroup "Store tests" [unitTests]
@@ -23,10 +24,10 @@ unitTests = testGroup "UnitTests" [testGetSet, testReplace, testCleanupExpired]
 testGetSet :: TestTree
 testGetSet = testCase "Gets and sets value" $ do
   store <- createStore
-  getValue' 2 store >>= (@=? Nothing)
+  S.getValue 2 store >>= (@=? Nothing)
   v <- newStoreValue 2 1 "value"
-  setValue' 2 v store
-  getValue' 2 store >>= (@=? Just v)
+  S.setValue 2 v store
+  S.getValue 2 store >>= (@=? Just v)
 
 testReplace :: TestTree
 testReplace = testCase "replaceStore only replaces if CAS values match" $ do
@@ -34,12 +35,12 @@ testReplace = testCase "replaceStore only replaces if CAS values match" $ do
   v       <- newStoreValue 2 1 "value"
   diffCAS <- newStoreValue 2 2 "don't set me"
   sameCAS <- newStoreValue 2 1 "changed"
-  setValue' 2 v store
-  replaceValue' 2 diffCAS store >>= (@=? Nothing)
-  getValue' 2 store >>= (@=? Just v)
-  replaceValue' 2 sameCAS store >>= (@=? Just 2)
+  S.setValue 2 v store
+  S.replaceValue 2 diffCAS store >>= (@=? Nothing)
+  S.getValue 2 store >>= (@=? Just v)
+  S.replaceValue 2 sameCAS store >>= (@=? Just 2)
   let expectedCAS = sameCAS { _version = 2 }
-  getValue' 2 store >>= (@=? Just expectedCAS)
+  S.getValue 2 store >>= (@=? Just expectedCAS)
 
 testCleanupExpired :: TestTree
 testCleanupExpired = testCase "cleanupExpired removes expired values" $ do
@@ -49,10 +50,10 @@ testCleanupExpired = testCase "cleanupExpired removes expired values" $ do
   expire2Sec' <- newStoreValue 2 1 "value3"
   expire6Sec  <- newStoreValue 6 1 "value4"
   let vals = [expire1Sec, expire2Sec, expire2Sec', expire6Sec]
-  for_ (zip [1 ..] vals) $ \(k, v) -> setValue' k v store
+  for_ (zip [1 ..] vals) $ \(k, v) -> S.setValue k v store
   threadDelay 2100000
-  getCurrentTime >>= flip cleanupExpired' store
-  getValue' 1 store >>= (@=? Nothing)
-  getValue' 2 store >>= (@=? Nothing)
-  getValue' 3 store >>= (@=? Nothing)
-  getValue' 4 store >>= (@=? Just expire6Sec)
+  getCurrentTime >>= flip S.cleanupExpired store
+  S.getValue 1 store >>= (@=? Nothing)
+  S.getValue 2 store >>= (@=? Nothing)
+  S.getValue 3 store >>= (@=? Nothing)
+  S.getValue 4 store >>= (@=? Just expire6Sec)

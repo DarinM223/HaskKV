@@ -2,10 +2,8 @@
 module HaskKV.Server.Types where
 
 import Control.Concurrent.STM (TBQueue, newTBQueueIO)
-import Control.Monad.Reader (MonadIO, MonadReader)
 import GHC.Generics (Generic)
 import HaskKV.Types (Capacity (unCapacity), SID, Timeout)
-import Optics (Lens')
 
 import qualified Data.IntMap as IM
 import qualified HaskKV.Timer as Timer
@@ -30,12 +28,6 @@ data ServerState msg = ServerState
   , electionTimeout  :: Timeout
   , heartbeatTimeout :: Timeout
   } deriving Generic
-
-class HasServerState msg r | r -> msg where
-  serverStateL :: Lens' r (ServerState msg)
-
-newtype ServerT m a = ServerT { unServerT :: m a }
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
 
 newServerState :: Capacity -> Timeout -> Timeout -> SID -> IO (ServerState msg)
 newServerState backpressure electionTimeout heartbeatTimeout sid = do

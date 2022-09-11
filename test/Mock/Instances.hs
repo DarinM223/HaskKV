@@ -17,8 +17,8 @@ import HaskKV.Raft.Class
 import HaskKV.Raft.Message
 import HaskKV.Raft.State
 import HaskKV.Server.Types
-import HaskKV.Snapshot.Types hiding (HasSnapshotManager)
-import HaskKV.Store.Types hiding (HasStore)
+import HaskKV.Snapshot.Types
+import HaskKV.Store.Types
 import HaskKV.Store.Utils
 import HaskKV.Types
 import Optics

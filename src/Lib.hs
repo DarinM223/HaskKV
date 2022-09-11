@@ -1,16 +1,9 @@
-{-# OPTIONS_GHC -fspecialise-aggressively #-}
 {-# LANGUAGE DisambiguateRecordFields #-}
-{-# LANGUAGE OverloadedStrings #-}
 module Lib where
 
-import Control.Concurrent (forkIO)
-import Control.Monad (forever)
-import Control.Monad.Trans (lift)
-import Control.Monad.Trans.Maybe (MaybeT (MaybeT), runMaybeT)
+import App (app)
 import Data.Foldable (traverse_)
 import HaskKV
-import HaskKV.Store.Types (LoadSnapshotM (loadSnapshot))
-import Optics ((^.))
 import Servant.Server (hoistServer, serve)
 import System.Log.Logger
 import System.Log.Handler.Simple (fileHandler)
@@ -59,16 +52,7 @@ handleArgs (path : sid : _) = do
     <*> configToServerState sid' config
     <*> pure (configSnapshotDirectory sid' config)
   appConfig <- newAppConfig initAppConfig :: IO MyConfig
-  flip runApp appConfig $ runMaybeT $ do
-    (index, term, _) <- MaybeT snapshotInfo
-    snapshot         <- MaybeT (readSnapshot index)
-    lift $ loadSnapshot index term snapshot
-
-  -- Run Raft server and handler.
-  traverse_
-    (\p -> runServer p "*" settings (appConfig ^. serverStateL))
-    raftPort
-  forkIO $ forever $ runApp runRaft appConfig
+  app appConfig settings raftPort
 
   -- Run API server.
   let apiServer = hoistServer api (convertApp appConfig) server

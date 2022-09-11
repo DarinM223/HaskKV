@@ -5,18 +5,14 @@
 module HaskKV.Snapshot.Types where
 
 import Control.Concurrent.STM (TVar)
-import Control.Monad.Reader (MonadIO, MonadReader)
 import Data.Binary (Binary)
-import Data.Kind (Type)
 import GHC.Generics (Generic)
 import GHC.IO.Handle (Handle)
 import HaskKV.Types (FilePos, FileSize, LogIndex, LogTerm, SID)
-import Optics ((^.), Lens')
+import Optics ((^.))
 
 import qualified Data.ByteString as B
 import qualified Data.IntMap as IM
-
-class (Binary s) => HasSnapshotType s (m :: Type -> Type) | m -> s
 
 data SnapshotChunkType = FullChunk | EndChunk deriving (Show, Eq)
 
@@ -58,9 +54,3 @@ data SnapshotManager = SnapshotManager
   { snapshots     :: TVar Snapshots
   , directoryPath :: FilePath
   } deriving Generic
-
-class HasSnapshotManager r where
-  snapshotManagerL :: Lens' r SnapshotManager
-
-newtype SnapshotT m a = SnapshotT { unSnapshotT :: m a }
-  deriving (Functor, Applicative, Monad, MonadIO, MonadReader r)
